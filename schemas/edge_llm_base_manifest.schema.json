@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/edge_llm_base_manifest.schema.json",
+  "title": "Edge LLM Base Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "base_id",
+    "source",
+    "model",
+    "lora_policy",
+    "decision_protocol",
+    "deployment_gates"
+  ],
+  "properties": {
+    "schema_version": {"const": "edge-llm-base/v1"},
+    "base_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._@-]{1,127}$"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "revision",
+        "config_sha256",
+        "tokenizer_sha256",
+        "tokenizer_config_sha256",
+        "artifacts"
+      ],
+      "properties": {
+        "model_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "config_sha256": {"$ref": "#/$defs/sha256"},
+        "tokenizer_sha256": {"$ref": "#/$defs/sha256"},
+        "tokenizer_config_sha256": {"$ref": "#/$defs/sha256"},
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/artifact"}
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "loader",
+        "architecture",
+        "model_type",
+        "modality",
+        "parameter_count",
+        "num_hidden_layers",
+        "hidden_size"
+      ],
+      "properties": {
+        "loader": {"type": "string", "minLength": 1},
+        "architecture": {"type": "string", "minLength": 1},
+        "model_type": {"type": "string", "minLength": 1},
+        "modality": {"const": "text_only"},
+        "parameter_count": {"type": "integer", "minimum": 1},
+        "num_hidden_layers": {"type": "integer", "minimum": 1},
+        "hidden_size": {"type": "integer", "minimum": 1}
+      }
+    },
+    "lora_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "peft_type",
+        "task_type",
+        "max_rank",
+        "allowed_target_modules",
+        "allow_modules_to_save"
+      ],
+      "properties": {
+        "format": {"const": "peft-safetensors"},
+        "peft_type": {"const": "LORA"},
+        "task_type": {"const": "CAUSAL_LM"},
+        "max_rank": {"type": "integer", "minimum": 1, "maximum": 256},
+        "allowed_target_modules": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "allow_modules_to_save": {"type": "boolean"}
+      }
+    },
+    "decision_protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "max_input_tokens", "max_output_tokens", "thinking", "slots", "reserved_slots"],
+      "properties": {
+        "name": {"const": "single_token_action/v1"},
+        "max_input_tokens": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "max_output_tokens": {"const": 1},
+        "thinking": {"const": false},
+        "slots": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slot", "token", "token_id"],
+            "properties": {
+              "slot": {"type": "string", "minLength": 1},
+              "token": {"type": "string", "minLength": 1, "maxLength": 1},
+              "token_id": {"type": "integer", "minimum": 0}
+            }
+          }
+        },
+        "reserved_slots": {
+          "type": "object",
+          "additionalProperties": {"enum": ["abstain", "request_cloud"]}
+        }
+      }
+    },
+    "deployment_gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_system_ram_mb", "max_mean_closed_loop_ms", "min_valid_output_rate"],
+      "properties": {
+        "max_system_ram_mb": {"type": "number", "exclusiveMinimum": 0},
+        "max_mean_closed_loop_ms": {"type": "number", "exclusiveMinimum": 0},
+        "min_valid_output_rate": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "bytes": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

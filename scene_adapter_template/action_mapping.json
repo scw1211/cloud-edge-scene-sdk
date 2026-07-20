@@ -1,0 +1,44 @@
+{
+  "schema_version": "edge-llm-action-map/v1",
+  "scene": "industrial_anomaly",
+  "protocol": "single_token_action/v1",
+  "fallback_slot": "G",
+  "entries": [
+    {
+      "slot": "A",
+      "decision": "no_action",
+      "candidate_action_type": null,
+      "min_risk_level": "low",
+      "max_risk_level": "low",
+      "requires_cloud": false,
+      "safe_offline": true
+    },
+    {
+      "slot": "B",
+      "decision": "set_operating_limit",
+      "candidate_action_type": "set_operating_limit",
+      "min_risk_level": "high",
+      "max_risk_level": "severe",
+      "requires_cloud": false,
+      "safe_offline": true
+    },
+    {
+      "slot": "G",
+      "decision": "abstain",
+      "candidate_action_type": null,
+      "min_risk_level": "low",
+      "max_risk_level": "severe",
+      "requires_cloud": false,
+      "safe_offline": true
+    },
+    {
+      "slot": "H",
+      "decision": "request_cloud",
+      "candidate_action_type": null,
+      "min_risk_level": "low",
+      "max_risk_level": "severe",
+      "requires_cloud": true,
+      "safe_offline": false
+    }
+  ]
+}

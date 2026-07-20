@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/edge_llm_runtime.schema.json",
+  "title": "Edge LLM Runtime Configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "provider", "endpoint", "model", "generation"],
+  "properties": {
+    "schema_version": {"const": "edge-llm-runtime/v1"},
+    "provider": {
+      "enum": ["llama_cpp", "ollama", "openai_compatible"]
+    },
+    "endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://"
+    },
+    "model": {"type": "string"},
+    "timeout_seconds": {
+      "type": "number",
+      "minimum": 0.01,
+      "maximum": 600,
+      "default": 5
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_input_tokens",
+        "max_output_tokens",
+        "temperature",
+        "top_p",
+        "seed",
+        "thinking",
+        "keep_alive"
+      ],
+      "properties": {
+        "max_input_tokens": {"type": "integer", "minimum": 1, "maximum": 262144},
+        "max_output_tokens": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+        "top_p": {"type": "number", "minimum": 0, "maximum": 1},
+        "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "thinking": {"type": "boolean"},
+        "keep_alive": {"type": "string", "minLength": 1}
+      }
+    },
+    "authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api_key_env": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "provider": {"enum": ["ollama", "openai_compatible"]}
+        }
+      },
+      "then": {
+        "properties": {
+          "model": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  ]
+}

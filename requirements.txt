@@ -1,0 +1,2 @@
+# 场景事件 data 按插件自有 JSON Schema 校验。
+jsonschema>=4.21,<5

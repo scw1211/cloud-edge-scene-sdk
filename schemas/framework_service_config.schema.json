@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloud-edge.local/schemas/framework-service-config-v1.json",
+  "title": "Cloud-edge framework service configuration",
+  "type": "object",
+  "required": ["schema_version", "role", "plugin_config"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "role": {"enum": ["edge", "cloud"]},
+    "plugin_config": {"type": "string", "minLength": 1},
+    "listen": {
+      "type": "object",
+      "properties": {
+        "host": {"type": "string", "minLength": 1},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "max_body_bytes": {"type": "integer", "minimum": 1},
+        "access_log": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "outbox": {"type": "string"},
+        "performance_profiles": {"type": "string"},
+        "feedback": {"type": "string"},
+        "idempotency": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "scheduler": {
+      "type": "object",
+      "properties": {
+        "confidence_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+        "jitter_guard": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "cloud": {
+      "type": "object",
+      "required": ["base_url"],
+      "properties": {
+        "base_url": {"type": "string", "pattern": "^https?://"},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "max_attempts": {"type": "integer", "minimum": 1, "maximum": 10},
+        "retry_backoff_seconds": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "network_probe": {
+      "type": "object",
+      "properties": {
+        "interval_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "window_size": {"type": "integer", "minimum": 2, "maximum": 1000},
+        "failure_threshold": {"type": "integer", "minimum": 1},
+        "uplink_mbps": {"type": "number", "exclusiveMinimum": 0},
+        "downlink_mbps": {"type": "number", "exclusiveMinimum": 0},
+        "expected_response_bytes": {"type": "integer", "minimum": 0},
+        "cloud_queue_ms": {"type": "number", "minimum": 0},
+        "cloud_compute_ms": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "replay": {
+      "type": "object",
+      "properties": {
+        "interval_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "batch_size": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "lease_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "max_backoff_seconds": {"type": "number", "exclusiveMinimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "release_watch": {
+      "type": "object",
+      "required": ["enabled", "registry"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "registry": {"type": "string", "minLength": 1},
+        "interval_seconds": {"type": "number", "exclusiveMinimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "idempotency": {
+      "type": "object",
+      "properties": {
+        "ttl_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "max_entries": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"role": {"const": "edge"}}, "required": ["role"]},
+      "then": {"required": ["cloud"]}
+    }
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/edge_llm_release_store.schema.json",
+  "title": "Edge LLM Release Store v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision",
+    "active_release_id",
+    "release_order",
+    "releases",
+    "history"
+  ],
+  "properties": {
+    "schema_version": {"const": "edge-llm-release-store/v1"},
+    "revision": {"type": "integer", "minimum": 0},
+    "active_release_id": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$"
+    },
+    "release_order": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$"
+      }
+    },
+    "releases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "release_id",
+          "created_at_utc",
+          "binding_fingerprint",
+          "base_manifest",
+          "adapter_package",
+          "deployment_artifact",
+          "adapter"
+        ]
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "action",
+          "from_release_id",
+          "to_release_id",
+          "at_utc"
+        ],
+        "properties": {
+          "sequence": {"type": "integer", "minimum": 1},
+          "action": {"enum": ["promote", "rollback"]},
+          "from_release_id": {"type": ["string", "null"]},
+          "to_release_id": {"type": "string", "minLength": 1},
+          "at_utc": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  }
+}

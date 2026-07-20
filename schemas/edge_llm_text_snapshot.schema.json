@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/edge_llm_text_snapshot.schema.json",
+  "title": "Edge LLM Text Snapshot Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "snapshot_id",
+    "base_id",
+    "base_fingerprint",
+    "relative_path",
+    "upstream",
+    "derivation",
+    "model",
+    "tokenizer",
+    "files"
+  ],
+  "properties": {
+    "schema_version": {"const": "edge-llm-text-snapshot/v1"},
+    "snapshot_id": {"type": "string", "minLength": 1},
+    "base_id": {"type": "string", "minLength": 1},
+    "base_fingerprint": {"$ref": "#/$defs/sha256"},
+    "relative_path": {"type": "string", "minLength": 1},
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "revision", "source_config_sha256"],
+      "properties": {
+        "model_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "source_config_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "source_architecture",
+        "output_architecture",
+        "dtype",
+        "transformers_version",
+        "source_contains_multimodal_parameters",
+        "output_contains_multimodal_parameters",
+        "excluded_parameter_prefixes",
+        "source_parameter_count",
+        "source_multimodal_parameter_count",
+        "source_auxiliary_parameter_count",
+        "removed_parameter_count"
+      ],
+      "properties": {
+        "method": {"const": "transformers.AutoModelForCausalLM.from_pretrained"},
+        "source_architecture": {"type": "string", "minLength": 1},
+        "output_architecture": {"type": "string", "minLength": 1},
+        "dtype": {"enum": ["float16", "bfloat16", "float32"]},
+        "transformers_version": {"type": "string", "minLength": 1},
+        "source_contains_multimodal_parameters": {"const": true},
+        "output_contains_multimodal_parameters": {"const": false},
+        "excluded_parameter_prefixes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "source_parameter_count": {"type": "integer", "minimum": 1},
+        "source_multimodal_parameter_count": {"type": "integer", "minimum": 1},
+        "source_auxiliary_parameter_count": {"type": "integer", "minimum": 0},
+        "removed_parameter_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "architecture",
+        "model_type",
+        "modality",
+        "parameter_count",
+        "multimodal_parameter_count"
+      ],
+      "properties": {
+        "architecture": {"type": "string", "minLength": 1},
+        "model_type": {"type": "string", "minLength": 1},
+        "modality": {"const": "text_only"},
+        "parameter_count": {"type": "integer", "minimum": 1},
+        "multimodal_parameter_count": {"const": 0}
+      }
+    },
+    "tokenizer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chat_template",
+        "vocabulary_ids_preserved",
+        "removed_multimodal_role_keys"
+      ],
+      "properties": {
+        "chat_template": {"const": "text_only_no_thinking/v1"},
+        "vocabulary_ids_preserved": {"const": true},
+        "removed_multimodal_role_keys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 5,
+      "items": {"$ref": "#/$defs/artifact"}
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

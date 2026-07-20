@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "role": "cloud",
+  "plugin_config": "deployment/framework/scene_plugins.json",
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 18100,
+    "max_body_bytes": 8388608,
+    "access_log": false
+  },
+  "storage": {
+    "feedback": "runtime/framework_cloud_feedback.jsonl",
+    "idempotency": "runtime/framework_cloud_idempotency.sqlite3"
+  },
+  "idempotency": {
+    "ttl_seconds": 86400,
+    "max_entries": 100000
+  }
+}

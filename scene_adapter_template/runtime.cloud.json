@@ -1,0 +1,17 @@
+{
+  "schema_version": "edge-llm-runtime/v1",
+  "provider": "ollama",
+  "endpoint": "http://127.0.0.1:11434",
+  "model": "qwen3.5:9b",
+  "timeout_seconds": 30,
+  "generation": {
+    "max_input_tokens": 2048,
+    "max_output_tokens": 128,
+    "temperature": 0,
+    "top_p": 1,
+    "seed": 42,
+    "thinking": false,
+    "keep_alive": "30m"
+  },
+  "authentication": {}
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "role": "edge",
+  "plugin_config": "deployment/framework/scene_plugins.json",
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 18101,
+    "max_body_bytes": 8388608,
+    "access_log": false
+  },
+  "storage": {
+    "outbox": "runtime/framework_edge_outbox.sqlite3",
+    "performance_profiles": "runtime/framework_edge_performance_profiles.json",
+    "feedback": "runtime/framework_edge_feedback.jsonl",
+    "idempotency": "runtime/framework_edge_idempotency.sqlite3"
+  },
+  "scheduler": {
+    "confidence_threshold": 0.75,
+    "jitter_guard": 1.645
+  },
+  "cloud": {
+    "base_url": "http://127.0.0.1:18100",
+    "timeout_seconds": 0.5,
+    "max_attempts": 2,
+    "retry_backoff_seconds": 0.025
+  },
+  "network_probe": {
+    "interval_seconds": 1.0,
+    "window_size": 20,
+    "failure_threshold": 3,
+    "uplink_mbps": 100.0,
+    "downlink_mbps": 100.0,
+    "expected_response_bytes": 2048,
+    "cloud_queue_ms": 1.0,
+    "cloud_compute_ms": 12.0
+  },
+  "replay": {
+    "interval_seconds": 1.0,
+    "batch_size": 64,
+    "lease_seconds": 30.0,
+    "max_backoff_seconds": 60.0
+  },
+  "idempotency": {
+    "ttl_seconds": 86400,
+    "max_entries": 100000
+  }
+}

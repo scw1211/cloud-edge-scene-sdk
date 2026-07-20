@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/edge_llm_adapter_manifest.schema.json",
+  "title": "Edge LLM Scene Adapter Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "adapter_id",
+    "scene",
+    "version",
+    "base",
+    "adapter_artifact",
+    "lora",
+    "action_mapping",
+    "input_contract",
+    "training",
+    "evaluation",
+    "deployment"
+  ],
+  "properties": {
+    "schema_version": {"const": "edge-llm-adapter/v1"},
+    "adapter_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._@-]{1,127}$"},
+    "scene": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._@-]{1,127}$"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"},
+    "base": {
+      "type": "object",
+      "required": ["base_id", "fingerprint"],
+      "properties": {
+        "base_id": {"type": "string"},
+        "fingerprint": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "adapter_artifact": {"$ref": "#/$defs/artifact"},
+    "lora": {
+      "type": "object",
+      "required": ["peft_type", "task_type", "rank", "alpha", "dropout", "target_modules", "modules_to_save"],
+      "properties": {
+        "peft_type": {"const": "LORA"},
+        "task_type": {"const": "CAUSAL_LM"},
+        "rank": {"type": "integer", "minimum": 1},
+        "alpha": {"type": "integer", "minimum": 1},
+        "dropout": {"type": "number", "minimum": 0, "maximum": 1},
+        "target_modules": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "modules_to_save": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "action_mapping": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "input_contract": {"$ref": "#/$defs/input_contract"},
+    "training": {"type": "object"},
+    "evaluation": {"type": "object"},
+    "deployment": {"type": "object"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "input_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_type",
+        "data_schema",
+        "context_encoder",
+        "llm_input_type",
+        "max_input_tokens",
+        "direct_media_to_llm"
+      ],
+      "properties": {
+        "event_type": {"type": "string", "minLength": 1},
+        "data_schema": {"type": "string", "format": "uri"},
+        "context_encoder": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._@-]{1,127}$"},
+        "llm_input_type": {"enum": ["natural_language", "structured_text", "compact_text_code"]},
+        "max_input_tokens": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "direct_media_to_llm": {"const": false}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256", "bytes", "format"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "format": {"const": "safetensors"}
+      }
+    }
+  }
+}

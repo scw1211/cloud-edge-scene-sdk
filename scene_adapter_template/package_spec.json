@@ -1,0 +1,47 @@
+{
+  "schema_version": "edge-llm-package-spec/v1",
+  "adapter_id": "replace-with-scene-adapter",
+  "scene": "industrial_anomaly",
+  "version": "0.1.0",
+  "adapter_source": "models/adapters/industrial_anomaly_sft",
+  "action_mapping": "scene_adapter_template/action_mapping.json",
+  "input_contract": {
+    "event_type": "com.example.industrial.anomaly-map.v1",
+    "data_schema": "https://cloud-edge.local/schemas/examples/industrial-anomaly-map-v1.json",
+    "llm_input_type": "compact_text_code",
+    "context_encoder": "replace-with-versioned-encoding@1.0",
+    "max_input_tokens": 128,
+    "direct_media_to_llm": false
+  },
+  "training": {
+    "teacher_model": "replace-with-cloud-teacher",
+    "methods": ["sft"],
+    "train_dataset_id": "replace-with-immutable-train-id",
+    "test_dataset_id": "replace-with-immutable-heldout-test-id",
+    "test_set_used_for_training": false
+  },
+  "evaluation": {
+    "evidence": {
+      "heldout": "results/edge_llm/industrial_anomaly_eval.json"
+    },
+    "metric_sources": {
+      "decision_accuracy": {"evidence": "heldout", "path": "decision_accuracy"},
+      "weighted_f1": {"evidence": "heldout", "path": "weighted_f1"},
+      "valid_output_rate": {"evidence": "heldout", "path": "valid_output_rate"}
+    },
+    "gates": [
+      {"metric": "decision_accuracy", "operator": ">=", "value": 0.75},
+      {"metric": "weighted_f1", "operator": ">=", "value": 0.75},
+      {"metric": "valid_output_rate", "operator": ">=", "value": 0.99}
+    ]
+  },
+  "deployment": {
+    "artifact": "models/gguf/industrial_anomaly_q4_k_m.gguf",
+    "runtime": "llama.cpp",
+    "format": "gguf",
+    "quantization": "Q4_K_M",
+    "max_input_tokens": 128,
+    "max_output_tokens": 1,
+    "thinking": false
+  }
+}

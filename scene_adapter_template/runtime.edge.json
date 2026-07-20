@@ -1,0 +1,17 @@
+{
+  "schema_version": "edge-llm-runtime/v1",
+  "provider": "llama_cpp",
+  "endpoint": "http://127.0.0.1:8080",
+  "model": "qwen3.5-0.8b-scene-q4_k_m",
+  "timeout_seconds": 5,
+  "generation": {
+    "max_input_tokens": 256,
+    "max_output_tokens": 1,
+    "temperature": 0,
+    "top_p": 1,
+    "seed": 42,
+    "thinking": false,
+    "keep_alive": "30m"
+  },
+  "authentication": {}
+}

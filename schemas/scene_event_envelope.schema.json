@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloud-edge.local/schemas/scene-event-envelope-v1.json",
+  "title": "Scene-agnostic CloudEvents envelope",
+  "type": "object",
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "scene",
+    "edgeid",
+    "time",
+    "datacontenttype",
+    "dataschema"
+  ],
+  "properties": {
+    "specversion": {"const": "1.0"},
+    "id": {"type": "string", "minLength": 1},
+    "source": {"type": "string", "minLength": 1, "format": "uri-reference"},
+    "type": {"type": "string", "minLength": 1},
+    "scene": {"type": "string", "minLength": 1},
+    "edgeid": {"type": "string", "minLength": 1},
+    "subject": {"type": "string"},
+    "time": {"type": "string", "format": "date-time"},
+    "datacontenttype": {"type": "string", "minLength": 1},
+    "dataschema": {"type": "string", "minLength": 1, "format": "uri"},
+    "data": {"not": {"type": "null"}},
+    "data_base64": {"type": "string", "minLength": 1, "contentEncoding": "base64"}
+  },
+  "oneOf": [
+    {
+      "required": ["data"],
+      "not": {"required": ["data_base64"]}
+    },
+    {
+      "required": ["data_base64"],
+      "not": {"required": ["data"]}
+    }
+  ],
+  "additionalProperties": {"type": ["string", "number", "integer", "boolean", "null"]}
+}

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloud-edge-scene-sdk"
+version = "0.9.0"
+description = "Scene plugin and standardized Edge-Qwen adapter SDK"
+requires-python = ">=3.9"
+dependencies = ["jsonschema>=4.21,<5"]
+
+[tool.setuptools.packages.find]
+include = ["cloud_edge_framework*", "edge_llm_factory*", "scene_plugin_template*"]
+
+[tool.setuptools.package-data]
+scene_plugin_template = ["*.json"]

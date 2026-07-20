@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/edge_llm_package_spec.schema.json",
+  "title": "Edge LLM Adapter Package Spec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "adapter_id",
+    "scene",
+    "version",
+    "adapter_source",
+    "action_mapping",
+    "input_contract",
+    "training",
+    "evaluation",
+    "deployment"
+  ],
+  "properties": {
+    "schema_version": {"const": "edge-llm-package-spec/v1"},
+    "adapter_id": {"type": "string", "minLength": 2},
+    "scene": {"type": "string", "minLength": 2},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+"},
+    "adapter_source": {"type": "string", "minLength": 1},
+    "action_mapping": {"type": "string", "minLength": 1},
+    "input_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_type",
+        "data_schema",
+        "context_encoder",
+        "llm_input_type",
+        "max_input_tokens",
+        "direct_media_to_llm"
+      ],
+      "properties": {
+        "event_type": {"type": "string", "minLength": 1},
+        "data_schema": {"type": "string", "format": "uri"},
+        "context_encoder": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._@-]{1,127}$"},
+        "llm_input_type": {"enum": ["natural_language", "structured_text", "compact_text_code"]},
+        "max_input_tokens": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "direct_media_to_llm": {"const": false}
+      }
+    },
+    "training": {
+      "type": "object",
+      "required": ["teacher_model", "methods", "train_dataset_id", "test_dataset_id", "test_set_used_for_training"],
+      "properties": {
+        "teacher_model": {"type": "string", "minLength": 1},
+        "methods": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["sft", "on_policy_correction", "dpo", "logit_kd", "prune_distill"]}
+        },
+        "train_dataset_id": {"type": "string", "minLength": 1},
+        "test_dataset_id": {"type": "string", "minLength": 1},
+        "test_set_used_for_training": {"const": false}
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "required": ["evidence", "metric_sources", "gates"],
+      "properties": {
+        "evidence": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string"}},
+        "metric_sources": {"type": "object", "minProperties": 1},
+        "gates": {"type": "array", "minItems": 1}
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "required": ["artifact", "runtime", "format", "quantization", "max_input_tokens", "max_output_tokens", "thinking"],
+      "properties": {
+        "artifact": {"type": "string", "minLength": 1},
+        "runtime": {"enum": ["llama.cpp", "ollama", "transformers"]},
+        "format": {"enum": ["gguf", "safetensors"]},
+        "quantization": {"type": "string", "minLength": 1},
+        "max_input_tokens": {"type": "integer", "minimum": 1},
+        "max_output_tokens": {"const": 1},
+        "thinking": {"const": false}
+      }
+    }
+  }
+}

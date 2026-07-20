@@ -1,0 +1,506 @@
+{
+  "sdk_version": "0.9.0",
+  "built_at_utc": "2026-07-20T14:09:39.807445+00:00",
+  "python_requires": ">=3.9",
+  "included_files": [
+    {
+      "path": ".gitignore",
+      "bytes": 158,
+      "sha256": "8777e8c518b8e01cddb48468bc5b104690fa30b40a45569c72e8c2bafc925e6d"
+    },
+    {
+      "path": "HANDOFF_CHECKLIST.md",
+      "bytes": 3519,
+      "sha256": "f594e5d46936f5c0d6edffd4dc321352240d674bdda7bf9a7a12e63c561acbb1"
+    },
+    {
+      "path": "README.md",
+      "bytes": 13743,
+      "sha256": "7929a0d94328d405a5f1670a8400e709ec5b9435b861f586f5b723474873f8e1"
+    },
+    {
+      "path": "VERSION",
+      "bytes": 6,
+      "sha256": "9d8c94f1ad3ea96b1e2ac4914fda4cb93c76b4a3e0d8cc6dd8976d6c0b227d15"
+    },
+    {
+      "path": "cloud_edge_framework/__init__.py",
+      "bytes": 959,
+      "sha256": "50ec27545c212ab676203772528f581e1a2cce57445551f71108e326fe43b1ee"
+    },
+    {
+      "path": "cloud_edge_framework/benchmark_edge_service.py",
+      "bytes": 8839,
+      "sha256": "7d440d3e8a2625ecacfe3665f039da928fee72917cfa2942e975232951ab24eb"
+    },
+    {
+      "path": "cloud_edge_framework/benchmark_services.py",
+      "bytes": 6063,
+      "sha256": "fa12db3d2e042466d695016c9ca39bf07e1bda290b1591bcc39f3a28a1e0a5fd"
+    },
+    {
+      "path": "cloud_edge_framework/cloud_service.py",
+      "bytes": 9031,
+      "sha256": "6a2f0e2f7a979f02cffb9f63245606c381a76fe03add6ae2f6a8b6841e1c87ae"
+    },
+    {
+      "path": "cloud_edge_framework/conflicts.py",
+      "bytes": 11653,
+      "sha256": "e348fbfe09aa085b420dcf988a3b67a540855bf5807ece50c7ebe8d3422c5369"
+    },
+    {
+      "path": "cloud_edge_framework/contracts.py",
+      "bytes": 24162,
+      "sha256": "fc6f8c14d7d5c4e3e8bafb059b698f6b88943d81bf66975a1649443c98f156ba"
+    },
+    {
+      "path": "cloud_edge_framework/edge_client.py",
+      "bytes": 4754,
+      "sha256": "3f641be93d7ff9ffe58227a0b0805593ba962f45c4dc6ec1bcc54d626a46021d"
+    },
+    {
+      "path": "cloud_edge_framework/edge_service.py",
+      "bytes": 11346,
+      "sha256": "600d110cda8e487b9e1fa386f5824f89209c83f5996d1eb540bb9020789d466c"
+    },
+    {
+      "path": "cloud_edge_framework/event_envelope.py",
+      "bytes": 6927,
+      "sha256": "df86062f0e167a062dcbacec4547330cd6b7176d64f33893b49f85151f0f7983"
+    },
+    {
+      "path": "cloud_edge_framework/evidence.py",
+      "bytes": 2960,
+      "sha256": "1a7c64b75d6c0e9b61eb27aed72f104cb3362001bc2dd0077abb9a508c8965d3"
+    },
+    {
+      "path": "cloud_edge_framework/feedback.py",
+      "bytes": 7280,
+      "sha256": "069609f7d284127f9e0bad9773bfab0d1de098679aa4ae616769ab7110ac5cb8"
+    },
+    {
+      "path": "cloud_edge_framework/http_api.py",
+      "bytes": 4523,
+      "sha256": "4df2869f39e2402db72afcf964e2e173caf3f0a643e6fa9a62f7099bae679359"
+    },
+    {
+      "path": "cloud_edge_framework/ingest_client.py",
+      "bytes": 1790,
+      "sha256": "b40ceb6852459248de18c7260493a117fd1d128e6af87ffd90e8ab00cb0d5fdc"
+    },
+    {
+      "path": "cloud_edge_framework/metrics.py",
+      "bytes": 5162,
+      "sha256": "aaccad83d138d2bad48242486ea7fdb19ad0095ad9adae329ef3e84391a5eed0"
+    },
+    {
+      "path": "cloud_edge_framework/networking.py",
+      "bytes": 6204,
+      "sha256": "f9ef816181bd889aaa5c9c1d1e411fe8191c77fe5ce1c83c649d53af2a074ef2"
+    },
+    {
+      "path": "cloud_edge_framework/performance.py",
+      "bytes": 5881,
+      "sha256": "94be471ffd105d378f0dcb721867b66ff8e32f7d64669d545a855c8351fb4f28"
+    },
+    {
+      "path": "cloud_edge_framework/plugin_manager.py",
+      "bytes": 8369,
+      "sha256": "b4eefd65ab27ef16bc3259587a8bce9e5515ad299d80d22a042a3e2a58932a93"
+    },
+    {
+      "path": "cloud_edge_framework/plugins/__init__.py",
+      "bytes": 187,
+      "sha256": "6f36d16839c76731b48431536d90d1cc4048e3e3d07ad038125938778b46b5b4"
+    },
+    {
+      "path": "cloud_edge_framework/plugins/base.py",
+      "bytes": 7485,
+      "sha256": "0b5b6e4d1a3250f41db6ffef7426c203035a012625f05021775ecb471099de98"
+    },
+    {
+      "path": "cloud_edge_framework/registry.py",
+      "bytes": 9526,
+      "sha256": "6c166ceaaa684a5516767033a21a03c4ee206da75d3b44e88f0b7f1fc7ad5ddb"
+    },
+    {
+      "path": "cloud_edge_framework/release_watcher.py",
+      "bytes": 6237,
+      "sha256": "f7e51de6c1399ef5ef7d168ed827cb6895b521f7e397c60b8f457411e0dceede"
+    },
+    {
+      "path": "cloud_edge_framework/reliability.py",
+      "bytes": 14127,
+      "sha256": "b9c2ae347a64001d10da5761a7ced710988276bd323e541475b5bf6a04def6f5"
+    },
+    {
+      "path": "cloud_edge_framework/reliable_transport.py",
+      "bytes": 5220,
+      "sha256": "fc2cda533309b9e12aa11219c9389707e75c7721a2d0ff92fe95b5a2421f35a1"
+    },
+    {
+      "path": "cloud_edge_framework/replay.py",
+      "bytes": 4071,
+      "sha256": "2b0abfa1d896c8d7d662bd9e3028fc6378acff842f8c9f13ac90692d53f2884b"
+    },
+    {
+      "path": "cloud_edge_framework/review_queue.py",
+      "bytes": 3079,
+      "sha256": "e0b8629d2a6b466420c684cf4eca98a890dd02cb9601b2f4ba392efcfa7809ff"
+    },
+    {
+      "path": "cloud_edge_framework/runtime.py",
+      "bytes": 17335,
+      "sha256": "f53ded7c8d5d9853186d656fcba64d19a1f98ad2785ac4e9535e5513502f4a4f"
+    },
+    {
+      "path": "cloud_edge_framework/scheduling.py",
+      "bytes": 6594,
+      "sha256": "1d5499dfd2796a7335adfb977abada31fe45e0d177a6e2b62678cc9cedf2f668"
+    },
+    {
+      "path": "cloud_edge_framework/server.py",
+      "bytes": 12506,
+      "sha256": "1377350c39c0289d6ef0bd58f7d579ba024a656e6c98ced3819a51af8e931bab"
+    },
+    {
+      "path": "cloud_edge_framework/service_config.py",
+      "bytes": 7512,
+      "sha256": "9a6f1056d44fb3c11e1a72d82faf90f4d0f51e4e4100df0c9f9bb4c54e1529c6"
+    },
+    {
+      "path": "cloud_edge_framework/transport.py",
+      "bytes": 6528,
+      "sha256": "aa3c9540b62bf4c538e41040cffd916ec4ce008c0339d4795db28bbc3c90b634"
+    },
+    {
+      "path": "cloud_edge_framework/version.py",
+      "bytes": 123,
+      "sha256": "c5d22ebcb598bc9485ad25915935eb2c177275323662de32d0edaa3e68f81b63"
+    },
+    {
+      "path": "deployment/framework/cloud_service.json",
+      "bytes": 442,
+      "sha256": "07dfb0b72513b9d2ff18950194aa08aef76ecb2e26ded9786f018bec9f63c182"
+    },
+    {
+      "path": "deployment/framework/edge_service.json",
+      "bytes": 1184,
+      "sha256": "81483dc201a820a0ed5b8d3a655fc732f531481e920d70a727f12af912cc685d"
+    },
+    {
+      "path": "deployment/framework/scene_plugins.json",
+      "bytes": 334,
+      "sha256": "33381f230ca002b2139df670cc6b60629ed7074edeabea3ee5b6e5d525aa72a3"
+    },
+    {
+      "path": "edge_llm/README.md",
+      "bytes": 4150,
+      "sha256": "310352a33e55e70d2557f50572bfe617078fc89d011b3c4d862b3d6ae4fd258b"
+    },
+    {
+      "path": "edge_llm/base_manifest.json",
+      "bytes": 2726,
+      "sha256": "2832e36a971974075c14694b1e2af506d0183e6a229eff2871b0283d24179af3"
+    },
+    {
+      "path": "edge_llm/calibration/calibration.txt",
+      "bytes": 175312,
+      "sha256": "f99d799ee97e6fdf54fa8358201cc7b63c470928a187ba433d299ee0aa43daef"
+    },
+    {
+      "path": "edge_llm/calibration/manifest.json",
+      "bytes": 1477,
+      "sha256": "d29b32f50552c86e7f0ea933fd59ce55850fffd6046c2174228f4fded36f700a"
+    },
+    {
+      "path": "edge_llm/general_compression.md",
+      "bytes": 6878,
+      "sha256": "7e41d17815930b71354ee8822ac8f829c201b195ea3262bc3f9302cfc9ebc029"
+    },
+    {
+      "path": "edge_llm/general_distillation.md",
+      "bytes": 7598,
+      "sha256": "ce57a8dad7cc6e5c1455f8eeee4c7a651f6c6d6c084d9357c791f65fc97c7aeb"
+    },
+    {
+      "path": "edge_llm/text_snapshot_manifest.json",
+      "bytes": 2630,
+      "sha256": "b90f3d049fab08de5f5b7e891b5c58e14b1d8bd562b7565ab7ca010e026ba95a"
+    },
+    {
+      "path": "edge_llm_factory/__init__.py",
+      "bytes": 111,
+      "sha256": "3e2d3323aea5596b8a508f80c902c13c77e645991dd3b01a1665aeeb8ca07695"
+    },
+    {
+      "path": "edge_llm_factory/__main__.py",
+      "bytes": 3678,
+      "sha256": "86963b63660bcd33f6cebf7afdef29dd1d347bf1a2ee31d70ce6e365982d0629"
+    },
+    {
+      "path": "edge_llm_factory/adapter_package.py",
+      "bytes": 20388,
+      "sha256": "a572f06c5d7285f5c15462a9c89d94b4d8296790a28027c114b5e470015869d9"
+    },
+    {
+      "path": "edge_llm_factory/base_snapshot.py",
+      "bytes": 3498,
+      "sha256": "67c0d69fdb778132a5dae3b87d04bf509bce3672531b67682c18fc072d35f87f"
+    },
+    {
+      "path": "edge_llm_factory/benchmark_runtime.py",
+      "bytes": 12907,
+      "sha256": "ea8cf5c0b17e31aec8c8a6ce4468ac0a4a8e92af589e76a0ac907b217589397e"
+    },
+    {
+      "path": "edge_llm_factory/build_imatrix.py",
+      "bytes": 5482,
+      "sha256": "2f4b7b3508f299e5d3ed82e907e8663af8cfec087c2c2c4075490bbfe443d4c5"
+    },
+    {
+      "path": "edge_llm_factory/contracts.py",
+      "bytes": 22988,
+      "sha256": "3caa7da094a4068cba48d2fa54b1258330e34ba4f15fba9225451619cd057dc3"
+    },
+    {
+      "path": "edge_llm_factory/evaluate_action_tokens.py",
+      "bytes": 9219,
+      "sha256": "897d7046cc7266b637e850391d221950f219807423a0ce7cb034c66a0a2b174c"
+    },
+    {
+      "path": "edge_llm_factory/export_gguf.py",
+      "bytes": 7114,
+      "sha256": "b30ef7b55fa790682651f8cd49add6b29964a0ea6ccedfd11e067911dbc48487"
+    },
+    {
+      "path": "edge_llm_factory/general_calibration.py",
+      "bytes": 11177,
+      "sha256": "147d2ab90e498f44d53614ed7f689c82aef73212feaa0107f7cea7f1d163703b"
+    },
+    {
+      "path": "edge_llm_factory/general_kd_data.py",
+      "bytes": 20095,
+      "sha256": "46f8986aecf837bc7c1ef386bbd031988ba4a62e049ecf14f5024cfa2a26f6ef"
+    },
+    {
+      "path": "edge_llm_factory/general_kd_eval.py",
+      "bytes": 8140,
+      "sha256": "79b65912802815adc955efdc46b803d87dd2b86d6320869b9d95050158581557"
+    },
+    {
+      "path": "edge_llm_factory/general_kd_gate.py",
+      "bytes": 7219,
+      "sha256": "ec88b43b4cea865f2678664339f07cb72563c76c8ab97b088c76b46209f37077"
+    },
+    {
+      "path": "edge_llm_factory/general_kd_source.py",
+      "bytes": 12335,
+      "sha256": "99f874070fe477888f022373da76472c4463777977c2989a68bb585c2262ccc2"
+    },
+    {
+      "path": "edge_llm_factory/merge_lora.py",
+      "bytes": 5914,
+      "sha256": "1ce6aa6c2095f7b7e56ab7d156ddcfc561083e9dbe841838ddb99986f6817224"
+    },
+    {
+      "path": "edge_llm_factory/pipeline.py",
+      "bytes": 15355,
+      "sha256": "a2560bcf8c217a1344fd0c6cc8e748ef6e5a20e477a02e25a832cc5b7e721186"
+    },
+    {
+      "path": "edge_llm_factory/providers.py",
+      "bytes": 16554,
+      "sha256": "ef17659b3555d475fec09ab671912640d8c0bd708ca70317d07511f9217d65e1"
+    },
+    {
+      "path": "edge_llm_factory/release_runtime.py",
+      "bytes": 4206,
+      "sha256": "de4ade5f71e1eebc6d621591c49ac10ad762e740a9cbedbcfabecf8ccb5adad5"
+    },
+    {
+      "path": "edge_llm_factory/release_store.py",
+      "bytes": 16020,
+      "sha256": "31e573c62f55ddb8ebf9fdf40b1bcdaf27b31d46d746a1fbf5410363245f7df9"
+    },
+    {
+      "path": "edge_llm_factory/runtime.py",
+      "bytes": 10155,
+      "sha256": "f7c89ce7edb4c667f21ab77f8d929c2d496c4e7cdcd5caad0d55600ab8af3a07"
+    },
+    {
+      "path": "edge_llm_factory/serve_release.py",
+      "bytes": 11040,
+      "sha256": "423b5d57d25c41d2eca12fea6b550a06aca0cdaa144564bb4fd001c16e340567"
+    },
+    {
+      "path": "edge_llm_factory/text_base.py",
+      "bytes": 26526,
+      "sha256": "7e15079793660e65e69213bc832041f72757a3893c4241440ba675fe4797d2cf"
+    },
+    {
+      "path": "edge_llm_factory/train_general_kd.py",
+      "bytes": 20546,
+      "sha256": "57c2722d40bc0d3746534c773ad57862f400eada4d75031e655de6ed8f0c1a5a"
+    },
+    {
+      "path": "edge_llm_factory/train_sft.py",
+      "bytes": 14944,
+      "sha256": "394ec667cd70d076bd357443876f833e3e257519a42b59bb72ebcbd93c4ce19a"
+    },
+    {
+      "path": "pyproject.toml",
+      "bytes": 460,
+      "sha256": "7772aab26e59dc822546222c0ab630b939034f9419e57426d9d747ca73c8e150"
+    },
+    {
+      "path": "requirements-training.txt",
+      "bytes": 170,
+      "sha256": "54492cde9c026aed3de47f0fcfbdb79189212fb45541209da8e39707e64caff7"
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 78,
+      "sha256": "12df6478b14f1810b6090bdd7c09051542d3a1b2d325f1f8e91b28f9284fc3b3"
+    },
+    {
+      "path": "scene_adapter_template/DATA_FORMAT.md",
+      "bytes": 1442,
+      "sha256": "876139dd0941d7020af27066995410884808aa3e361859649af48417e52fadf7"
+    },
+    {
+      "path": "scene_adapter_template/README.md",
+      "bytes": 746,
+      "sha256": "eb664188839f9f5c6854bc8cfa93406ad9066e2b6b19c574a37bc51e9cae580f"
+    },
+    {
+      "path": "scene_adapter_template/action_mapping.json",
+      "bytes": 1084,
+      "sha256": "dcab99c300791c0d468f103fd105eb70fc821ca4e5b7f4a2ef4bf610de338523"
+    },
+    {
+      "path": "scene_adapter_template/package_spec.json",
+      "bytes": 1736,
+      "sha256": "e0dcea625d97b2ff04c48432ab7ce6b82666f4ea78ddc286395ebcb5ddcf7f10"
+    },
+    {
+      "path": "scene_adapter_template/pipeline.json",
+      "bytes": 4936,
+      "sha256": "d907e5101126a8bf22ce6258f2abe9ca191503d725ece41533b3f6b3e6c14773"
+    },
+    {
+      "path": "scene_adapter_template/runtime.cloud.json",
+      "bytes": 368,
+      "sha256": "0d7ea8a1d4eb9d67c05f6ffb9ceed729ea862df0f0151e1f714cd256e6dfb967"
+    },
+    {
+      "path": "scene_adapter_template/runtime.edge.json",
+      "bytes": 381,
+      "sha256": "990f85c4cbcba69f55be37a360161093bc4e8ee1c2ec8841c8ea021971cb68fb"
+    },
+    {
+      "path": "scene_plugin_template/__init__.py",
+      "bytes": 156,
+      "sha256": "81b4ce08ea21eeafa3168e4c121e90f69e4995485c881941376effef83e27c10"
+    },
+    {
+      "path": "scene_plugin_template/action_mapping.json",
+      "bytes": 1084,
+      "sha256": "dcab99c300791c0d468f103fd105eb70fc821ca4e5b7f4a2ef4bf610de338523"
+    },
+    {
+      "path": "scene_plugin_template/base_manifest.json",
+      "bytes": 2726,
+      "sha256": "2832e36a971974075c14694b1e2af506d0183e6a229eff2871b0283d24179af3"
+    },
+    {
+      "path": "scene_plugin_template/data_schema.json",
+      "bytes": 1855,
+      "sha256": "90662639234501422c9454a3634dd4dbe80f154f60398a2d29a44ee2f7c6f5c2"
+    },
+    {
+      "path": "scene_plugin_template/plugin.py",
+      "bytes": 7345,
+      "sha256": "902256c16a69466185c70421dc076309fe4bd1fd18254dc08c81a3162bb5cb90"
+    },
+    {
+      "path": "scene_plugin_template/sample_event.json",
+      "bytes": 1268,
+      "sha256": "082614a397aa27add38cac75112786dda36f3e1d7160da651cd67a72841a53c6"
+    },
+    {
+      "path": "scene_plugin_template/smoke_test.py",
+      "bytes": 4127,
+      "sha256": "e2632eeacbbd5f33bea63b6b52dfcef9c5264f3447259981fc8689728946199b"
+    },
+    {
+      "path": "schemas/decision_envelope.schema.json",
+      "bytes": 1785,
+      "sha256": "4cd5d52c28d047b4886c1c0375dceaa723ff63f39619319987b762b5948617c6"
+    },
+    {
+      "path": "schemas/edge_llm_action_mapping.schema.json",
+      "bytes": 1418,
+      "sha256": "490a95b53e1167dee35ca5f4fa9e46b80096874300d835ba589a201113c9a6d7"
+    },
+    {
+      "path": "schemas/edge_llm_adapter_manifest.schema.json",
+      "bytes": 3233,
+      "sha256": "548b802464f4832c62cf7c25f070cb8ab4332c55572c9236800441290cbc9c79"
+    },
+    {
+      "path": "schemas/edge_llm_base_manifest.schema.json",
+      "bytes": 4603,
+      "sha256": "5b0f4e6e848802505bf45b826f95d06d47c623e159a75b4555a15faed53d8909"
+    },
+    {
+      "path": "schemas/edge_llm_package_spec.schema.json",
+      "bytes": 3161,
+      "sha256": "5b849ce5bb374bfa47c8a9bfd71b3ebeb8f6de1ea6d2280a20ec96238e392e02"
+    },
+    {
+      "path": "schemas/edge_llm_pipeline.schema.json",
+      "bytes": 1555,
+      "sha256": "2d8a14cd24346ce3bee38d8d1c9f7c1aa29ec49fef3425ef1bc1c842649a4652"
+    },
+    {
+      "path": "schemas/edge_llm_release_store.schema.json",
+      "bytes": 1773,
+      "sha256": "d088db932cf1ba35f6c22044d2405f1837479ef7cc48900de68deed71a20ba1b"
+    },
+    {
+      "path": "schemas/edge_llm_runtime.schema.json",
+      "bytes": 2002,
+      "sha256": "dec5194df7fd5fe206b435a78dcfd05df288254e182385fd4c6a6a9eb5659157"
+    },
+    {
+      "path": "schemas/edge_llm_text_snapshot.schema.json",
+      "bytes": 4220,
+      "sha256": "52f369b70226a0a0d23d2d9755a42561db8c918efd37b1dbb52c5cbaf7cc51e1"
+    },
+    {
+      "path": "schemas/framework_service_config.schema.json",
+      "bytes": 3542,
+      "sha256": "a3ae67b279a0d34a4d78fb8965bc60335a982046b9269044fa19461a3794dcf9"
+    },
+    {
+      "path": "schemas/scene_event_envelope.schema.json",
+      "bytes": 1308,
+      "sha256": "c00437f7b6fffd57969e4786b159a434356ab56ebff0cbf3b05c9ff368591b04"
+    },
+    {
+      "path": "schemas/semantic_event.schema.json",
+      "bytes": 4979,
+      "sha256": "91d681aa9eccbe791174dce006763369617bcd9625141f55a3e399cccf08ff65"
+    }
+  ],
+  "excluded_assets": [
+    "traffic plugin",
+    "ASTGCN code and checkpoints",
+    "PEMS08 data",
+    "traffic Student and cloud model artifacts",
+    "traffic benchmark results",
+    "traffic LoRA and traffic action mapping",
+    "Qwen base weights (manifest only)"
+  ]
+}

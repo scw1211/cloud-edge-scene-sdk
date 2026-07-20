@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/decision_envelope.schema.json",
+  "title": "Cloud-edge decision envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "decision_id",
+    "event_ids",
+    "scene",
+    "decision",
+    "risk_level",
+    "confidence",
+    "route",
+    "status",
+    "actions",
+    "reason",
+    "policy_version",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "decision_id": {"type": "string", "minLength": 1},
+    "event_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "scene": {"type": "string", "minLength": 1},
+    "decision": {"type": "string", "minLength": 1},
+    "risk_level": {"enum": ["low", "medium", "high", "severe"]},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "route": {"enum": ["edge_only", "cloud_sync", "cloud_async", "local_autonomy"]},
+    "status": {"enum": ["final", "provisional", "queued"]},
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["action_type", "target_ids", "resource_ids", "parameters", "reason", "priority"],
+        "properties": {
+          "action_type": {"type": "string", "minLength": 1},
+          "target_ids": {"type": "array", "items": {"type": "string"}},
+          "resource_ids": {"type": "array", "items": {"type": "string"}},
+          "parameters": {"type": "object"},
+          "reason": {"type": "string"},
+          "priority": {"type": "integer", "minimum": 0, "maximum": 100}
+        }
+      }
+    },
+    "reason": {"type": "string"},
+    "policy_version": {"type": "string", "minLength": 1},
+    "metadata": {"type": "object"}
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "base_fingerprint": "4c9fedaef396fb9cf6c8a97c57ee53397b1bd3f9c2a321ab4233e253a233c876",
+  "base_id": "qwen35-0.8b-text@2fc06364",
+  "derivation": {
+    "dtype": "bfloat16",
+    "excluded_parameter_prefixes": [
+      "model.visual.",
+      "mtp."
+    ],
+    "method": "transformers.AutoModelForCausalLM.from_pretrained",
+    "output_architecture": "Qwen3_5ForCausalLM",
+    "output_contains_multimodal_parameters": false,
+    "removed_parameter_count": 121045760,
+    "source_architecture": "Qwen3_5ForConditionalGeneration",
+    "source_auxiliary_parameter_count": 20452864,
+    "source_contains_multimodal_parameters": true,
+    "source_multimodal_parameter_count": 100592896,
+    "source_parameter_count": 873438784,
+    "transformers_version": "5.13.0"
+  },
+  "files": [
+    {
+      "bytes": 206,
+      "path": "chat_template.jinja",
+      "sha256": "ebfbae1fa21d082eec599a0f24ef3225b8a24fd2875d98f2a2e4931274d4a729"
+    },
+    {
+      "bytes": 1790,
+      "path": "config.json",
+      "sha256": "23057bc04455839466948da445c71b51c7d19dffb6c46e3df3faa840650ff8da"
+    },
+    {
+      "bytes": 116,
+      "path": "generation_config.json",
+      "sha256": "8e29eeb222454c2a417b17547a84aee206c110a033418b7c0342cd75e75d92a0"
+    },
+    {
+      "bytes": 1504827608,
+      "path": "model.safetensors",
+      "sha256": "a8503e51cb22c2f89f525fef0ce1c50e1925364f4bcc75956bd3df6ab0d127ca"
+    },
+    {
+      "bytes": 19989325,
+      "path": "tokenizer.json",
+      "sha256": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"
+    },
+    {
+      "bytes": 780,
+      "path": "tokenizer_config.json",
+      "sha256": "47bf2817fc0102b9ead6e1428f4481edeaf1268ce440c8e6ca72d5d878cb1b65"
+    }
+  ],
+  "model": {
+    "architecture": "Qwen3_5ForCausalLM",
+    "modality": "text_only",
+    "model_type": "qwen3_5_text",
+    "multimodal_parameter_count": 0,
+    "parameter_count": 752393024
+  },
+  "relative_path": "models/base/qwen35_0_8b_text_2fc06364",
+  "schema_version": "edge-llm-text-snapshot/v1",
+  "snapshot_id": "qwen35-0.8b-text-bfloat16@2fc06364",
+  "tokenizer": {
+    "chat_template": "text_only_no_thinking/v1",
+    "removed_multimodal_role_keys": [
+      "audio_bos_token",
+      "audio_eos_token",
+      "audio_token",
+      "image_token",
+      "model_specific_special_tokens",
+      "video_token",
+      "vision_bos_token",
+      "vision_eos_token"
+    ],
+    "vocabulary_ids_preserved": true
+  },
+  "upstream": {
+    "model_id": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "source_config_sha256": "b90b86f35c8e6925ef74ee04d0e758f0a845c83a42089ad82bbaa948de9b4204"
+  }
+}

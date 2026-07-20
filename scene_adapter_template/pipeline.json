@@ -1,0 +1,132 @@
+{
+  "schema_version": "edge-llm-pipeline/v1",
+  "pipeline_id": "example-scene-edge-llm-v1",
+  "state_path": "runtime/industrial_anomaly_edge_llm_pipeline.json",
+  "stages": [
+    {
+      "id": "verify_base",
+      "kind": "verify_base",
+      "base": "edge_llm/base_manifest.json",
+      "snapshot_manifest": "edge_llm/text_snapshot_manifest.json",
+      "snapshot": "models/base/qwen35_0_8b_text_2fc06364",
+      "inputs": [
+        "edge_llm/base_manifest.json",
+        "edge_llm/text_snapshot_manifest.json",
+        "models/base/qwen35_0_8b_text_2fc06364"
+      ],
+      "outputs": []
+    },
+    {
+      "id": "train_sft",
+      "kind": "command",
+      "argv": [
+        "{python}", "-m", "edge_llm_factory", "train-sft",
+        "--base", "edge_llm/base_manifest.json",
+        "--snapshot", "models/base/qwen35_0_8b_text_2fc06364",
+        "--snapshot_manifest", "edge_llm/text_snapshot_manifest.json",
+        "--train_jsonl", "datasets/industrial_anomaly/train.jsonl",
+        "--val_jsonl", "datasets/industrial_anomaly/val.jsonl",
+        "--output", "models/adapters/industrial_anomaly_sft",
+        "--prompt_format", "raw_task"
+      ],
+      "inputs": [
+        "datasets/industrial_anomaly/train.jsonl",
+        "datasets/industrial_anomaly/val.jsonl"
+      ],
+      "outputs": ["models/adapters/industrial_anomaly_sft"]
+    },
+    {
+      "id": "evaluate_heldout",
+      "kind": "command",
+      "argv": [
+        "{python}", "-m", "edge_llm_factory", "evaluate",
+        "--base", "edge_llm/base_manifest.json",
+        "--snapshot", "models/base/qwen35_0_8b_text_2fc06364",
+        "--snapshot_manifest", "edge_llm/text_snapshot_manifest.json",
+        "--adapter", "models/adapters/industrial_anomaly_sft",
+        "--test_jsonl", "datasets/industrial_anomaly/test.jsonl",
+        "--test_dataset_id", "replace-with-heldout-test-id",
+        "--output", "results/edge_llm/industrial_anomaly_eval.json",
+        "--prompt_format", "raw_task"
+      ],
+      "inputs": [
+        "models/adapters/industrial_anomaly_sft",
+        "datasets/industrial_anomaly/test.jsonl"
+      ],
+      "outputs": ["results/edge_llm/industrial_anomaly_eval.json"]
+    },
+    {
+      "id": "merge_lora",
+      "kind": "command",
+      "argv": [
+        "{python}", "-m", "edge_llm_factory", "merge-lora",
+        "--base", "edge_llm/base_manifest.json",
+        "--snapshot", "models/base/qwen35_0_8b_text_2fc06364",
+        "--snapshot_manifest", "edge_llm/text_snapshot_manifest.json",
+        "--adapter", "models/adapters/industrial_anomaly_sft",
+        "--output", "models/merged/industrial_anomaly"
+      ],
+      "inputs": ["models/adapters/industrial_anomaly_sft"],
+      "outputs": ["models/merged/industrial_anomaly"]
+    },
+    {
+      "id": "export_gguf",
+      "kind": "command",
+      "argv": [
+        "{python}", "-m", "edge_llm_factory", "export-gguf",
+        "--converter", "/opt/llama.cpp/convert_hf_to_gguf.py",
+        "--quantizer", "/opt/llama.cpp/build/bin/llama-quantize",
+        "--merged_model", "models/merged/industrial_anomaly",
+        "--f16_gguf", "models/gguf/industrial_anomaly_f16.gguf",
+        "--output_gguf", "models/gguf/industrial_anomaly_q4_k_m.gguf",
+        "--quantization", "Q4_K_M",
+        "--summary", "results/edge_llm/industrial_anomaly_export.json"
+      ],
+      "inputs": ["models/merged/industrial_anomaly"],
+      "outputs": [
+        "models/gguf/industrial_anomaly_q4_k_m.gguf",
+        "results/edge_llm/industrial_anomaly_export.json"
+      ]
+    },
+    {
+      "id": "build_adapter",
+      "kind": "build_adapter",
+      "base": "edge_llm/base_manifest.json",
+      "spec": "scene_adapter_template/package_spec.json",
+      "output": "dist/adapters/industrial_anomaly",
+      "archive": "dist/adapters/industrial_anomaly-0.1.0.zip",
+      "inputs": [
+        "models/adapters/industrial_anomaly_sft",
+        "models/gguf/industrial_anomaly_q4_k_m.gguf",
+        "results/edge_llm/industrial_anomaly_eval.json"
+      ],
+      "outputs": [
+        "dist/adapters/industrial_anomaly",
+        "dist/adapters/industrial_anomaly-0.1.0.zip"
+      ]
+    },
+    {
+      "id": "validate_adapter",
+      "kind": "validate_adapter",
+      "base": "edge_llm/base_manifest.json",
+      "package": "dist/adapters/industrial_anomaly",
+      "inputs": ["dist/adapters/industrial_anomaly"],
+      "outputs": []
+    },
+    {
+      "id": "publish_release",
+      "kind": "publish_release",
+      "release_id": "industrial-anomaly@0.1.0",
+      "registry": "runtime/edge_llm_releases.json",
+      "base": "edge_llm/base_manifest.json",
+      "package": "dist/adapters/industrial_anomaly",
+      "deployment_artifact": "models/gguf/industrial_anomaly_q4_k_m.gguf",
+      "inputs": [
+        "edge_llm/base_manifest.json",
+        "dist/adapters/industrial_anomaly",
+        "models/gguf/industrial_anomaly_q4_k_m.gguf"
+      ],
+      "outputs": ["runtime/edge_llm_releases.json"]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "discover_entry_points": false,
+  "entry_point_group": "cloud_edge_framework.scenes",
+  "plugins": [
+    {
+      "spec": "scene_plugin_template.plugin:ExampleScenePlugin",
+      "enabled": true,
+      "options": {
+        "policy_version": "example-0.2.0",
+        "template_mode": true
+      }
+    }
+  ]
+}

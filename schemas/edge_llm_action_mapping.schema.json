@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/edge_llm_action_mapping.schema.json",
+  "title": "Edge LLM Action Mapping v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scene", "protocol", "fallback_slot", "entries"],
+  "properties": {
+    "schema_version": {"const": "edge-llm-action-map/v1"},
+    "scene": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._@-]{1,127}$"},
+    "protocol": {"const": "single_token_action/v1"},
+    "fallback_slot": {"type": "string", "minLength": 1},
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slot",
+          "decision",
+          "candidate_action_type",
+          "min_risk_level",
+          "max_risk_level",
+          "requires_cloud",
+          "safe_offline"
+        ],
+        "properties": {
+          "slot": {"type": "string", "minLength": 1},
+          "decision": {"type": "string", "minLength": 1},
+          "candidate_action_type": {"type": ["string", "null"]},
+          "min_risk_level": {"enum": ["low", "medium", "high", "severe"]},
+          "max_risk_level": {"enum": ["low", "medium", "high", "severe"]},
+          "requires_cloud": {"type": "boolean"},
+          "safe_offline": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

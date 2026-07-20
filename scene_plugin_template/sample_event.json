@@ -1,0 +1,40 @@
+{
+  "specversion": "1.0",
+  "id": "industrial_event_0001",
+  "source": "urn:edge:industrial_edge_01:anomaly-detector",
+  "type": "com.example.industrial.anomaly-map.v1",
+  "scene": "industrial_anomaly",
+  "edgeid": "industrial_edge_01",
+  "subject": "workpiece_012",
+  "time": "2026-07-17T00:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://cloud-edge.local/schemas/examples/industrial-anomaly-map-v1.json",
+  "data": {
+    "asset_id": "workpiece_012",
+    "subsystem": "surface_inspection",
+    "region_id": "line_a",
+    "anomaly_score": 0.94,
+    "threshold": 0.60,
+    "confidence": 0.91,
+    "calibrated": true,
+    "confidence_method": "validation_set_calibration",
+    "window_ms": 5000,
+    "deadline_ms": 200,
+    "preprocessing_latency_ms": 2.1,
+    "inference_latency_ms": 6.4,
+    "shared_resource": "production_line_a",
+    "proposed_limit_percent": 70,
+    "model": {
+      "name": "scene_anomaly_detector",
+      "version": "0.1.0",
+      "output_type": "score_and_heatmap"
+    },
+    "heatmap": {
+      "uri": "evidence://industrial_edge_01/industrial_event_0001/heatmap.bin",
+      "encoding": "float16_heatmap",
+      "shape": [64, 64],
+      "size_bytes": 8192,
+      "content_type": "application/octet-stream"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "calibration_text": {
+    "bytes": 175312,
+    "path": "edge_llm/calibration/calibration.txt",
+    "sha256": "f99d799ee97e6fdf54fa8358201cc7b63c470928a187ba433d299ee0aa43daef"
+  },
+  "calibration_text_sha256": "f99d799ee97e6fdf54fa8358201cc7b63c470928a187ba433d299ee0aa43daef",
+  "categories": [
+    "math",
+    "code",
+    "natural_language_reasoning"
+  ],
+  "evaluation_prompt_overlap": 0,
+  "excluded_evaluation_files": [
+    {
+      "bytes": 37642,
+      "path": "external/eval.jsonl",
+      "sha256": "1d9c13948dc1d59fcb8b7dcd83e240aadcbd08e6d1ed3c537e2909b99e6d4cd7"
+    }
+  ],
+  "max_sample_tokens": 512,
+  "observed_category_counts": {
+    "code": 324,
+    "math": 540,
+    "natural_language_reasoning": 468,
+    "traffic_action": 900
+  },
+  "sample_count": 293,
+  "scene_specific_samples": 0,
+  "schema_version": "edge-llm-general-calibration/v1",
+  "seed": 20260719,
+  "selected_category_counts": {
+    "code": 98,
+    "math": 98,
+    "natural_language_reasoning": 97
+  },
+  "selected_prompt_fingerprints_sha256": "de43a4271e91e7021d4c837e67db3b47664787c2e3323998dcd9d6f583acc6e5",
+  "skipped_counts": {
+    "duplicate_prompt": 450,
+    "non_general_category": 900
+  },
+  "source_files": [
+    {
+      "bytes": 1769313,
+      "path": "external/train.jsonl",
+      "sha256": "9ee9d15e948805e43f0b8b348301d3e8f811db8f08094c2ed33fdf10f0fe5b03"
+    }
+  ],
+  "target_tokens": 50000,
+  "task": "scene_independent_llm_quantization_calibration",
+  "token_count": 50135
+}

@@ -1,0 +1,7 @@
+# Qwen 基座对应版本；不要在不同场景中各自升级。
+torch==2.11.0
+transformers==5.13.0
+safetensors==0.8.0
+peft==0.19.1
+accelerate==1.14.0
+datasets==5.0.0
