@@ -83,6 +83,26 @@ class FrameworkMetrics:
             self.increment("idempotency_replays_total", operation=operation)
         self.observe("cloud_service_runtime_ms", elapsed_ms)
 
+    def record_coordination_result(
+        self, result: Mapping[str, Any], replayed: bool
+    ) -> None:
+        if replayed:
+            return
+        event_count = int(result.get("event_count", 0))
+        initial = int(result.get("initial_conflict_count", 0))
+        residual = int(result.get("residual_conflict_count", 0))
+        self.increment("coordination_events_total", event_count)
+        self.increment("coordination_conflicts_initial_total", initial)
+        self.increment("coordination_conflicts_residual_total", residual)
+        if initial:
+            self.increment("coordination_runs_with_conflicts_total")
+            if residual == 0:
+                self.increment("coordination_conflict_resolution_successes_total")
+        self.observe(
+            "coordination_resolution_success_rate",
+            result.get("resolution_success_rate", 1.0 if initial == 0 else 0.0),
+        )
+
     def record_failure(self, operation: str) -> None:
         self.increment("request_failures_total", operation=operation)
 

@@ -32,14 +32,30 @@ class EvidencePlanner:
 
     def required_level(self, event: SemanticEvent, conflict_suspected: bool = False) -> str:
         if conflict_suspected:
-            return "raw"
-        if (
+            inferred = "raw"
+        elif (
             event.risk.level in {"high", "severe"}
             or event.uncertainty.confidence < self.uncertainty_threshold
             or len(event.uncertainty.prediction_set) > 1
         ):
-            return "feature"
-        return "summary"
+            inferred = "feature"
+        else:
+            inferred = "summary"
+
+        requested = event.metadata.get("minimum_evidence_level")
+        if requested is None:
+            return inferred
+        if not isinstance(requested, str) or requested not in LEVEL_INDEX:
+            raise ValueError(
+                "event metadata minimum_evidence_level must be one of {}".format(
+                    list(EVIDENCE_LEVELS)
+                )
+            )
+        return (
+            requested
+            if LEVEL_INDEX[requested] > LEVEL_INDEX[inferred]
+            else inferred
+        )
 
     def plan(self, event: SemanticEvent, conflict_suspected: bool = False) -> EvidencePlan:
         required = self.required_level(event, conflict_suspected)
@@ -56,6 +72,12 @@ class EvidencePlanner:
             "feature": "high-risk or uncertain event adds compressed model features",
             "raw": "a suspected cross-edge conflict requests raw evidence for cloud verification",
         }
+        explicit_level = event.metadata.get("minimum_evidence_level")
+        reason = reason_by_level[required]
+        if explicit_level == required:
+            reason = "the scene policy requires {} evidence for cloud verification".format(
+                required
+            )
         return EvidencePlan(
             required_level=required,
             included_levels=included_levels,
@@ -73,5 +95,5 @@ class EvidencePlanner:
             ),
             complete=complete,
             missing_level=missing,
-            reason=reason_by_level[required],
+            reason=reason,
         )

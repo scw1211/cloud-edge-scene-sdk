@@ -27,6 +27,7 @@ class OutboxReplayWorker:
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
+        self._last_delivery_result: Optional[Dict[str, Any]] = None
         self._last_result: Dict[str, Any] = {
             "status": "not_started",
             "attempted": 0,
@@ -65,6 +66,8 @@ class OutboxReplayWorker:
         result["observed_at_ms"] = int(time.time() * 1000)
         with self._lock:
             self._last_result = result
+            if int(result.get("attempted", 0)) > 0:
+                self._last_delivery_result = dict(result)
         return result
 
     def _run(self) -> None:
@@ -80,6 +83,7 @@ class OutboxReplayWorker:
                         "error": "{}: {}".format(type(exc).__name__, exc),
                         "observed_at_ms": int(time.time() * 1000),
                     }
+                    self._last_delivery_result = dict(self._last_result)
                 self.metrics.record_failure("outbox_replay")
             self._stop_event.wait(self.config.interval_seconds)
 
@@ -106,9 +110,15 @@ class OutboxReplayWorker:
         with self._lock:
             running = self._thread is not None and self._thread.is_alive()
             last_result = dict(self._last_result)
+            last_delivery_result = (
+                dict(self._last_delivery_result)
+                if self._last_delivery_result is not None
+                else None
+            )
         return {
             "running": running,
             "interval_seconds": self.config.interval_seconds,
             "batch_size": self.config.batch_size,
             "last_result": last_result,
+            "last_delivery_result": last_delivery_result,
         }

@@ -60,6 +60,7 @@ class ScheduleDecision:
     waits_for_cloud: bool
     uncertain: bool
     critical: bool
+    explicit_cloud_review_requested: bool
     evidence_level: str
     upload_bytes: int
     estimated_transfer_ms: float
@@ -82,6 +83,7 @@ class CollaborationScheduler:
         network: NetworkSnapshot,
         conflict_suspected: bool = False,
         model_disagreement: bool = False,
+        cloud_review_requested: bool = False,
         upload_bytes: int = 0,
         evidence_level: str = "summary",
         measured_cloud_path_ms: Optional[float] = None,
@@ -135,6 +137,12 @@ class CollaborationScheduler:
         elif conflict_suspected:
             route = "cloud_async"
             reason = "conflict review is required but the cloud loop cannot meet the deadline"
+        elif cloud_review_requested and sync_feasible:
+            route = "cloud_sync"
+            reason = "the scene policy explicitly requests synchronous cloud verification"
+        elif cloud_review_requested:
+            route = "cloud_async"
+            reason = "the scene policy requests cloud verification outside the synchronous budget"
         elif critical and sync_feasible:
             route = "cloud_sync"
             reason = "critical event can finish cloud verification within the deadline"
@@ -160,6 +168,7 @@ class CollaborationScheduler:
             waits_for_cloud=route == "cloud_sync",
             uncertain=uncertain,
             critical=critical,
+            explicit_cloud_review_requested=bool(cloud_review_requested),
             evidence_level=evidence_level,
             upload_bytes=upload_bytes,
             estimated_transfer_ms=round(transfer_ms, 6),

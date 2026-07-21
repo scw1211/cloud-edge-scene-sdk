@@ -140,6 +140,7 @@ class CloudApiService:
         result["idempotency_replay"] = replayed
         result["trace_id"] = str(headers.get("x-trace-id", ""))
         self.metrics.record_cloud_request("coordinate", elapsed_ms, replayed)
+        self.metrics.record_coordination_result(result, replayed)
         return result
 
     def add_feedback(self, payload: Dict[str, Any]) -> Dict[str, Any]:

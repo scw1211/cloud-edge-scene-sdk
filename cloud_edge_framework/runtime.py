@@ -19,6 +19,9 @@ from cloud_edge_framework.scheduling import (
 )
 
 
+_REVIEW_CONTEXT_KEY = "_edge_review_context"
+
+
 class CloudRuntime:
     def __init__(self, registry: Optional[SceneRegistry] = None) -> None:
         self.registry = registry or build_default_registry()
@@ -123,6 +126,97 @@ class EdgeRuntime:
     def pending_reviews(self) -> List[SemanticEvent]:
         return self.review_store.events()
 
+    @staticmethod
+    def _pending_review_event(
+        event: SemanticEvent,
+        local: DecisionEnvelope,
+        evidence_level: str,
+        snapshot: NetworkSnapshot,
+        request_bytes: int,
+    ) -> SemanticEvent:
+        metadata = dict(event.metadata)
+        metadata[_REVIEW_CONTEXT_KEY] = {
+            "schema_version": 1,
+            "local_decision": local.to_dict(),
+            "evidence_level": evidence_level,
+            "network_class": network_class(snapshot),
+            "request_bytes": max(0, int(request_bytes)),
+        }
+        return replace(event, metadata=metadata)
+
+    @staticmethod
+    def _clean_pending_event(event: SemanticEvent) -> SemanticEvent:
+        if _REVIEW_CONTEXT_KEY not in event.metadata:
+            return event
+        metadata = dict(event.metadata)
+        metadata.pop(_REVIEW_CONTEXT_KEY, None)
+        return replace(event, metadata=metadata)
+
+    def _record_replayed_feedback(
+        self,
+        stored_events: Sequence[SemanticEvent],
+        cloud_events: Sequence[SemanticEvent],
+        coordination: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        decisions_by_event_id: Dict[str, DecisionEnvelope] = {}
+        for raw_decision in coordination.get("decisions", []):
+            if not isinstance(raw_decision, dict):
+                continue
+            decision = DecisionEnvelope.from_dict(raw_decision)
+            for event_id in decision.event_ids:
+                decisions_by_event_id[event_id] = decision
+
+        local_records = 0
+        cloud_submissions = 0
+        legacy_events_skipped = 0
+        cloud_submission_errors: List[str] = []
+        for stored_event, cloud_event in zip(stored_events, cloud_events):
+            context = stored_event.metadata.get(_REVIEW_CONTEXT_KEY)
+            if not isinstance(context, dict):
+                legacy_events_skipped += 1
+                continue
+            cloud_decision = decisions_by_event_id.get(cloud_event.event_id)
+            if cloud_decision is None:
+                raise ValueError(
+                    "cloud coordination omitted decision for {}".format(
+                        cloud_event.event_id
+                    )
+                )
+            local_decision = DecisionEnvelope.from_dict(context["local_decision"])
+            evidence_level = str(context.get("evidence_level", "summary"))
+            network_label = str(context.get("network_class", "unknown"))
+            request_bytes = int(context.get("request_bytes", 0))
+            if self.feedback_store.append(
+                cloud_event,
+                local_decision,
+                cloud_decision,
+                evidence_level,
+                network_label,
+                request_bytes,
+            ):
+                local_records += 1
+            if hasattr(self.cloud, "submit_feedback"):
+                try:
+                    if self.cloud.submit_feedback(
+                        cloud_event,
+                        local_decision,
+                        cloud_decision,
+                        evidence_level,
+                        network_label,
+                        request_bytes,
+                    ):
+                        cloud_submissions += 1
+                except Exception as exc:  # noqa: BLE001
+                    cloud_submission_errors.append(
+                        "{}: {}".format(type(exc).__name__, exc)
+                    )
+        return {
+            "local_records": local_records,
+            "cloud_submissions": cloud_submissions,
+            "legacy_events_skipped": legacy_events_skipped,
+            "cloud_submission_errors": cloud_submission_errors,
+        }
+
     def process(
         self,
         payload: Dict[str, Any],
@@ -201,6 +295,9 @@ class EdgeRuntime:
         edge_llm_disagreement = bool(
             local.metadata.get("edge_llm_model_disagreement", False)
         )
+        cloud_review_requested = bool(
+            event.metadata.get("cloud_review_requested", False)
+        )
         schedule = self.scheduler.schedule(
             event,
             snapshot,
@@ -208,6 +305,7 @@ class EdgeRuntime:
             model_disagreement=(
                 model_disagreement or edge_llm_escalation or edge_llm_disagreement
             ),
+            cloud_review_requested=cloud_review_requested,
             upload_bytes=cloud_request_bytes,
             evidence_level=evidence_plan.required_level,
             measured_cloud_path_ms=profile.cloud_path_ms if profile is not None else None,
@@ -273,7 +371,15 @@ class EdgeRuntime:
                         cloud_request_bytes,
                         0,
                     )
-                self.review_store.append(cloud_event)
+                self.review_store.append(
+                    self._pending_review_event(
+                        cloud_event,
+                        local,
+                        evidence_plan.required_level,
+                        snapshot,
+                        cloud_request_bytes,
+                    )
+                )
                 metadata = dict(local.metadata)
                 metadata.update(
                     {
@@ -289,7 +395,15 @@ class EdgeRuntime:
                     metadata=metadata,
                 )
         elif schedule.route == "cloud_async":
-            self.review_store.append(cloud_event)
+            self.review_store.append(
+                self._pending_review_event(
+                    cloud_event,
+                    local,
+                    evidence_plan.required_level,
+                    snapshot,
+                    cloud_request_bytes,
+                )
+            )
             metadata = dict(local.metadata)
             metadata.update({"cloud_review_queued": True, "evidence_warning": warning})
             final = replace(
@@ -299,14 +413,24 @@ class EdgeRuntime:
                 metadata=metadata,
             )
         elif schedule.route == "local_autonomy":
-            critical_review_queued = event.risk.level in {"high", "severe"}
-            if critical_review_queued:
-                self.review_store.append(cloud_event)
+            review_queued = (
+                event.risk.level in {"high", "severe"} or cloud_review_requested
+            )
+            if review_queued:
+                self.review_store.append(
+                    self._pending_review_event(
+                        cloud_event,
+                        local,
+                        evidence_plan.required_level,
+                        snapshot,
+                        cloud_request_bytes,
+                    )
+                )
             metadata = dict(local.metadata)
             metadata.update(
                 {
                     "local_autonomy": True,
-                    "cloud_review_queued": critical_review_queued,
+                    "cloud_review_queued": review_queued,
                 }
             )
             final = replace(
@@ -375,8 +499,12 @@ class EdgeRuntime:
                 "remaining": self.review_store.count(),
             }
         event_ids = [event.event_id for event in pending]
+        cloud_events = [self._clean_pending_event(event) for event in pending]
         try:
-            coordination = self.cloud.coordinate(pending)
+            coordination = self.cloud.coordinate(cloud_events)
+            feedback = self._record_replayed_feedback(
+                pending, cloud_events, coordination
+            )
         except Exception as exc:  # noqa: BLE001
             error = "{}: {}".format(type(exc).__name__, exc)
             if leases is not None:
@@ -400,5 +528,6 @@ class EdgeRuntime:
             "attempted": len(pending),
             "completed": len(pending),
             "coordination": coordination,
+            "feedback": feedback,
             "remaining": self.review_store.count(),
         }

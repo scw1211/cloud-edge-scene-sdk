@@ -230,6 +230,13 @@ python -m edge_llm_factory release rollback \
 
 RGB、红外、点云和波形不需要转成文本。场景插件可以上传特征张量、二进制编码或原始证据 URI，并在 `Evidence.codec` 中记录编码方式和版本。
 
+`normalize()` 还可以在内部 `SemanticEvent.metadata` 中声明两个调度提示：
+
+- `cloud_review_requested=true`：即使聚合风险较低，也必须保留局部异常、模型策略或业务规则提出的云复核意图；
+- `minimum_evidence_level=summary|feature|raw`：指定这次复核最低需要哪一级证据。
+
+它们不是外部场景 `data` 的固定字段，而是插件完成语义解释后交给公共调度器的内部信号。网络不可用时，框架先执行本地策略并持久排队；网络恢复后再补传指定证据。
+
 ### 5. 定义多节点关联和冲突
 
 - `fuse_cloud_context()`：只融合业务上相关的设备、区域或任务；
@@ -256,7 +263,7 @@ python -m cloud_edge_framework.edge_service \
   --config deployment/framework/edge_service.json
 ```
 
-边缘 `/ready` 不以云端在线为前提；断网时仍可接收事件并执行本地策略。边缘主动探测云端网络，调用方不能手工声明网络良好。高风险待复核事件进入 SQLite Outbox，云端恢复后由后台任务自动补传。
+边缘 `/ready` 不以云端在线为前提；断网时仍可接收事件并执行本地策略。边缘主动探测云端网络，调用方不能手工声明网络良好。高风险或场景显式要求复核的事件进入 SQLite Outbox，云端恢复后由后台任务自动补传。异步协调结果会同时写入边缘和云端反馈样本库，保留边缘初判与云端修正，供后续蒸馏或策略更新使用。
 
 提交样例事件：
 
