@@ -10,7 +10,8 @@ requires-python = ">=3.9"
 dependencies = ["jsonschema>=4.21,<5"]
 
 [tool.setuptools.packages.find]
-include = ["cloud_edge_framework*", "edge_llm_factory*", "scene_plugin_template*"]
+include = ["cloud_edge_framework*", "edge_llm_factory*", "model_bundle*", "scene_plugin_template*"]
 
 [tool.setuptools.package-data]
 scene_plugin_template = ["*.json"]
+model_bundle = ["*.json", "*.md", "*.txt"]

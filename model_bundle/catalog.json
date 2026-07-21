@@ -1,0 +1,40 @@
+{
+  "schema_version": "cloud-edge-model-catalog/v1",
+  "bundle_version": "0.9.0",
+  "cloud_teacher": {
+    "role": "cloud_teacher",
+    "runtime": "ollama",
+    "model": "qwen3.5:9b",
+    "upstream_model": "Qwen/Qwen3.5-9B",
+    "upstream_url": "https://huggingface.co/Qwen/Qwen3.5-9B",
+    "distribution_url": "https://ollama.com/library/qwen3.5:9b",
+    "ollama_manifest_sha256": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+    "model_blob_sha256": "dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c",
+    "model_blob_bytes": 6594462816,
+    "parameters": 9700000000,
+    "quantization": "Q4_K_M",
+    "project_modifications": "none",
+    "license": "Apache-2.0"
+  },
+  "edge_general_student": {
+    "role": "edge_general_student",
+    "runtime": "ollama",
+    "model": "qwen35-text-general-kd-q4:latest",
+    "base_id": "qwen35-0.8b-text@2fc06364",
+    "asset_name": "qwen35_0_8b_text_general_kd_q4_k_m.gguf",
+    "asset_url": "https://github.com/scw1211/cloud-edge-scene-sdk/releases/download/models-v0.9.0/qwen35_0_8b_text_general_kd_q4_k_m.gguf",
+    "asset_sha256": "e9918db619700df60a010c132de82b8e0e1b7c7ba458b65e651ca8a59b74369d",
+    "asset_bytes": 529289600,
+    "ollama_manifest_sha256": "78067229c1fa35c164a72d15f2c27c8df48acbb50b888a3c9199bb611195edd2",
+    "parameters": 752393024,
+    "quantization": "Q4_K_M",
+    "training": "scene-independent behavior distillation from Qwen3.5 9B",
+    "evaluation": {
+      "sample_count": 80,
+      "macro_accuracy": 0.4222,
+      "relative_to_teacher": 0.6333,
+      "valid_output_rate": 1.0
+    },
+    "license": "Apache-2.0"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.9.0",
-  "built_at_utc": "2026-07-20T14:09:39.807445+00:00",
+  "built_at_utc": "2026-07-21T01:34:50.105063+00:00",
   "python_requires": ">=3.9",
   "included_files": [
     {
@@ -15,8 +15,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 13743,
-      "sha256": "7929a0d94328d405a5f1670a8400e709ec5b9435b861f586f5b723474873f8e1"
+      "bytes": 14427,
+      "sha256": "e3d7540440508df2ba1a76d5d6d89a786f40b0d4efda28e0dfcb4648b26d8f32"
     },
     {
       "path": "VERSION",
@@ -349,9 +349,34 @@
       "sha256": "394ec667cd70d076bd357443876f833e3e257519a42b59bb72ebcbd93c4ce19a"
     },
     {
+      "path": "model_bundle/APACHE-2.0.txt",
+      "bytes": 11355,
+      "sha256": "7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2"
+    },
+    {
+      "path": "model_bundle/README.md",
+      "bytes": 1443,
+      "sha256": "c876eaf0f221214ae59236b8a5aadaf6c479afb7da39388ea0bd3958471430d0"
+    },
+    {
+      "path": "model_bundle/__init__.py",
+      "bytes": 92,
+      "sha256": "24ee5867e87d8da13c63524bd62a491c3c20ad417f909e4d54febdc69f40fddf"
+    },
+    {
+      "path": "model_bundle/catalog.json",
+      "bytes": 1629,
+      "sha256": "81a705d8283d66146375993ccb1042148f9269126d7e6cd5f20fa10aec4377d0"
+    },
+    {
+      "path": "model_bundle/install_models.py",
+      "bytes": 9107,
+      "sha256": "84fc8ec937e15c0f81b06cf1b2b8aefabf7604086add16910a0e912ec3343a20"
+    },
+    {
       "path": "pyproject.toml",
-      "bytes": 460,
-      "sha256": "7772aab26e59dc822546222c0ab630b939034f9419e57426d9d747ca73c8e150"
+      "bytes": 520,
+      "sha256": "dbc1c8e9f93782c6f4087dd7f12cf0a70a974d11ac2bbde2425874faf121764c"
     },
     {
       "path": "requirements-training.txt",

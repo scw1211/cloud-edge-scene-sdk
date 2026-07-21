@@ -9,7 +9,7 @@
 - 每个场景维护独立 LoRA 和动作映射，由边缘 Qwen 输出一个动作 token；
 - 云端 Teacher 生成和纠错标签，云端协调器处理跨节点冲突。
 
-SDK 不包含交通模型、PEMS08、ASTGCN、Qwen 权重或任何场景 LoRA。模板决策只验证接口，不能作为效果提交。
+源码仓库不直接提交交通模型、PEMS08、ASTGCN 或大模型权重。云端原始 Teacher 与边缘通用蒸馏模型由 `model_bundle/` 锁定身份、下载地址和 SHA-256，安装时独立拉取。模板决策只验证接口，不能作为效果提交。
 
 ## 目录
 
@@ -17,6 +17,7 @@ SDK 不包含交通模型、PEMS08、ASTGCN、Qwen 权重或任何场景 LoRA。
 cloud_edge_scene_sdk/
 ├── cloud_edge_framework/          公共云边运行时
 ├── edge_llm_factory/              蒸馏、评估、合并、量化和适配器校验
+├── model_bundle/                  云端 Teacher 与边缘通用 Student 安装目录
 ├── edge_llm/base_manifest.json    锁定的共享 Qwen 上游身份与 LoRA 契约
 ├── edge_llm/text_snapshot_manifest.json  锁定的纯文本派生权重清单
 ├── edge_llm/calibration/            不含场景样本的通用校准文本与清单
@@ -50,6 +51,16 @@ python -m scene_plugin_template.smoke_test
 - 云端完成冲突消解。
 
 这只能证明框架接通，不代表场景模型已经满足准确率要求。
+
+## 安装默认模型
+
+模型包同时定义未经本项目微调的云端 `qwen3.5:9b` Teacher，以及经过场景无关蒸馏的边缘 0.8B Q4 Student：
+
+```bash
+python -m model_bundle.install_models --all
+```
+
+云端模型从官方 Ollama Registry 拉取；边缘模型从本项目 GitHub Release 下载。安装器会核对模型字节数、SHA-256 和 Ollama 清单摘要。只安装或验证其中一个模型的命令见 `model_bundle/README.md`。
 
 ## 场景接入步骤
 
