@@ -16,6 +16,7 @@
 ```text
 cloud_edge_scene_sdk/
 ├── cloud_edge_framework/          公共云边运行时
+├── FILE_BRIDGE.md                  本地 JSON 校验、Outbox 和上传说明
 ├── edge_llm_factory/              蒸馏、评估、合并、量化和适配器校验
 ├── model_bundle/                  云端 Teacher 与边缘通用 Student 安装目录
 ├── edge_llm/base_manifest.json    锁定的共享 Qwen 上游身份与 LoRA 契约
@@ -112,6 +113,20 @@ power_grid_plugin/
 内部 `SemanticEvent` 才需要 `scope / prediction / risk / uncertainty / timing / evidence / candidate_actions`，因为公共调度和冲突协调依赖这些语义。它由插件生成，不是对场景模型输出格式的要求。
 
 事件类型、`dataschema` 或数据结构不匹配时会直接报错，不会猜字段或回退到旧格式。模板的完整例子见 `scene_plugin_template/sample_event.json`、`data_schema.json` 和 `plugin.py`。
+
+#### 旧项目通过文件桥接
+
+旧模型工程不需要安装或导入本框架。让模型把完整事件 JSON 写入专用 `inbox`，再在独立 Python 环境启动常驻桥接器：
+
+```bash
+python -m cloud_edge_framework.file_bridge watch \
+  --input-dir runtime/file_bridge/inbox \
+  --state-dir runtime/file_bridge/state \
+  --schema-dir scene_plugin_template \
+  --edge-base-url http://127.0.0.1:18101
+```
+
+桥接器会先校验公共信封和场景 `data_schema.json`，合法事件进入 SQLite Outbox 后发送；非法文件进入隔离目录，断网事件在恢复后补传。详细口径见 `FILE_BRIDGE.md`。
 
 ### 3. 接入边缘和云端模型
 

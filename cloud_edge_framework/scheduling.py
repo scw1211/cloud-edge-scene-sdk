@@ -61,6 +61,7 @@ class ScheduleDecision:
     uncertain: bool
     critical: bool
     explicit_cloud_review_requested: bool
+    sla_probe_requested: bool
     evidence_level: str
     upload_bytes: int
     estimated_transfer_ms: float
@@ -84,6 +85,7 @@ class CollaborationScheduler:
         conflict_suspected: bool = False,
         model_disagreement: bool = False,
         cloud_review_requested: bool = False,
+        sla_probe_requested: bool = False,
         upload_bytes: int = 0,
         evidence_level: str = "summary",
         measured_cloud_path_ms: Optional[float] = None,
@@ -131,6 +133,9 @@ class CollaborationScheduler:
         if not network.available or network.loss_rate >= 0.95:
             route = "local_autonomy"
             reason = "cloud is unavailable; execute the local scene safety policy"
+        elif sla_probe_requested and network.loss_rate < 0.20:
+            route = "cloud_sync"
+            reason = "bounded SLA probe measures the complete Edge-Qwen and cloud path"
         elif conflict_suspected and sync_feasible:
             route = "cloud_sync"
             reason = "correlated edge decisions require synchronous cloud coordination"
@@ -169,6 +174,7 @@ class CollaborationScheduler:
             uncertain=uncertain,
             critical=critical,
             explicit_cloud_review_requested=bool(cloud_review_requested),
+            sla_probe_requested=bool(sla_probe_requested),
             evidence_level=evidence_level,
             upload_bytes=upload_bytes,
             estimated_transfer_ms=round(transfer_ms, 6),

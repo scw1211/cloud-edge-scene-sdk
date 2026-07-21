@@ -1,6 +1,6 @@
 {
-  "sdk_version": "0.9.1",
-  "built_at_utc": "2026-07-21T04:46:28.850498+00:00",
+  "sdk_version": "0.10.0",
+  "built_at_utc": "2026-07-21T13:41:29.716651+00:00",
   "python_requires": ">=3.9",
   "included_files": [
     {
@@ -9,19 +9,24 @@
       "sha256": "8777e8c518b8e01cddb48468bc5b104690fa30b40a45569c72e8c2bafc925e6d"
     },
     {
+      "path": "FILE_BRIDGE.md",
+      "bytes": 5344,
+      "sha256": "4427bc9f3bb9924898fbe77159d6f47c554c5da34eb83f2fee6efdadfddef1d6"
+    },
+    {
       "path": "HANDOFF_CHECKLIST.md",
       "bytes": 3742,
       "sha256": "6537b96b6d784d7a485f5e5f367472d692b800ad1c26796aae880d2ef69ccb18"
     },
     {
       "path": "README.md",
-      "bytes": 15153,
-      "sha256": "59048895c2eeb96638a17ce239cf5ef8ba1eacaac45be1af27ee3290056b06c9"
+      "bytes": 15869,
+      "sha256": "3033915de37599e44bce1c21233252ac294c470bdab33bbe4a78abae53eaec11"
     },
     {
       "path": "VERSION",
-      "bytes": 6,
-      "sha256": "179a5390966e85c2071a87c1b31de13df67460665196f6529f8c4986842f81e5"
+      "bytes": 7,
+      "sha256": "dc24feb5bd35084d8ae32a4eafbec12352707d4662401fcbcc9bbd696cde77a9"
     },
     {
       "path": "cloud_edge_framework/__init__.py",
@@ -32,6 +37,11 @@
       "path": "cloud_edge_framework/benchmark_edge_service.py",
       "bytes": 8839,
       "sha256": "7d440d3e8a2625ecacfe3665f039da928fee72917cfa2942e975232951ab24eb"
+    },
+    {
+      "path": "cloud_edge_framework/benchmark_file_bridge.py",
+      "bytes": 6033,
+      "sha256": "b6f1925ed7137969990d1b64b9bef13d46ce0f082dd1a73b81d64ac995599ad4"
     },
     {
       "path": "cloud_edge_framework/benchmark_services.py",
@@ -79,6 +89,11 @@
       "sha256": "069609f7d284127f9e0bad9773bfab0d1de098679aa4ae616769ab7110ac5cb8"
     },
     {
+      "path": "cloud_edge_framework/file_bridge.py",
+      "bytes": 36474,
+      "sha256": "ac5ce28a59a49edd3c6d30a67a9214ce23f25179327f962e00f3bd45fa029b38"
+    },
+    {
       "path": "cloud_edge_framework/http_api.py",
       "bytes": 4523,
       "sha256": "4df2869f39e2402db72afcf964e2e173caf3f0a643e6fa9a62f7099bae679359"
@@ -115,8 +130,8 @@
     },
     {
       "path": "cloud_edge_framework/plugins/base.py",
-      "bytes": 7485,
-      "sha256": "0b5b6e4d1a3250f41db6ffef7426c203035a012625f05021775ecb471099de98"
+      "bytes": 7902,
+      "sha256": "548afb4b2ead8dcf1e2fc534e2b69c9c26910abe5c928cf4b36f9064c9f21e95"
     },
     {
       "path": "cloud_edge_framework/registry.py",
@@ -150,13 +165,13 @@
     },
     {
       "path": "cloud_edge_framework/runtime.py",
-      "bytes": 22272,
-      "sha256": "230bf9a8b3899ce76c81f01cc092310390f4b8cc66a09f20e48ac2d0c3164c65"
+      "bytes": 23403,
+      "sha256": "92bb3c302fe95c7716e949d2c2109ddd48c3b07872689ad28a1df685f954fbba"
     },
     {
       "path": "cloud_edge_framework/scheduling.py",
-      "bytes": 7105,
-      "sha256": "231efed127da2b970cf888470203a50bb1e313e4099fa32d2d5653e0aa985cf6"
+      "bytes": 7421,
+      "sha256": "7029b0124ee6c4743f6731a0b02661e7c241852291d870addf991471d8510e83"
     },
     {
       "path": "cloud_edge_framework/server.py",
@@ -375,8 +390,8 @@
     },
     {
       "path": "pyproject.toml",
-      "bytes": 520,
-      "sha256": "f28f57c912e4ada5e3c434236944945ef48da9e1794683bf25c29a234ba72520"
+      "bytes": 521,
+      "sha256": "59c78f61bf23c30f069c6d7785226fedc972cce0a6e2dfb4549561fbcffc22ff"
     },
     {
       "path": "requirements-training.txt",

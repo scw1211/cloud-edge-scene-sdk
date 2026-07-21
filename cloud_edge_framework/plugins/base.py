@@ -44,6 +44,9 @@ class ScenePlugin(ABC):
 
     def contract_descriptor(self) -> Dict[str, Any]:
         """Validate and describe the plugin's external event contract."""
+        cached = getattr(self, "_contract_descriptor_cache", None)
+        if cached is not None:
+            return dict(cached)
         scene = str(self.scene).strip()
         if not scene:
             raise ContractError("plugin scene must be non-empty")
@@ -67,11 +70,14 @@ class ScenePlugin(ABC):
                 f"plugin {scene!r} payload schema is invalid: {exc.message}"
             ) from exc
 
-        return {
+        descriptor = {
             "scene": scene,
             "event_types": list(event_types),
             "data_schema": schema_id,
         }
+        self._contract_descriptor_cache = descriptor
+        self._payload_validator_cache = Draft202012Validator(schema)
+        return dict(descriptor)
 
     def validate_envelope(self, envelope: SceneEventEnvelope) -> SceneEventEnvelope:
         """Validate routing metadata and the plugin-owned payload."""
@@ -91,7 +97,10 @@ class ScenePlugin(ABC):
                 f"{descriptor['data_schema']!r}"
             )
 
-        validator = Draft202012Validator(self.payload_schema())
+        validator = getattr(self, "_payload_validator_cache", None)
+        if validator is None:
+            self.contract_descriptor()
+            validator = self._payload_validator_cache
         errors = sorted(
             validator.iter_errors(envelope.payload_for_validation()),
             key=lambda error: list(error.path),

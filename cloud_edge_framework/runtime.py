@@ -242,6 +242,7 @@ class EdgeRuntime:
             }
         )
         event = replace(event, metadata=event_metadata)
+        normalization_done = time.perf_counter()
         scene_edge_inference_ms = event.timing.edge_inference_ms
         edge_decision_started = time.perf_counter()
         local = plugin.edge_decide(event)
@@ -256,6 +257,7 @@ class EdgeRuntime:
                 edge_inference_ms=scene_edge_inference_ms + edge_decision_runtime_ms,
             ),
         )
+        edge_decision_done = time.perf_counter()
         evidence_plan = self.evidence_planner.plan(event, conflict_suspected)
         selected_evidence_ids = set(evidence_plan.selected_evidence_ids)
         selected_event = replace(
@@ -288,6 +290,7 @@ class EdgeRuntime:
                 separators=(",", ":"),
             ).encode("utf-8")
         )
+        data_plane_done = time.perf_counter()
         profile = self.performance_store.estimate(
             event.scene, evidence_plan.required_level, snapshot
         )
@@ -298,6 +301,10 @@ class EdgeRuntime:
         cloud_review_requested = bool(
             event.metadata.get("cloud_review_requested", False)
         )
+        sla_probe_requested = (
+            local.metadata.get("edge_llm_selection_reason")
+            == "deadline_profile_probe"
+        )
         schedule = self.scheduler.schedule(
             event,
             snapshot,
@@ -306,6 +313,7 @@ class EdgeRuntime:
                 model_disagreement or edge_llm_escalation or edge_llm_disagreement
             ),
             cloud_review_requested=cloud_review_requested,
+            sla_probe_requested=sla_probe_requested,
             upload_bytes=cloud_request_bytes,
             evidence_level=evidence_plan.required_level,
             measured_cloud_path_ms=profile.cloud_path_ms if profile is not None else None,
@@ -313,6 +321,7 @@ class EdgeRuntime:
         warning = ""
         if schedule.cloud_requested and not evidence_plan.complete:
             warning = "required {} evidence is unavailable".format(evidence_plan.missing_level)
+        scheduling_done = time.perf_counter()
 
         if schedule.route == "cloud_sync":
             cloud_started = time.perf_counter()
@@ -442,7 +451,8 @@ class EdgeRuntime:
         else:
             final = replace(local, route="edge_only", status="final")
 
-        runtime_ms = (time.perf_counter() - started) * 1000.0
+        route_done = time.perf_counter()
+        runtime_ms = (route_done - started) * 1000.0
         accounted_closed_loop_ms = (
             event.timing.preprocessing_ms + scene_edge_inference_ms + runtime_ms
         )
@@ -473,6 +483,21 @@ class EdgeRuntime:
                 "edge_inference_ms": event.timing.edge_inference_ms,
                 "scene_edge_model_reported_ms": scene_edge_inference_ms,
                 "edge_decision_runtime_ms": round(edge_decision_runtime_ms, 6),
+                "pipeline_stage_ms": {
+                    "normalization": round((normalization_done - started) * 1000.0, 6),
+                    "edge_decision": round(
+                        (edge_decision_done - normalization_done) * 1000.0, 6
+                    ),
+                    "data_plane_preparation": round(
+                        (data_plane_done - edge_decision_done) * 1000.0, 6
+                    ),
+                    "scheduling": round(
+                        (scheduling_done - data_plane_done) * 1000.0, 6
+                    ),
+                    "route_execution": round(
+                        (route_done - scheduling_done) * 1000.0, 6
+                    ),
+                },
                 "post_model_framework_ms": round(runtime_ms, 6),
                 "accounted_closed_loop_ms": round(accounted_closed_loop_ms, 6),
                 "note": "reported scene inference is added once; measured edge decision and cloud transport are already inside framework time",
