@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.10.0",
-  "built_at_utc": "2026-07-21T13:41:29.716651+00:00",
+  "built_at_utc": "2026-07-22T05:30:37.048071+00:00",
   "python_requires": ">=3.9",
   "included_files": [
     {
@@ -14,14 +14,19 @@
       "sha256": "4427bc9f3bb9924898fbe77159d6f47c554c5da34eb83f2fee6efdadfddef1d6"
     },
     {
+      "path": "FRAMEWORK_STUDY_GUIDE.md",
+      "bytes": 32821,
+      "sha256": "cf0fb88b779161d01b0c45e26dcafa2d2ef54c9b126a411f055d3c5f94483911"
+    },
+    {
       "path": "HANDOFF_CHECKLIST.md",
       "bytes": 3742,
       "sha256": "6537b96b6d784d7a485f5e5f367472d692b800ad1c26796aae880d2ef69ccb18"
     },
     {
       "path": "README.md",
-      "bytes": 15869,
-      "sha256": "3033915de37599e44bce1c21233252ac294c470bdab33bbe4a78abae53eaec11"
+      "bytes": 16141,
+      "sha256": "4f6b88cf18c28405a55694f53d4fc259a939092a6c4fe79501e8e39953541af3"
     },
     {
       "path": "VERSION",

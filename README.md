@@ -11,11 +11,14 @@
 
 源码仓库不直接提交交通模型、PEMS08、ASTGCN 或大模型权重。云端原始 Teacher 与边缘通用蒸馏模型由 `model_bundle/` 锁定身份、下载地址和 SHA-256，安装时独立拉取。模板决策只验证接口，不能作为效果提交。
 
+第一次阅读建议先看 [`FRAMEWORK_STUDY_GUIDE.md`](FRAMEWORK_STUDY_GUIDE.md)。它按完整请求、弱网可靠性、模型生命周期和逐文件职责解释整个 SDK。
+
 ## 目录
 
 ```text
 cloud_edge_scene_sdk/
 ├── cloud_edge_framework/          公共云边运行时
+├── FRAMEWORK_STUDY_GUIDE.md        整体调用链、逐文件说明和阅读路线
 ├── FILE_BRIDGE.md                  本地 JSON 校验、Outbox 和上传说明
 ├── edge_llm_factory/              蒸馏、评估、合并、量化和适配器校验
 ├── model_bundle/                  云端 Teacher 与边缘通用 Student 安装目录
