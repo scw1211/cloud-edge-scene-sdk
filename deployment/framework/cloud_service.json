@@ -10,7 +10,9 @@
   },
   "storage": {
     "feedback": "runtime/framework_cloud_feedback.jsonl",
-    "idempotency": "runtime/framework_cloud_idempotency.sqlite3"
+    "idempotency": "runtime/framework_cloud_idempotency.sqlite3",
+    "artifacts": "runtime/framework_cloud_artifacts",
+    "aggregations": "runtime/framework_cloud_aggregations.sqlite3"
   },
   "idempotency": {
     "ttl_seconds": 86400,

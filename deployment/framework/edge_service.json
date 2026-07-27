@@ -12,7 +12,9 @@
     "outbox": "runtime/framework_edge_outbox.sqlite3",
     "performance_profiles": "runtime/framework_edge_performance_profiles.json",
     "feedback": "runtime/framework_edge_feedback.jsonl",
-    "idempotency": "runtime/framework_edge_idempotency.sqlite3"
+    "idempotency": "runtime/framework_edge_idempotency.sqlite3",
+    "reviews": "runtime/framework_edge_reviews.sqlite3",
+    "monitoring": "runtime/framework_edge_monitoring.sqlite3"
   },
   "scheduler": {
     "confidence_threshold": 0.75,
@@ -43,5 +45,14 @@
   "idempotency": {
     "ttl_seconds": 86400,
     "max_entries": 100000
+  },
+  "monitoring": {
+    "enabled": true,
+    "window_size": 500,
+    "min_labeled_samples": 50,
+    "min_drift_samples": 50,
+    "bootstrap_reference_size": 200,
+    "evaluation_interval_events": 25,
+    "evaluation_max_staleness_ms": 1000
   }
 }

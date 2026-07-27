@@ -5,7 +5,9 @@ from pathlib import Path
 import time
 from typing import Any, Dict, Mapping
 
-from cloud_edge_framework.contracts import SCHEMA_VERSION, stable_id
+from cloud_edge_framework.aggregation import AggregationSpec, MultiEdgeEventAggregator
+from cloud_edge_framework.artifacts import EvidenceArtifactStore
+from cloud_edge_framework.contracts import SCHEMA_VERSION, SemanticEvent, stable_id
 from cloud_edge_framework.feedback import DecisionFeedbackStore
 from cloud_edge_framework.http_api import ApiNotFoundError, create_http_server
 from cloud_edge_framework.metrics import FrameworkMetrics
@@ -22,6 +24,11 @@ PLUGINS_ENDPOINT = "/api/v1/collaboration/plugins"
 RELOAD_ENDPOINT = "/api/v1/collaboration/plugins/reload"
 SCHEMA_ENDPOINT = "/api/v1/collaboration/schema"
 METRICS_ENDPOINT = "/api/v1/framework/metrics"
+EVIDENCE_ENDPOINT_PREFIX = "/api/v1/evidence/"
+AGGREGATE_ENDPOINT = "/api/v1/collaboration/aggregate"
+AGGREGATE_FLUSH_ENDPOINT = AGGREGATE_ENDPOINT + "/flush"
+AGGREGATIONS_ENDPOINT = "/api/v1/collaboration/aggregations"
+AGGREGATIONS_ENDPOINT_PREFIX = AGGREGATIONS_ENDPOINT + "/"
 
 
 class CloudApiService:
@@ -32,12 +39,32 @@ class CloudApiService:
             raise ValueError("CloudApiService requires a cloud config")
         self.project_root = project_root.resolve()
         self.config = config
+        artifact_root = config.storage.artifacts or (
+            self.project_root / "runtime" / "framework_cloud_artifacts"
+        )
+        self.artifact_store = EvidenceArtifactStore(artifact_root)
+        aggregation_path = config.storage.aggregations or (
+            self.project_root / "runtime" / "framework_cloud_aggregations.sqlite3"
+        )
+        self.aggregator = MultiEdgeEventAggregator(aggregation_path)
+        self.cloud_reviewer = None
+        if config.cloud_llm is not None and config.cloud_llm.enabled:
+            if config.cloud_llm.runtime_config is None:
+                raise ValueError("enabled cloud_llm requires runtime_config")
+            from edge_llm_factory.providers import load_provider
+            from cloud_edge_framework.cloud_llm import CloudLLMReviewer
+
+            self.cloud_reviewer = CloudLLMReviewer(
+                load_provider(config.cloud_llm.runtime_config),
+                min_risk_level=config.cloud_llm.min_risk_level,
+            )
         feedback_store = DecisionFeedbackStore(config.storage.feedback)
         self.manager = PluginRuntimeManager(
             project_root=self.project_root,
             config_path=config.plugin_config,
             feedback_store=feedback_store,
             role="cloud",
+            cloud_reviewer=self.cloud_reviewer,
         )
         idempotency_path = config.storage.idempotency or (
             self.project_root / "runtime" / "framework_cloud_idempotency.sqlite3"
@@ -58,6 +85,8 @@ class CloudApiService:
             "schema_version": SCHEMA_VERSION,
             "runtime": self.manager.health(),
             "idempotency": self.idempotency.snapshot(),
+            "artifacts": self.artifact_store.snapshot(),
+            "aggregations": self.aggregator.snapshot(),
         }
 
     def protocol(self) -> Dict[str, Any]:
@@ -72,6 +101,10 @@ class CloudApiService:
                 "plugins": PLUGINS_ENDPOINT,
                 "reload_plugins": RELOAD_ENDPOINT,
                 "metrics": METRICS_ENDPOINT,
+                "evidence": EVIDENCE_ENDPOINT_PREFIX + "{sha256}",
+                "aggregate": AGGREGATE_ENDPOINT,
+                "flush_aggregations": AGGREGATE_FLUSH_ENDPOINT,
+                "aggregations": AGGREGATIONS_ENDPOINT,
             },
         }
 
@@ -143,6 +176,65 @@ class CloudApiService:
         self.metrics.record_coordination_result(result, replayed)
         return result
 
+    def _complete_aggregation_lease(self, lease: Any) -> Dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            with self.manager.lease() as snapshot:
+                coordination = snapshot.require_cloud().coordinate(lease.events)
+            self.aggregator.complete(lease.group_id, coordination)
+        except Exception as exc:
+            self.aggregator.release(
+                lease.group_id, "{}: {}".format(type(exc).__name__, exc)
+            )
+            raise
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        self.metrics.record_cloud_request("aggregate", elapsed_ms, False)
+        self.metrics.record_coordination_result(coordination, False)
+        return self.aggregator.get(lease.group_id)
+
+    def aggregate(
+        self, payload: Dict[str, Any], headers: Mapping[str, str]
+    ) -> Dict[str, Any]:
+        del headers
+        raw_event = payload.get("event")
+        if not isinstance(raw_event, dict):
+            raise ValueError("request.event must be an object")
+        event = SemanticEvent.from_dict(raw_event)
+        with self.manager.lease() as snapshot:
+            plugin = snapshot.registry.get(event.scene)
+            raw_spec = plugin.aggregation_spec(event)
+        if raw_spec is None:
+            raise ValueError("scene event does not request multi-edge aggregation")
+        spec = AggregationSpec.from_dict(raw_spec)
+        submission = self.aggregator.submit(event, spec)
+        lease = self.aggregator.claim(str(submission["group_id"]))
+        if lease is None:
+            return {"aggregation": submission, "coordination": submission.get("result")}
+        completed = self._complete_aggregation_lease(lease)
+        return {"aggregation": completed, "coordination": completed.get("result")}
+
+    def flush_aggregations(self, limit: int = 64) -> Dict[str, Any]:
+        leases = self.aggregator.claim_due(limit)
+        completed = []
+        errors = []
+        for lease in leases:
+            try:
+                completed.append(self._complete_aggregation_lease(lease))
+            except Exception as exc:
+                errors.append(
+                    {
+                        "group_id": lease.group_id,
+                        "error": "{}: {}".format(type(exc).__name__, exc),
+                    }
+                )
+        return {
+            "attempted": len(leases),
+            "completed": len(completed),
+            "groups": completed,
+            "errors": errors,
+            "summary": self.aggregator.snapshot(),
+        }
+
     def add_feedback(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         record = payload.get("record")
         if not isinstance(record, dict):
@@ -171,6 +263,12 @@ class CloudApiService:
                 "count": self.manager.feedback_store.count(),
                 "recent": self.manager.feedback_store.recent(20),
             }
+        if path == AGGREGATIONS_ENDPOINT:
+            return self.aggregator.snapshot()
+        if path.startswith(AGGREGATIONS_ENDPOINT_PREFIX):
+            return self.aggregator.get(path[len(AGGREGATIONS_ENDPOINT_PREFIX):])
+        if path.startswith(EVIDENCE_ENDPOINT_PREFIX):
+            return self.artifact_store.describe(path[len(EVIDENCE_ENDPOINT_PREFIX):])
         raise ApiNotFoundError(path)
 
     def handle_post(
@@ -183,17 +281,42 @@ class CloudApiService:
             return self.cloud_decision(payload, headers)
         if path == COORDINATE_ENDPOINT:
             return self.coordinate(payload, headers)
+        if path == AGGREGATE_ENDPOINT:
+            return self.aggregate(payload, headers)
+        if path == AGGREGATE_FLUSH_ENDPOINT:
+            return self.flush_aggregations(int(payload.get("limit", 64)))
         if path == FEEDBACK_ENDPOINT:
             return self.add_feedback(payload)
         if path == RELOAD_ENDPOINT:
             return self.manager.reload()
         raise ApiNotFoundError(path)
 
+    def handle_put(
+        self,
+        path: str,
+        body: bytes,
+        headers: Mapping[str, str],
+    ) -> Dict[str, Any]:
+        if not path.startswith(EVIDENCE_ENDPOINT_PREFIX):
+            raise ApiNotFoundError(path)
+        digest = path[len(EVIDENCE_ENDPOINT_PREFIX):]
+        result = self.artifact_store.put(
+            body,
+            digest,
+            content_type=str(headers.get("content-type", "application/octet-stream")),
+            evidence_id=str(headers.get("x-evidence-id", "")),
+        )
+        result["received_bytes"] = len(body)
+        self.metrics.increment("evidence_uploads_total")
+        self.metrics.observe("evidence_upload_bytes", len(body))
+        return result
+
     def record_failure(self, method: str, path: str) -> None:
         self.metrics.record_failure("{} {}".format(method, path))
 
     def close(self) -> None:
         self.manager.close()
+        self.aggregator.close()
 
 
 def parse_args() -> argparse.Namespace:

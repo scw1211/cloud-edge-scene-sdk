@@ -61,6 +61,24 @@ class ReliableHttpCloudClient(HttpCloudClient):
         material = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return stable_id("http_request", path, material), trace_id
 
+    def _put_bytes(
+        self,
+        path: str,
+        data: bytes,
+        headers: Dict[str, str],
+    ) -> Dict[str, Any]:
+        last_error: Exception = CloudTransportError("artifact upload did not start")
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                result = super()._put_bytes(path, data, headers)
+                result["attempts"] = attempt
+                return result
+            except CloudTransportError as exc:
+                last_error = exc
+                if attempt < self.max_attempts:
+                    time.sleep(self.retry_backoff_seconds * (2 ** (attempt - 1)))
+        raise last_error
+
     def _post(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         request_id, trace_id = self._request_identity(path, payload)

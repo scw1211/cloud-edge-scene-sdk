@@ -41,6 +41,16 @@ def build_role_handler(service: Any, max_body_bytes: int, access_log: bool):
             self.wfile.write(body)
 
         def read_json(self) -> Dict[str, Any]:
+            body = self.read_body()
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except UnicodeDecodeError as exc:
+                raise ValueError("request body must use UTF-8") from exc
+            if not isinstance(payload, dict):
+                raise ValueError("request body must be an object")
+            return payload
+
+        def read_body(self) -> bytes:
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError as exc:
@@ -51,13 +61,7 @@ def build_role_handler(service: Any, max_body_bytes: int, access_log: bool):
                         max_body_bytes
                     )
                 )
-            try:
-                payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
-            except UnicodeDecodeError as exc:
-                raise ValueError("request body must use UTF-8") from exc
-            if not isinstance(payload, dict):
-                raise ValueError("request body must be an object")
-            return payload
+            return self.rfile.read(content_length)
 
         def _handle_error(self, exc: Exception) -> None:
             if isinstance(exc, ApiNotFoundError):
@@ -100,6 +104,17 @@ def build_role_handler(service: Any, max_body_bytes: int, access_log: bool):
                 self.send_json(HTTPStatus.OK, result)
             except Exception as exc:  # noqa: BLE001
                 service.record_failure("POST", path)
+                self._handle_error(exc)
+
+        def do_PUT(self) -> None:
+            path = urlsplit(self.path).path
+            try:
+                if not hasattr(service, "handle_put"):
+                    raise ApiNotFoundError(path)
+                result = service.handle_put(path, self.read_body(), _headers(self))
+                self.send_json(HTTPStatus.OK, result)
+            except Exception as exc:  # noqa: BLE001
+                service.record_failure("PUT", path)
                 self._handle_error(exc)
 
     return Handler

@@ -9,16 +9,19 @@ from cloud_edge_framework.contracts import SCHEMA_VERSION, stable_id
 from cloud_edge_framework.feedback import DecisionFeedbackStore
 from cloud_edge_framework.http_api import ApiNotFoundError, create_http_server
 from cloud_edge_framework.metrics import FrameworkMetrics
+from cloud_edge_framework.monitoring import CalibrationDriftMonitor, MonitoringPolicy
 from cloud_edge_framework.networking import CloudNetworkMonitor
 from cloud_edge_framework.performance import PerformanceProfileStore
 from cloud_edge_framework.plugin_manager import PluginRuntimeManager
 from cloud_edge_framework.release_watcher import EdgeLLMReleaseWatcher
 from cloud_edge_framework.reliability import SQLiteIdempotencyStore, SQLiteOutbox
+from cloud_edge_framework.review_tracking import ReviewLifecycleStore
 from cloud_edge_framework.reliable_transport import ReliableHttpCloudClient
 from cloud_edge_framework.replay import OutboxReplayWorker
 from cloud_edge_framework.scheduling import CollaborationScheduler
 from cloud_edge_framework.service_config import FrameworkServiceConfig, load_service_config
 from cloud_edge_framework.version import FRAMEWORK_VERSION
+from cloud_edge_framework.utility_routing import LearnedUtilityRouter
 
 
 DECIDE_ENDPOINT = "/api/v1/collaboration/decide"
@@ -30,6 +33,13 @@ METRICS_ENDPOINT = "/api/v1/framework/metrics"
 OUTBOX_ENDPOINT = "/api/v1/framework/outbox"
 EDGE_LLM_RELEASE_ENDPOINT = "/api/v1/framework/edge-llm/release"
 EDGE_LLM_RELOAD_ENDPOINT = "/api/v1/framework/edge-llm/reload"
+REVIEWS_ENDPOINT = "/api/v1/collaboration/reviews"
+REVIEWS_ENDPOINT_PREFIX = REVIEWS_ENDPOINT + "/"
+MONITORING_ENDPOINT = "/api/v1/collaboration/monitoring"
+MONITORING_ENDPOINT_PREFIX = MONITORING_ENDPOINT + "/"
+MONITORING_OUTCOME_ENDPOINT = MONITORING_ENDPOINT + "/outcome"
+MONITORING_REFERENCE_ENDPOINT = MONITORING_ENDPOINT + "/reference"
+ROUTING_DATASET_ENDPOINT = "/api/v1/collaboration/routing-dataset"
 
 
 class EdgeApiService:
@@ -62,6 +72,43 @@ class EdgeApiService:
             synchronous_persistence=False,
         )
         self.feedback_store = DecisionFeedbackStore(config.storage.feedback)
+        review_path = config.storage.reviews or (
+            self.project_root / "runtime" / "framework_edge_reviews.sqlite3"
+        )
+        self.review_tracker = ReviewLifecycleStore(review_path)
+        monitoring_path = config.storage.monitoring or (
+            self.project_root / "runtime" / "framework_edge_monitoring.sqlite3"
+        )
+        monitoring_config = config.monitoring
+        monitoring_enabled = (
+            monitoring_config is None or monitoring_config.enabled
+        )
+        monitoring_policy = (
+            MonitoringPolicy()
+            if monitoring_config is None
+            else MonitoringPolicy(
+                window_size=monitoring_config.window_size,
+                bins=monitoring_config.bins,
+                min_labeled_samples=monitoring_config.min_labeled_samples,
+                min_drift_samples=monitoring_config.min_drift_samples,
+                bootstrap_reference_size=monitoring_config.bootstrap_reference_size,
+                max_ece=monitoring_config.max_ece,
+                target_coverage=monitoring_config.target_coverage,
+                coverage_tolerance=monitoring_config.coverage_tolerance,
+                max_psi=monitoring_config.max_psi,
+                evaluation_interval_events=(
+                    monitoring_config.evaluation_interval_events
+                ),
+                evaluation_max_staleness_ms=(
+                    monitoring_config.evaluation_max_staleness_ms
+                ),
+            )
+        )
+        self.calibration_monitor = (
+            CalibrationDriftMonitor(monitoring_path, monitoring_policy)
+            if monitoring_enabled
+            else None
+        )
         self.cloud_client = ReliableHttpCloudClient(
             config.cloud.base_url,
             timeout_seconds=config.cloud.timeout_seconds,
@@ -72,6 +119,13 @@ class EdgeApiService:
             confidence_threshold=config.scheduler.confidence_threshold,
             jitter_guard=config.scheduler.jitter_guard,
         )
+        self.utility_router = None
+        if config.utility_router is not None and config.utility_router.enabled:
+            if config.utility_router.artifact is None:
+                raise ValueError("enabled utility router requires an artifact")
+            self.utility_router = LearnedUtilityRouter.load(
+                config.utility_router.artifact, mode=config.utility_router.mode
+            )
         self.metrics = FrameworkMetrics(self.role)
         self.manager = PluginRuntimeManager(
             project_root=self.project_root,
@@ -79,9 +133,12 @@ class EdgeApiService:
             review_store=self.outbox,
             performance_store=self.performance_store,
             feedback_store=self.feedback_store,
+            review_tracker=self.review_tracker,
             role="edge",
             remote_cloud=self.cloud_client,
             scheduler=self.scheduler,
+            calibration_monitor=self.calibration_monitor,
+            utility_router=self.utility_router,
         )
         self.release_watcher = None
         if config.release_watch is not None and config.release_watch.enabled:
@@ -123,6 +180,12 @@ class EdgeApiService:
             "outbox": self.outbox.snapshot(),
             "replay": self.replay_worker.health(),
             "idempotency": self.idempotency.snapshot(),
+            "reviews": self.review_tracker.snapshot(),
+            "monitoring": (
+                self.calibration_monitor.snapshot()
+                if self.calibration_monitor is not None
+                else {"status": "disabled"}
+            ),
             "edge_llm_release": self.release_watcher.health()
             if self.release_watcher is not None
             else {"status": "disabled"},
@@ -143,6 +206,13 @@ class EdgeApiService:
                 "reload_edge_llm": EDGE_LLM_RELOAD_ENDPOINT,
                 "metrics": METRICS_ENDPOINT,
                 "outbox": OUTBOX_ENDPOINT,
+                "reviews": REVIEWS_ENDPOINT,
+                "review": REVIEWS_ENDPOINT_PREFIX + "{review_or_event_id}",
+                "monitoring": MONITORING_ENDPOINT,
+                "monitoring_scene": MONITORING_ENDPOINT_PREFIX + "{scene}",
+                "monitoring_outcome": MONITORING_OUTCOME_ENDPOINT,
+                "monitoring_reference": MONITORING_REFERENCE_ENDPOINT,
+                "routing_dataset": ROUTING_DATASET_ENDPOINT,
             },
         }
 
@@ -201,14 +271,42 @@ class EdgeApiService:
                 "cloud_required_for_readiness": False,
             }
         if path == METRICS_ENDPOINT:
-            return self.metrics.snapshot()
+            result = self.metrics.snapshot()
+            result["review_lifecycle"] = self.review_tracker.snapshot()
+            result["calibration_drift_monitor"] = (
+                self.calibration_monitor.snapshot()
+                if self.calibration_monitor is not None
+                else {"status": "disabled"}
+            )
+            return result
         if path == OUTBOX_ENDPOINT:
             return self.outbox.snapshot()
+        if path == ROUTING_DATASET_ENDPOINT:
+            return self.review_tracker.routing_dataset()
         if path == EDGE_LLM_RELEASE_ENDPOINT:
             return (
                 self.release_watcher.health()
                 if self.release_watcher is not None
                 else {"status": "disabled"}
+            )
+        if path == REVIEWS_ENDPOINT:
+            return {
+                "summary": self.review_tracker.snapshot(),
+                "recent": self.review_tracker.recent(20),
+            }
+        if path.startswith(REVIEWS_ENDPOINT_PREFIX):
+            return self.review_tracker.get(path[len(REVIEWS_ENDPOINT_PREFIX):])
+        if path == MONITORING_ENDPOINT:
+            return (
+                self.calibration_monitor.snapshot()
+                if self.calibration_monitor is not None
+                else {"status": "disabled"}
+            )
+        if path.startswith(MONITORING_ENDPOINT_PREFIX):
+            if self.calibration_monitor is None:
+                return {"status": "disabled"}
+            return self.calibration_monitor.scene_snapshot(
+                path[len(MONITORING_ENDPOINT_PREFIX):]
             )
         if path == SCHEMA_ENDPOINT:
             return self.protocol()
@@ -229,6 +327,25 @@ class EdgeApiService:
             return self.replay_worker.run_once()
         if path == RELOAD_ENDPOINT:
             return self.manager.reload()
+        if path == MONITORING_OUTCOME_ENDPOINT:
+            if self.calibration_monitor is None:
+                raise ValueError("calibration and drift monitoring is disabled")
+            return self.calibration_monitor.record_outcome(
+                str(payload.get("event_id", "")),
+                str(payload.get("true_label", "")),
+            )
+        if path == MONITORING_REFERENCE_ENDPOINT:
+            if self.calibration_monitor is None:
+                raise ValueError("calibration and drift monitoring is disabled")
+            samples = payload.get("samples")
+            if not isinstance(samples, list):
+                raise ValueError("monitoring reference samples must be a list")
+            return self.calibration_monitor.set_reference(
+                str(payload.get("scene", "")),
+                str(payload.get("signal", "")),
+                samples,
+                source=str(payload.get("source", "validation")),
+            )
         if path == EDGE_LLM_RELOAD_ENDPOINT:
             if self.release_watcher is None:
                 raise ValueError("Edge LLM release watcher is disabled")
@@ -245,6 +362,9 @@ class EdgeApiService:
         self.network_monitor.stop()
         self.cloud_client.flush_feedback()
         self.manager.close()
+        if self.calibration_monitor is not None:
+            self.calibration_monitor.close()
+        self.review_tracker.close()
 
 
 def parse_args() -> argparse.Namespace:

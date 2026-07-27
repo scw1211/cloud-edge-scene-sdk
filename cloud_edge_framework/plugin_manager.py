@@ -12,6 +12,8 @@ from cloud_edge_framework.registry import SceneRegistry, build_default_registry
 from cloud_edge_framework.feedback import DecisionFeedbackStore
 from cloud_edge_framework.performance import PerformanceProfileStore
 from cloud_edge_framework.review_queue import PendingReviewStore
+from cloud_edge_framework.review_tracking import ReviewLifecycleStore
+from cloud_edge_framework.monitoring import CalibrationDriftMonitor
 from cloud_edge_framework.runtime import CloudRuntime, EdgeRuntime
 from cloud_edge_framework.scheduling import CollaborationScheduler
 
@@ -58,9 +60,13 @@ class PluginRuntimeManager:
         review_store: Optional[PendingReviewStore] = None,
         performance_store: Optional[PerformanceProfileStore] = None,
         feedback_store: Optional[DecisionFeedbackStore] = None,
+        review_tracker: Optional[ReviewLifecycleStore] = None,
         role: str = "combined",
         remote_cloud: Optional[Any] = None,
         scheduler: Optional[CollaborationScheduler] = None,
+        cloud_reviewer: Optional[Any] = None,
+        calibration_monitor: Optional[CalibrationDriftMonitor] = None,
+        utility_router: Optional[Any] = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.config_path = (
@@ -71,6 +77,8 @@ class PluginRuntimeManager:
         self.review_store = review_store or PendingReviewStore()
         self.performance_store = performance_store or PerformanceProfileStore()
         self.feedback_store = feedback_store or DecisionFeedbackStore()
+        self._owns_review_tracker = review_tracker is None
+        self.review_tracker = review_tracker or ReviewLifecycleStore()
         self.role = str(role)
         if self.role not in RUNTIME_ROLES:
             raise ValueError("runtime role must be one of {}".format(sorted(RUNTIME_ROLES)))
@@ -78,6 +86,9 @@ class PluginRuntimeManager:
             raise ValueError("edge runtime manager requires remote_cloud")
         self.remote_cloud = remote_cloud
         self.scheduler = scheduler
+        self.cloud_reviewer = cloud_reviewer
+        self.calibration_monitor = calibration_monitor
+        self.utility_router = utility_router
         self._lock = threading.RLock()
         self._reload_lock = threading.Lock()
         self._active: Optional[RuntimeSnapshot] = None
@@ -96,7 +107,7 @@ class PluginRuntimeManager:
         edge: Optional[EdgeRuntime] = None
         try:
             if self.role in {"cloud", "combined"}:
-                cloud = CloudRuntime(registry)
+                cloud = CloudRuntime(registry, reviewer=self.cloud_reviewer)
                 cloud.warmup()
             else:
                 registry.warmup()
@@ -109,6 +120,9 @@ class PluginRuntimeManager:
                     review_store=self.review_store,
                     performance_store=self.performance_store,
                     feedback_store=self.feedback_store,
+                    review_tracker=self.review_tracker,
+                    calibration_monitor=self.calibration_monitor,
+                    utility_router=self.utility_router,
                 )
         except Exception:
             registry.close()
@@ -189,6 +203,22 @@ class PluginRuntimeManager:
                     self.performance_store.snapshot()["profiles"]
                 ),
                 "decision_feedback_records": self.feedback_store.count(),
+                "review_lifecycle": self.review_tracker.snapshot(),
+                "calibration_drift_monitor": (
+                    self.calibration_monitor.snapshot()
+                    if self.calibration_monitor is not None
+                    else {"status": "disabled"}
+                ),
+                "utility_router": (
+                    self.utility_router.describe()
+                    if self.utility_router is not None
+                    else {"enabled": False}
+                ),
+                "cloud_llm": (
+                    self.cloud_reviewer.describe()
+                    if self.cloud_reviewer is not None
+                    else {"enabled": False}
+                ),
                 "retired_snapshot_count": retired_count,
                 "inflight_requests": inflight,
             }
@@ -209,5 +239,7 @@ class PluginRuntimeManager:
                 snapshot.registry.close()
             except Exception as exc:  # noqa: BLE001
                 errors.append(str(exc))
+        if self._owns_review_tracker:
+            self.review_tracker.close()
         if errors:
             raise RuntimeError("failed to close plugin runtime: {}".format("; ".join(errors)))

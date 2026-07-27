@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import replace
-from typing import Any, Dict, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
@@ -44,6 +44,9 @@ class ScenePlugin(ABC):
 
     def contract_descriptor(self) -> Dict[str, Any]:
         """Validate and describe the plugin's external event contract."""
+        cached = getattr(self, "_contract_descriptor_cache", None)
+        if cached is not None:
+            return dict(cached)
         scene = str(self.scene).strip()
         if not scene:
             raise ContractError("plugin scene must be non-empty")
@@ -67,11 +70,14 @@ class ScenePlugin(ABC):
                 f"plugin {scene!r} payload schema is invalid: {exc.message}"
             ) from exc
 
-        return {
+        descriptor = {
             "scene": scene,
             "event_types": list(event_types),
             "data_schema": schema_id,
         }
+        self._contract_descriptor_cache = descriptor
+        self._payload_validator_cache = Draft202012Validator(schema)
+        return dict(descriptor)
 
     def validate_envelope(self, envelope: SceneEventEnvelope) -> SceneEventEnvelope:
         """Validate routing metadata and the plugin-owned payload."""
@@ -91,7 +97,10 @@ class ScenePlugin(ABC):
                 f"{descriptor['data_schema']!r}"
             )
 
-        validator = Draft202012Validator(self.payload_schema())
+        validator = getattr(self, "_payload_validator_cache", None)
+        if validator is None:
+            self.contract_descriptor()
+            validator = self._payload_validator_cache
         errors = sorted(
             validator.iter_errors(envelope.payload_for_validation()),
             key=lambda error: list(error.path),
@@ -114,6 +123,19 @@ class ScenePlugin(ABC):
     def cloud_decide(self, event: SemanticEvent) -> DecisionEnvelope:
         """Return a cloud expert decision for one normalized event."""
 
+    def apply_cloud_llm_review(
+        self,
+        event: SemanticEvent,
+        baseline: DecisionEnvelope,
+        review: Dict[str, Any],
+    ) -> DecisionEnvelope:
+        """Attach a review safely; scene plugins may validate and adopt a recommendation."""
+        del event
+        metadata = dict(baseline.metadata)
+        metadata["cloud_llm_review"] = dict(review)
+        metadata["cloud_llm_challenged"] = review.get("verdict") == "challenge"
+        return replace(baseline, metadata=metadata)
+
     def prepare_cloud_event(
         self,
         event: SemanticEvent,
@@ -121,6 +143,33 @@ class ScenePlugin(ABC):
     ) -> SemanticEvent:
         """Remove edge-only state and build the scene-owned cloud data-plane payload."""
         return event
+
+    def monitoring_signals(self, event: SemanticEvent) -> Dict[str, float]:
+        """Expose scene-specific normalized signals in addition to common confidence fields."""
+        value = event.metadata.get("monitoring_signals", {})
+        if not isinstance(value, dict):
+            raise ContractError("event metadata monitoring_signals must be an object")
+        return dict(value)
+
+    def routing_advice(
+        self,
+        event: SemanticEvent,
+        local_decision: DecisionEnvelope,
+    ) -> Dict[str, Any]:
+        """Return optional scene-owned hints without making a Student a framework requirement."""
+        del event, local_decision
+        return {}
+
+    def aggregation_spec(
+        self, event: SemanticEvent
+    ) -> Optional[Dict[str, Any]]:
+        """Return scene-owned join metadata, or None when an event is independent."""
+        value = event.metadata.get("aggregation")
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ContractError("event metadata aggregation must be an object")
+        return dict(value)
 
     def fuse_cloud_context(
         self,
