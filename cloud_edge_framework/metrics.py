@@ -65,7 +65,23 @@ class FrameworkMetrics:
             "accounted_closed_loop_ms",
             accounting.get("accounted_closed_loop_ms", 0.0),
         )
+        self.observe(
+            "edge_preliminary_decision_ms",
+            accounting.get("edge_preliminary_decision_ms", 0.0),
+        )
+        synchronous_ms = accounting.get("synchronous_cloud_closed_loop_ms")
+        if synchronous_ms is not None:
+            self.observe("synchronous_cloud_closed_loop_ms", synchronous_ms)
         self.observe("selected_request_bytes", data_plane.get("selected_request_bytes", 0))
+        actual_transport_bytes = float(
+            data_plane.get("actual_transport_request_bytes", 0)
+        )
+        if actual_transport_bytes > 0:
+            self.observe("actual_transport_request_bytes", actual_transport_bytes)
+            self.observe(
+                "actual_artifact_request_bytes",
+                data_plane.get("actual_artifact_request_bytes", 0),
+            )
         if isinstance(transport, dict) and transport:
             self.observe("http_round_trip_ms", transport.get("http_round_trip_ms", 0.0))
             self.observe("http_request_bytes", transport.get("request_bytes", 0))

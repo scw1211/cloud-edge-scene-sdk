@@ -25,6 +25,10 @@ class StorageConfig:
     performance_profiles: Optional[Path]
     feedback: Optional[Path]
     idempotency: Optional[Path]
+    artifacts: Optional[Path] = None
+    reviews: Optional[Path] = None
+    aggregations: Optional[Path] = None
+    monitoring: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,36 @@ class IdempotencyConfig:
 
 
 @dataclass(frozen=True)
+class CloudLLMConfig:
+    enabled: bool
+    runtime_config: Optional[Path]
+    min_risk_level: str
+
+
+@dataclass(frozen=True)
+class MonitoringConfig:
+    enabled: bool
+    window_size: int
+    bins: int
+    min_labeled_samples: int
+    min_drift_samples: int
+    bootstrap_reference_size: int
+    max_ece: float
+    target_coverage: float
+    coverage_tolerance: float
+    max_psi: float
+    evaluation_interval_events: int
+    evaluation_max_staleness_ms: int
+
+
+@dataclass(frozen=True)
+class UtilityRouterConfig:
+    enabled: bool
+    artifact: Optional[Path]
+    mode: str
+
+
+@dataclass(frozen=True)
 class ReleaseWatchConfig:
     enabled: bool
     registry: Optional[Path]
@@ -87,6 +121,9 @@ class FrameworkServiceConfig:
     idempotency: IdempotencyConfig
     source_path: Path
     release_watch: Optional[ReleaseWatchConfig] = None
+    cloud_llm: Optional[CloudLLMConfig] = None
+    monitoring: Optional[MonitoringConfig] = None
+    utility_router: Optional[UtilityRouterConfig] = None
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -144,6 +181,9 @@ def load_service_config(
     idempotency_raw = dict(value.get("idempotency", {}))
     cloud_raw = value.get("cloud")
     release_watch_raw = value.get("release_watch")
+    cloud_llm_raw = value.get("cloud_llm")
+    monitoring_raw = value.get("monitoring")
+    utility_router_raw = value.get("utility_router")
 
     cloud = None
     if cloud_raw is not None:
@@ -172,6 +212,68 @@ def load_service_config(
             interval_seconds=float(release_data.get("interval_seconds", 2.0)),
         )
 
+    cloud_llm = None
+    if cloud_llm_raw is not None:
+        if role != "cloud":
+            raise ValueError("cloud_llm may only be configured on the cloud service")
+        llm_data = dict(cloud_llm_raw)
+        enabled = bool(llm_data.get("enabled", False))
+        runtime_config = _resolve_path(
+            project_root, llm_data.get("runtime_config")
+        )
+        min_risk_level = str(llm_data.get("min_risk_level", "high"))
+        if min_risk_level not in {"low", "medium", "high", "severe"}:
+            raise ValueError("cloud_llm min_risk_level is invalid")
+        if enabled and runtime_config is None:
+            raise ValueError("enabled cloud_llm requires runtime_config")
+        cloud_llm = CloudLLMConfig(
+            enabled=enabled,
+            runtime_config=runtime_config,
+            min_risk_level=min_risk_level,
+        )
+
+    monitoring_data = dict(monitoring_raw or {})
+    monitoring = MonitoringConfig(
+        enabled=bool(monitoring_data.get("enabled", role == "edge")),
+        window_size=int(monitoring_data.get("window_size", 500)),
+        bins=int(monitoring_data.get("bins", 10)),
+        min_labeled_samples=int(monitoring_data.get("min_labeled_samples", 50)),
+        min_drift_samples=int(monitoring_data.get("min_drift_samples", 50)),
+        bootstrap_reference_size=int(
+            monitoring_data.get("bootstrap_reference_size", 200)
+        ),
+        max_ece=float(monitoring_data.get("max_ece", 0.10)),
+        target_coverage=float(monitoring_data.get("target_coverage", 0.90)),
+        coverage_tolerance=float(
+            monitoring_data.get("coverage_tolerance", 0.05)
+        ),
+        max_psi=float(monitoring_data.get("max_psi", 0.20)),
+        evaluation_interval_events=int(
+            monitoring_data.get("evaluation_interval_events", 25)
+        ),
+        evaluation_max_staleness_ms=int(
+            monitoring_data.get("evaluation_max_staleness_ms", 1000)
+        ),
+    )
+
+    utility_router = None
+    if utility_router_raw is not None:
+        if role != "edge":
+            raise ValueError("utility_router may only be configured on the edge service")
+        router_data = dict(utility_router_raw)
+        router_enabled = bool(router_data.get("enabled", False))
+        router_artifact = _resolve_path(project_root, router_data.get("artifact"))
+        router_mode = str(router_data.get("mode", "shadow"))
+        if router_mode not in {"shadow", "active"}:
+            raise ValueError("utility_router mode must be shadow or active")
+        if router_enabled and router_artifact is None:
+            raise ValueError("enabled utility_router requires artifact")
+        utility_router = UtilityRouterConfig(
+            enabled=router_enabled,
+            artifact=router_artifact,
+            mode=router_mode,
+        )
+
     plugin_path = _resolve_path(project_root, value["plugin_config"])
     if plugin_path is None:
         raise ValueError("plugin_config must not be empty")
@@ -191,6 +293,10 @@ def load_service_config(
             ),
             feedback=_resolve_path(project_root, storage_raw.get("feedback")),
             idempotency=_resolve_path(project_root, storage_raw.get("idempotency")),
+            artifacts=_resolve_path(project_root, storage_raw.get("artifacts")),
+            reviews=_resolve_path(project_root, storage_raw.get("reviews")),
+            aggregations=_resolve_path(project_root, storage_raw.get("aggregations")),
+            monitoring=_resolve_path(project_root, storage_raw.get("monitoring")),
         ),
         scheduler=SchedulerConfig(
             confidence_threshold=float(
@@ -224,5 +330,8 @@ def load_service_config(
             max_entries=int(idempotency_raw.get("max_entries", 100000)),
         ),
         release_watch=release_watch,
+        cloud_llm=cloud_llm,
+        monitoring=monitoring,
+        utility_router=utility_router,
         source_path=source_path,
     )

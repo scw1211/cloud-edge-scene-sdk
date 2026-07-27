@@ -207,6 +207,15 @@ class GenerationProvider(ABC):
     def generate(self, prompt: str, system_prompt: str = "") -> GenerationResult:
         """Generate one normalized text response."""
 
+    def generate_structured(
+        self,
+        prompt: str,
+        schema: Mapping[str, Any],
+        system_prompt: str = "",
+    ) -> GenerationResult:
+        """Generate schema-constrained JSON when the backend supports it."""
+        return self.generate(prompt, system_prompt=system_prompt)
+
     def _post(self, url: str, payload: Mapping[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
         request = urllib.request.Request(
             url,
@@ -272,7 +281,12 @@ class LlamaCppProvider(GenerationProvider):
 
 
 class OllamaProvider(GenerationProvider):
-    def generate(self, prompt: str, system_prompt: str = "") -> GenerationResult:
+    def _generate(
+        self,
+        prompt: str,
+        system_prompt: str,
+        response_format: Optional[Mapping[str, Any]] = None,
+    ) -> GenerationResult:
         prompt = self._prompt(prompt, system_prompt)
         messages = []
         if system_prompt.strip():
@@ -293,6 +307,8 @@ class OllamaProvider(GenerationProvider):
                 "num_predict": options["max_output_tokens"],
             },
         }
+        if response_format is not None:
+            payload["format"] = dict(response_format)
         started = time.perf_counter()
         result = self._post(self.config["endpoint"] + "/api/chat", payload, {})
         latency = (time.perf_counter() - started) * 1000
@@ -311,6 +327,17 @@ class OllamaProvider(GenerationProvider):
             generation_duration_ms=_nanoseconds_ms(result.get("eval_duration")),
         )
 
+
+    def generate(self, prompt: str, system_prompt: str = "") -> GenerationResult:
+        return self._generate(prompt, system_prompt)
+
+    def generate_structured(
+        self,
+        prompt: str,
+        schema: Mapping[str, Any],
+        system_prompt: str = "",
+    ) -> GenerationResult:
+        return self._generate(prompt, system_prompt, response_format=schema)
 
 class OpenAICompatibleProvider(GenerationProvider):
     def generate(self, prompt: str, system_prompt: str = "") -> GenerationResult:

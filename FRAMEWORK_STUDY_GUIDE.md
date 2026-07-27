@@ -1,6 +1,6 @@
 # 云边协同框架学习手册
 
-本文对应独立 SDK `cloud-edge-scene-sdk` 0.10.0。目标不是教你逐行背代码，而是让你能回答三件事：
+本文对应独立SDK `cloud-edge-scene-sdk` 0.11.0和公共框架0.3.0。目标不是教你逐行背代码，而是让你能回答三件事：
 
 1. 一个场景事件从边缘进入后，经过哪些对象和模块；
 2. 云断开、请求重复、模型更新或多节点冲突时，系统如何处理；
@@ -96,7 +96,7 @@
 | `edge_only` | 低风险且稳定，边缘结果直接完成 |
 | `cloud_sync` | 当前网络和 deadline 允许，等待云端复核后返回 |
 | `cloud_async` | 先返回临时边缘动作，事件进入 Outbox，稍后云端复核 |
-| `local_autonomy` | 云不可用，立即执行离线安全策略；高风险事件仍排队等待补传 |
+| `local_autonomy` | 云不可用时的故障降级；允许的本地动作立即执行，高风险事件排队补传且全局状态为待复核 |
 
 ## 三、一条请求如何跑完
 
@@ -222,9 +222,25 @@
 
 这层解决的是“云端弱网、断网、请求超时、进程重启和重复重试”等问题。
 
+### 第三层：临时判断到最终结果的生命周期
+
+可靠传输只保证事件不丢，`review_tracking.py`进一步记录决策是否发生变化：
+
+```text
+边缘临时判断
+  -> 待复核
+  -> 复核处理中
+  -> 云端最终结果
+  -> 是否修正、同步闭环或异步最终时延
+```
+
+正常网络下由边缘直接完成的事件可以成为本地最终结果；断网自治事件只要已经进入补传队列，全局状态就是“待复核”，不能因为当前已经返回一个安全动作就冒充全局最终结果。需要云确认的不可逆动作只进入延后列表，不会提前授权。
+
 ## 五、多节点协调如何工作
 
 `CloudRuntime.coordinate()` 先按场景调用 `fuse_cloud_context()`，场景插件只能补充上下文，不能改变事件数量和身份。之后云端分别生成候选决策，再交给 `ConflictCoordinator`。
+
+在线到达的多边缘事件还可以通过`aggregation.py`按场景插件提供的关联键持久汇聚。全部预期成员到齐时立即协调；超时但满足最小成员数时执行部分汇聚；重复事件按事件编号去重。关联键、成员名称、预期成员和超时时间均由场景插件定义，公共框架不会假设所有场景都使用`sample_id`。
 
 框架只有在以下条件成立时才进一步检查动作冲突：
 
@@ -357,16 +373,22 @@ train/val JSONL
 | A | `runtime.py` | 核心编排器；`EdgeRuntime.process()` 串联边缘完整链路，`CloudRuntime` 完成云决策和多事件协调。 |
 | A | `scheduling.py` | 计算闭环预算和四条路由，综合风险、不确定性、网络、冲突、上传字节和历史时延。 |
 | B | `evidence.py` | 选择 summary/feature/raw 证据，统计内联编码、引用源和未压缩源字节。 |
+| A | `artifacts.py` | 接收真实大证据文件，校验SHA-256、内容长度和类型，去重保存并统计实际通信量。 |
+| A | `aggregation.py` | 按场景关联键持久汇聚多个边缘事件，处理重复、缺失成员、超时部分汇聚和进程恢复。 |
 | A | `conflicts.py` | 建立事件关联组，检测共享资源动作冲突，调用场景插件解决并生成可审计记录。 |
 | B | `networking.py` | 边缘主动探测云端健康、RTT、抖动和丢包，维护滚动网络快照；`StaticNetworkMonitor` 供测试使用。 |
 | B | `performance.py` | 按 scene、证据级别和网络档保存云路径成功率、时延和字节 EWMA，供调度预测使用。 |
 | B | `feedback.py` | 异步持久保存本地初判和云端修正差异，形成后续纠错蒸馏或策略更新数据。 |
 | B | `review_queue.py` | 简单 JSONL/内存待复核队列，主要供单进程工具和兼容路径使用；正式边缘服务使用 SQLite Outbox。 |
+| A | `review_tracking.py` | 持久记录边缘临时判断、待复核、处理中、云端最终结果、修正率和分阶段时延。 |
 | A | `reliability.py` | 实现正式 SQLite Outbox 的 enqueue/claim/lease/ack/release，以及云端和边缘请求幂等缓存。 |
 | B | `replay.py` | 后台从 Outbox 领取事件，在网络恢复时调用云端多事件协调并确认或退避重试。 |
 | B | `transport.py` | 基础 HTTP 云客户端，调用云决策、协调和反馈接口，并附加传输耗时与字节统计。 |
 | B | `reliable_transport.py` | 在基础 HTTP 客户端上加入有限重试、幂等键和 trace header。 |
 | B | `service_config.py` | 加载和语义校验边缘/云端配置，把相对路径解析到项目根目录。 |
+| A | `monitoring.py` | 计算公共校准误差、风险集合覆盖率和数据漂移；监测失效时强制复核。 |
+| B | `utility_routing.py` | 加载轻量效用模型，支持只记录不接管的影子模式和通过门禁后的主动路由。 |
+| B | `cloud_llm.py` | 对场景专业云模型结果进行可选结构化大模型复核；失败时保留专业模型基线。 |
 | B | `http_api.py` | 通用标准库 HTTP 外壳，负责 JSON body 限制、路由转发、状态码和错误响应。 |
 | A | `edge_service.py` | 正式独立边缘进程；装配插件、EdgeRuntime、网络探测、Outbox、重放、指标和 release watcher。 |
 | A | `cloud_service.py` | 正式独立云端进程；提供单事件复核、多事件协调、反馈、插件热重载和幂等处理。 |
@@ -379,6 +401,8 @@ train/val JSONL
 | B | `metrics.py` | 聚合边缘、云端、重放、冲突、路由、时延和失败计数，输出统一 JSON 指标。 |
 | C | `benchmark_edge_service.py` | 重复请求正式边缘 HTTP 服务，测 Edge Qwen、云复核和完整链路。 |
 | C | `benchmark_services.py` | 为每次请求生成唯一 ID，测独立边云服务真实闭环，避免幂等缓存把结果测低。 |
+| C | `benchmark_monitoring.py` | 测量公共监测器的逐事件开销和分位时延。 |
+| C | `benchmark_review_fault_matrix.py` | 验证发送前断网、提交前失败、响应丢失、进程重启、重复补传和云端修正等故障点。 |
 
 ### `deployment/framework/`：服务启动配置
 

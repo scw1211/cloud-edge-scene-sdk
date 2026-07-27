@@ -1,6 +1,17 @@
 # 云边协同场景接入 SDK
 
-这个 SDK 用于把工业、电网或其他场景接入同一套云边协同运行时，并为边缘 Qwen 提供统一的基座、LoRA、动作槽、训练流水线和发布校验。
+这个SDK用于把任意具备结构化感知结果的业务场景接入同一套云边协同运行时，并为边缘Qwen提供统一的基座、场景适配器、动作槽、训练流水线和发布校验。
+
+> 通用框架只固定外层事件信封和内部统一语义事件，不固定`data`中的业务字段。`scene_plugin_template/`默认采用异常检测，仅用于演示如何定义场景Schema和转换逻辑；复制模板后应改成自己的场景名称、字段和动作，不能把示例中的8个字段理解成SDK统一输入。
+
+当前SDK版本为0.11.0，对应公共框架0.3.0。本版新增：
+
+- 真实证据文件上传、SHA-256校验、去重和实际通信量统计；
+- 按场景关联键进行多边缘持久汇聚，支持超时部分汇聚；
+- 边缘临时判断、待复核、云端最终结果和修正率的完整生命周期；
+- 公共校准误差、风险集合覆盖率和数据漂移监测；
+- 学习式效用路由的影子模式与主动模式；
+- 可选云端大模型结构化复核，失败时保留场景专业模型基线。
 
 固定分工如下：
 
@@ -88,7 +99,7 @@ power_grid_plugin/
 
 ### 2. 实现模型输出适配
 
-场景感知模型不输出公共 `SemanticEvent`，只输出自己的结果。工业模板的 `data` 只有异常分数、阈值和热力图引用，没有伪造缺陷类型、bbox 或统一风险字段。
+场景感知模型不输出公共`SemanticEvent`，只输出自己的结果。下面的异常检测数据只是示例，没有伪造缺陷类型、检测框或统一风险字段；其他场景可完全替换`data`结构。
 
 外部请求统一使用事件信封：
 
@@ -307,8 +318,14 @@ curl http://127.0.0.1:18100/health
 | 边缘 | POST | `/api/v1/collaboration/decide` | 场景信封接入、边缘决策和调度 |
 | 边缘 | POST | `/api/v1/collaboration/flush-pending` | 运维人员立即触发一次 Outbox 重放 |
 | 边缘 | GET | `/api/v1/framework/outbox` | 查看 pending/inflight/completed 状态 |
+| 边缘 | GET | `/api/v1/collaboration/reviews` | 查询边缘临时判断到云端最终结果的复核生命周期 |
+| 边缘 | GET/POST | `/api/v1/collaboration/monitoring` | 查询监测状态、写入结果或参考分布 |
+| 边缘 | GET | `/api/v1/collaboration/routing-dataset` | 导出学习式路由训练数据 |
 | 云端 | POST | `/api/v1/collaboration/cloud-decision` | 单事件云端复核 |
 | 云端 | POST | `/api/v1/collaboration/coordinate` | 多事件融合和冲突协调 |
+| 云端 | POST | `/api/v1/collaboration/aggregate` | 按场景关联键提交一个多边缘语义事件 |
+| 云端 | POST | `/api/v1/collaboration/aggregate/flush` | 触发超时部分汇聚 |
+| 云端 | PUT/GET | `/api/v1/evidence/{sha256}` | 上传或查询经过哈希校验的大证据文件 |
 | 云端 | GET/POST | `/api/v1/collaboration/feedback` | 查询或写入纠错反馈 |
 | 两端 | GET | `/health`、`/ready` | 健康和就绪状态 |
 | 两端 | GET | `/api/v1/framework/metrics` | 统一 JSON 指标 |

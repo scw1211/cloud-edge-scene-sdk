@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import replace
-from typing import Any, Dict, Sequence, Tuple
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
@@ -123,6 +123,19 @@ class ScenePlugin(ABC):
     def cloud_decide(self, event: SemanticEvent) -> DecisionEnvelope:
         """Return a cloud expert decision for one normalized event."""
 
+    def apply_cloud_llm_review(
+        self,
+        event: SemanticEvent,
+        baseline: DecisionEnvelope,
+        review: Dict[str, Any],
+    ) -> DecisionEnvelope:
+        """Attach a review safely; scene plugins may validate and adopt a recommendation."""
+        del event
+        metadata = dict(baseline.metadata)
+        metadata["cloud_llm_review"] = dict(review)
+        metadata["cloud_llm_challenged"] = review.get("verdict") == "challenge"
+        return replace(baseline, metadata=metadata)
+
     def prepare_cloud_event(
         self,
         event: SemanticEvent,
@@ -130,6 +143,33 @@ class ScenePlugin(ABC):
     ) -> SemanticEvent:
         """Remove edge-only state and build the scene-owned cloud data-plane payload."""
         return event
+
+    def monitoring_signals(self, event: SemanticEvent) -> Dict[str, float]:
+        """Expose scene-specific normalized signals in addition to common confidence fields."""
+        value = event.metadata.get("monitoring_signals", {})
+        if not isinstance(value, dict):
+            raise ContractError("event metadata monitoring_signals must be an object")
+        return dict(value)
+
+    def routing_advice(
+        self,
+        event: SemanticEvent,
+        local_decision: DecisionEnvelope,
+    ) -> Dict[str, Any]:
+        """Return optional scene-owned hints without making a Student a framework requirement."""
+        del event, local_decision
+        return {}
+
+    def aggregation_spec(
+        self, event: SemanticEvent
+    ) -> Optional[Dict[str, Any]]:
+        """Return scene-owned join metadata, or None when an event is independent."""
+        value = event.metadata.get("aggregation")
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ContractError("event metadata aggregation must be an object")
+        return dict(value)
 
     def fuse_cloud_context(
         self,

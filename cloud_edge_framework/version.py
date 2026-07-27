@@ -1,3 +1,3 @@
 """用途：定义公共框架发布版本，供服务健康检查和交付记录使用。"""
 
-FRAMEWORK_VERSION = "0.2.1"
+FRAMEWORK_VERSION = "0.3.0"
