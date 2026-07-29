@@ -1,0 +1,72 @@
+{
+  "schema_version": "edge-llm-package-spec/v1",
+  "adapter_id": "freeway-traffic-qwen35-v9",
+  "scene": "freeway_traffic_management",
+  "version": "1.0.0",
+  "adapter_source": "experiments/llm_sft/qwen35_0_8b_freeway_action_token_v9_lora",
+  "action_mapping": "deployment/edge_llm/scenes/freeway_traffic_v9/action_mapping.json",
+  "input_contract": {
+    "event_type": "com.cloudedge.traffic.edge-event.v1",
+    "data_schema": "https://cloud-edge.local/schemas/scenes/traffic-edge-event-v1.json",
+    "llm_input_type": "compact_text_code",
+    "context_encoder": "freeway-bitpacked-decimal@v1",
+    "max_input_tokens": 16,
+    "direct_media_to_llm": false
+  },
+  "training": {
+    "teacher_model": "qwen3.5:9b",
+    "methods": ["sft"],
+    "train_dataset_id": "freeway-action-token-v9-train-288-events",
+    "test_dataset_id": "sha256:616c010ebad234b5b8bcf0e9ffeeabc459449528d701bf502603b47415db80d4",
+    "test_set_used_for_training": false
+  },
+  "evaluation": {
+    "evidence": {
+      "distillation": "results/llm/qwen_v9_distillation_stage_summary.json",
+      "deployment": "results/llm/qwen_v9_text_only_competition_summary.json"
+    },
+    "metric_sources": {
+      "decision_accuracy": {
+        "evidence": "distillation",
+        "path": "selected_metrics.accuracy"
+      },
+      "weighted_f1": {
+        "evidence": "distillation",
+        "path": "selected_metrics.weighted_f1"
+      },
+      "valid_output_rate": {
+        "evidence": "distillation",
+        "path": "selected_metrics.valid_output_rate"
+      },
+      "selective_cascade_accuracy": {
+        "evidence": "deployment",
+        "path": "strict_future_test.selective_cascade_accuracy"
+      },
+      "average_ttft_ms": {
+        "evidence": "deployment",
+        "path": "jetson_gpu.average_ttft_ms"
+      },
+      "system_ram_footprint_mb": {
+        "evidence": "deployment",
+        "path": "jetson_gpu.system_ram_footprint_mb"
+      }
+    },
+    "gates": [
+      {"metric": "decision_accuracy", "operator": ">=", "value": 0.75},
+      {"metric": "weighted_f1", "operator": ">=", "value": 0.8},
+      {"metric": "valid_output_rate", "operator": "==", "value": 1.0},
+      {"metric": "selective_cascade_accuracy", "operator": ">=", "value": 0.8},
+      {"metric": "average_ttft_ms", "operator": "<=", "value": 100.0},
+      {"metric": "system_ram_footprint_mb", "operator": "<=", "value": 1536.0}
+    ]
+  },
+  "deployment": {
+    "artifact": "models/gguf/qwen35_0_8b_freeway_action_token_v9_text_only_q6_k.gguf",
+    "runtime": "llama.cpp",
+    "format": "gguf",
+    "quantization": "Q6_K",
+    "max_input_tokens": 16,
+    "max_output_tokens": 1,
+    "thinking": false
+  }
+}

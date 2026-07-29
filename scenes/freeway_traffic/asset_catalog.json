@@ -1,0 +1,62 @@
+{
+  "schema_version": "traffic-full-assets/v1",
+  "bundle_version": "0.13.0",
+  "downloaded_assets": {
+    "edge_qwen_gguf": {
+      "role": "edge",
+      "file": "assets/downloads/qwen35_0_8b_freeway_action_token_v9_text_only_q6_k.gguf",
+      "url": "https://github.com/scw1211/cloud-edge-scene-sdk/releases/download/traffic-assets-v0.13.0/qwen35_0_8b_freeway_action_token_v9_text_only_q6_k.gguf",
+      "bytes": 629735968,
+      "sha256": "57b74ab01a85f7e83c6ee8a0b10a7cd5da2e439108175372220c5ebd76aaeef9"
+    },
+    "pems08_inference_array": {
+      "role": "edge",
+      "file": "assets/downloads/PEMS08_r1_d0_w0_astcgn_multitask.npz",
+      "url": "https://github.com/scw1211/cloud-edge-scene-sdk/releases/download/traffic-assets-v0.13.0/PEMS08_r1_d0_w0_astcgn_multitask.npz",
+      "bytes": 73107329,
+      "sha256": "5773ea315e13aea4b9e459472056132281d015323b9af3cde32cf072393e1e5c"
+    }
+  },
+  "embedded_assets": {
+    "joint_astgcn_checkpoint": {
+      "file": "assets/models/joint_risk_astgcn_metis4_flowprio2_frozen.pt",
+      "bytes": 867237,
+      "sha256": "c85382832697fbd235b79e764ee367a71a02236b2d71bcaa7b2430abd6ae3473"
+    },
+    "edge_student": {
+      "file": "assets/models/edge_student_freeway_joint_metis4.json",
+      "bytes": 2266986,
+      "sha256": "bcad5b7f87dd2833e2c95afd2679bbf5b9176c66bcc0d4e35ec7a01a2fadceb2"
+    },
+    "defer_gate": {
+      "file": "assets/models/edge_defer_gate.npz",
+      "bytes": 676016,
+      "sha256": "f4191ab8212cf6c42b5a9c04adb07a12874b645e788c3371a81b3b3eef056a41"
+    },
+    "tree_feature_codec": {
+      "file": "assets/models/traffic_tree_feature_codec_topology_v1.npz",
+      "bytes": 3266531,
+      "sha256": "fdf2a6e384ff4f0ace09d988dd298e9dbb564122c26a1af8f4e0394851574676"
+    },
+    "cloud_extratrees": {
+      "file": "assets/models/cloud_coordinator_topology_fused.joblib",
+      "bytes": 26277606,
+      "sha256": "5ee22aa91a2d5137d29f2b9a152e67917b6a14b0fffaeb80e7d371686622c017"
+    },
+    "topology": {
+      "file": "assets/models/traffic_region_topology_metis4.json",
+      "bytes": 2597,
+      "sha256": "df12ac50b8c4803f4bbd0f916c8881ecb23186994176d9c5ad81cb90869004d2"
+    },
+    "risk_calibrator": {
+      "file": "assets/models/region_risk_conformal.json",
+      "bytes": 1134,
+      "sha256": "f25899d9eec52934c4ea66b686253f90ef90f9c9650c8a29fc39511c80fc3dbf"
+    }
+  },
+  "cloud_qwen": {
+    "model": "qwen3.5:9b",
+    "installer": "python -m model_bundle.install_models --cloud",
+    "license": "Apache-2.0"
+  }
+}

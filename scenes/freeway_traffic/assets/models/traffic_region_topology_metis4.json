@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "method": "road_graph_cut_edges",
+  "adjacency_sha256": "859d68e7583ed4e6016588eaaca494d3ece286dae361614c5c1833017f87eaa7",
+  "region_count": 4,
+  "region_neighbors": {
+    "region_0": [
+      "region_1",
+      "region_3"
+    ],
+    "region_1": [
+      "region_0",
+      "region_2",
+      "region_3"
+    ],
+    "region_2": [
+      "region_1",
+      "region_3"
+    ],
+    "region_3": [
+      "region_0",
+      "region_1",
+      "region_2"
+    ]
+  },
+  "region_boundary_nodes": {
+    "region_0": [
+      5,
+      12,
+      26,
+      28,
+      31,
+      32,
+      49,
+      71,
+      155,
+      167
+    ],
+    "region_1": [
+      18,
+      20,
+      27,
+      36,
+      38,
+      77,
+      90,
+      101,
+      127,
+      149,
+      160,
+      164
+    ],
+    "region_2": [
+      15,
+      35,
+      85,
+      92,
+      94,
+      97,
+      98,
+      151,
+      152,
+      158,
+      162,
+      163
+    ],
+    "region_3": [
+      13,
+      40,
+      42,
+      44,
+      48,
+      72,
+      73,
+      96,
+      125,
+      126,
+      144,
+      169
+    ]
+  },
+  "region_pairs": [
+    {
+      "left_region": "region_0",
+      "right_region": "region_1",
+      "cut_edge_count": 6,
+      "left_boundary_nodes": [
+        5,
+        26,
+        31,
+        32,
+        155,
+        167
+      ],
+      "right_boundary_nodes": [
+        18,
+        27,
+        160,
+        164
+      ]
+    },
+    {
+      "left_region": "region_0",
+      "right_region": "region_3",
+      "cut_edge_count": 4,
+      "left_boundary_nodes": [
+        12,
+        28,
+        49,
+        71
+      ],
+      "right_boundary_nodes": [
+        42,
+        48,
+        73,
+        169
+      ]
+    },
+    {
+      "left_region": "region_1",
+      "right_region": "region_2",
+      "cut_edge_count": 6,
+      "left_boundary_nodes": [
+        20,
+        36,
+        38,
+        77,
+        90,
+        101
+      ],
+      "right_boundary_nodes": [
+        35,
+        85,
+        92,
+        97,
+        158,
+        163
+      ]
+    },
+    {
+      "left_region": "region_1",
+      "right_region": "region_3",
+      "cut_edge_count": 2,
+      "left_boundary_nodes": [
+        127,
+        149
+      ],
+      "right_boundary_nodes": [
+        125,
+        126
+      ]
+    },
+    {
+      "left_region": "region_2",
+      "right_region": "region_3",
+      "cut_edge_count": 8,
+      "left_boundary_nodes": [
+        15,
+        94,
+        98,
+        151,
+        152,
+        162
+      ],
+      "right_boundary_nodes": [
+        13,
+        40,
+        44,
+        72,
+        96,
+        144
+      ]
+    }
+  ]
+}

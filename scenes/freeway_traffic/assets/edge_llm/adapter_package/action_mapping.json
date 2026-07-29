@@ -1,0 +1,80 @@
+{
+  "schema_version": "edge-llm-action-map/v1",
+  "scene": "freeway_traffic_management",
+  "protocol": "single_token_action/v1",
+  "fallback_slot": "G",
+  "entries": [
+    {
+      "slot": "A",
+      "decision": "no_action",
+      "candidate_action_type": null,
+      "min_risk_level": "low",
+      "max_risk_level": "low",
+      "requires_cloud": false,
+      "safe_offline": true
+    },
+    {
+      "slot": "B",
+      "decision": "congestion_warning",
+      "candidate_action_type": "traffic_advisory",
+      "min_risk_level": "medium",
+      "max_risk_level": "severe",
+      "requires_cloud": false,
+      "safe_offline": true
+    },
+    {
+      "slot": "C",
+      "decision": "variable_speed_limit",
+      "candidate_action_type": "variable_speed_limit",
+      "min_risk_level": "high",
+      "max_risk_level": "severe",
+      "requires_cloud": false,
+      "safe_offline": true
+    },
+    {
+      "slot": "D",
+      "decision": "ramp_metering",
+      "candidate_action_type": "ramp_metering",
+      "min_risk_level": "high",
+      "max_risk_level": "severe",
+      "requires_cloud": false,
+      "safe_offline": true
+    },
+    {
+      "slot": "E",
+      "decision": "regional_coordination",
+      "candidate_action_type": "regional_coordination",
+      "min_risk_level": "high",
+      "max_risk_level": "severe",
+      "requires_cloud": true,
+      "safe_offline": false
+    },
+    {
+      "slot": "F",
+      "decision": "reroute",
+      "candidate_action_type": "reroute",
+      "min_risk_level": "severe",
+      "max_risk_level": "severe",
+      "requires_cloud": true,
+      "safe_offline": false
+    },
+    {
+      "slot": "G",
+      "decision": "abstain",
+      "candidate_action_type": null,
+      "min_risk_level": "low",
+      "max_risk_level": "severe",
+      "requires_cloud": false,
+      "safe_offline": true
+    },
+    {
+      "slot": "H",
+      "decision": "request_cloud",
+      "candidate_action_type": null,
+      "min_risk_level": "low",
+      "max_risk_level": "severe",
+      "requires_cloud": true,
+      "safe_offline": false
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "task": "qwen_traffic_distillation_stage_comparison",
+  "strict_test_protocol": {
+    "events": 36,
+    "test_set_used_for_training": false,
+    "test_id_sha256": "616c010ebad234b5b8bcf0e9ffeeabc459449528d701bf502603b47415db80d4"
+  },
+  "stages": {
+    "phase1": "Qwen 9B safety-constrained labels -> Qwen 0.8B LoRA SFT",
+    "phase2": "Student rollout errors -> low-rate correction LoRA continuation",
+    "phase3": "Teacher chosen token vs Student hard negative -> DPO",
+    "phase4": "merge text-only language model -> Q6_K GGUF -> Jetson llama.cpp"
+  },
+  "dataset": {
+    "task": "strict_correction_and_preference_distillation_dataset",
+    "phase1_train_rows": 900,
+    "phase1_unique_train_events": 288,
+    "development_events": 36,
+    "strict_test_events": 36,
+    "train_rollout_errors": 0,
+    "development_rollout_errors": 2,
+    "development_split_consumed_for_correction": true,
+    "correction_repeats": 8,
+    "phase2_train_rows": 916,
+    "correction_transitions": {
+      "B->C": 2
+    },
+    "preference_pair_count": 290,
+    "hard_negative_train_pairs": 288,
+    "online_cloud_feedback_heldout_count": 17,
+    "online_cloud_feedback_used_for_training": false,
+    "test_set_used_for_training": false,
+    "strict_test_id_sha256": "616c010ebad234b5b8bcf0e9ffeeabc459449528d701bf502603b47415db80d4",
+    "split_overlap": {
+      "train_development": [],
+      "train_test": [],
+      "development_test": []
+    }
+  },
+  "candidates": {
+    "phase1_v9_sft": {
+      "evidence": "results/llm/llm_action_token_v9_test_hf_eval.json",
+      "count": 36,
+      "accuracy": 0.7778,
+      "macro_f1": 0.5549,
+      "weighted_f1": 0.8093,
+      "valid_output_rate": 1.0
+    },
+    "phase2_r24_correction": {
+      "evidence": "results/llm/llm_action_token_v9_phase2_r24_strict_test_hf_eval.json",
+      "count": 36,
+      "accuracy": 0.75,
+      "macro_f1": 0.4997,
+      "weighted_f1": 0.7583,
+      "valid_output_rate": 1.0
+    },
+    "phase2_r8_correction": {
+      "evidence": "results/llm/llm_action_token_v9_phase2_r8_strict_test_hf_eval.json",
+      "count": 36,
+      "accuracy": 0.7778,
+      "macro_f1": 0.5533,
+      "weighted_f1": 0.8024,
+      "valid_output_rate": 1.0
+    },
+    "phase3_dpo": {
+      "evidence": "results/llm/llm_action_token_v9_dpo_strict_test_hf_eval.json",
+      "count": 36,
+      "accuracy": 0.7778,
+      "macro_f1": 0.5533,
+      "weighted_f1": 0.8024,
+      "valid_output_rate": 1.0
+    }
+  },
+  "selected_for_deployment": "phase1_v9_sft",
+  "selected_metrics": {
+    "evidence": "results/llm/llm_action_token_v9_test_hf_eval.json",
+    "count": 36,
+    "accuracy": 0.7778,
+    "macro_f1": 0.5549,
+    "weighted_f1": 0.8093,
+    "valid_output_rate": 1.0
+  },
+  "deployment_artifact": "models/gguf/qwen35_0_8b_freeway_action_token_v9_text_only_q6_k.gguf",
+  "phase2_improved_strict_test": false,
+  "phase3_improved_strict_test": false,
+  "conclusion": "Correction and DPO are reproducible but do not improve the untouched temporal test; retain phase-1 v9 as the deployed model."
+}

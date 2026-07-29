@@ -1,0 +1,186 @@
+{
+  "action_mapping": {
+    "path": "action_mapping.json",
+    "sha256": "8c842896d91ef92e19c070c300f914bd858cc615406199c7abad3a81d07b28ba"
+  },
+  "adapter_artifact": {
+    "bytes": 25584224,
+    "format": "safetensors",
+    "path": "adapter_model.safetensors",
+    "sha256": "639a1edf13f9c41c6d19c6c7c33ee4a30eb83cbc313971081410d5f5d9c69924"
+  },
+  "adapter_id": "freeway-traffic-qwen35-v9",
+  "base": {
+    "base_id": "qwen35-0.8b-text@2fc06364",
+    "fingerprint": "4c9fedaef396fb9cf6c8a97c57ee53397b1bd3f9c2a321ab4233e253a233c876"
+  },
+  "deployment": {
+    "artifact_bytes": 629735968,
+    "artifact_sha256": "57b74ab01a85f7e83c6ee8a0b10a7cd5da2e439108175372220c5ebd76aaeef9",
+    "format": "gguf",
+    "max_input_tokens": 16,
+    "max_output_tokens": 1,
+    "quantization": "Q6_K",
+    "runtime": "llama.cpp",
+    "thinking": false
+  },
+  "evaluation": {
+    "evidence": {
+      "deployment": {
+        "path": "evidence/deployment.json",
+        "sha256": "d683181f9c5b5bdf0f94d686d2877681757e8d5dacc8a63878bedef7357aa869"
+      },
+      "distillation": {
+        "path": "evidence/distillation.json",
+        "sha256": "8017a5505cf513b458028eabb8239d50ade4f1a2bb00d1db05a36d176d14e4c4"
+      }
+    },
+    "gate_results": [
+      {
+        "actual": 0.7778,
+        "metric": "decision_accuracy",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.75
+      },
+      {
+        "actual": 0.8093,
+        "metric": "weighted_f1",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.8
+      },
+      {
+        "actual": 1.0,
+        "metric": "valid_output_rate",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 0.833333,
+        "metric": "selective_cascade_accuracy",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.8
+      },
+      {
+        "actual": 82.62,
+        "metric": "average_ttft_ms",
+        "operator": "<=",
+        "passed": true,
+        "value": 100.0
+      },
+      {
+        "actual": 1164.8711,
+        "metric": "system_ram_footprint_mb",
+        "operator": "<=",
+        "passed": true,
+        "value": 1536.0
+      }
+    ],
+    "gates": [
+      {
+        "metric": "decision_accuracy",
+        "operator": ">=",
+        "value": 0.75
+      },
+      {
+        "metric": "weighted_f1",
+        "operator": ">=",
+        "value": 0.8
+      },
+      {
+        "metric": "valid_output_rate",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "selective_cascade_accuracy",
+        "operator": ">=",
+        "value": 0.8
+      },
+      {
+        "metric": "average_ttft_ms",
+        "operator": "<=",
+        "value": 100.0
+      },
+      {
+        "metric": "system_ram_footprint_mb",
+        "operator": "<=",
+        "value": 1536.0
+      }
+    ],
+    "metric_sources": {
+      "average_ttft_ms": {
+        "evidence": "deployment",
+        "path": "jetson_gpu.average_ttft_ms"
+      },
+      "decision_accuracy": {
+        "evidence": "distillation",
+        "path": "selected_metrics.accuracy"
+      },
+      "selective_cascade_accuracy": {
+        "evidence": "deployment",
+        "path": "strict_future_test.selective_cascade_accuracy"
+      },
+      "system_ram_footprint_mb": {
+        "evidence": "deployment",
+        "path": "jetson_gpu.system_ram_footprint_mb"
+      },
+      "valid_output_rate": {
+        "evidence": "distillation",
+        "path": "selected_metrics.valid_output_rate"
+      },
+      "weighted_f1": {
+        "evidence": "distillation",
+        "path": "selected_metrics.weighted_f1"
+      }
+    },
+    "metrics": {
+      "average_ttft_ms": 82.62,
+      "decision_accuracy": 0.7778,
+      "selective_cascade_accuracy": 0.833333,
+      "system_ram_footprint_mb": 1164.8711,
+      "valid_output_rate": 1.0,
+      "weighted_f1": 0.8093
+    }
+  },
+  "input_contract": {
+    "context_encoder": "freeway-bitpacked-decimal@v1",
+    "data_schema": "https://cloud-edge.local/schemas/scenes/traffic-edge-event-v1.json",
+    "direct_media_to_llm": false,
+    "event_type": "com.cloudedge.traffic.edge-event.v1",
+    "llm_input_type": "compact_text_code",
+    "max_input_tokens": 16
+  },
+  "lora": {
+    "alpha": 32,
+    "dropout": 0.05,
+    "modules_to_save": [],
+    "peft_type": "LORA",
+    "rank": 16,
+    "target_modules": [
+      "down_proj",
+      "gate_proj",
+      "k_proj",
+      "o_proj",
+      "q_proj",
+      "up_proj",
+      "v_proj"
+    ],
+    "task_type": "CAUSAL_LM"
+  },
+  "scene": "freeway_traffic_management",
+  "schema_version": "edge-llm-adapter/v1",
+  "training": {
+    "methods": [
+      "sft"
+    ],
+    "teacher_model": "qwen3.5:9b",
+    "test_dataset_id": "sha256:616c010ebad234b5b8bcf0e9ffeeabc459449528d701bf502603b47415db80d4",
+    "test_set_used_for_training": false,
+    "train_dataset_id": "freeway-action-token-v9-train-288-events"
+  },
+  "version": "1.0.0"
+}

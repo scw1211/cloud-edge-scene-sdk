@@ -1,12 +1,12 @@
 {
-  "sdk_version": "0.12.0",
-  "built_at_utc": "2026-07-29T05:02:50.464774+00:00",
+  "sdk_version": "0.13.0",
+  "built_at_utc": "2026-07-29T05:44:14.040370+00:00",
   "python_requires": ">=3.9",
   "included_files": [
     {
       "path": ".gitignore",
-      "bytes": 158,
-      "sha256": "8777e8c518b8e01cddb48468bc5b104690fa30b40a45569c72e8c2bafc925e6d"
+      "bytes": 501,
+      "sha256": "d0051492834b1834311c4dffed295abb4203bddc37d4ffba33dc019bfa20fc29"
     },
     {
       "path": "FILE_BRIDGE.md",
@@ -25,13 +25,13 @@
     },
     {
       "path": "README.md",
-      "bytes": 18320,
-      "sha256": "a9cbec42732237be6b93bc78274654394beeec4e7c23739a871e75a65cd7dfcf"
+      "bytes": 18729,
+      "sha256": "a89274d809920bff32aeb3afb191c610b00aa64963e218d6de105ecbe2f31be5"
     },
     {
       "path": "VERSION",
       "bytes": 7,
-      "sha256": "8a932413d42f95082f8323447652379a4885e328329efca3a67ec9c793c09940"
+      "sha256": "d84c9e596c7d6a94e5f74579ef8d8912a807b0d28582474900ad35dfb3edfcf4"
     },
     {
       "path": "cloud_edge_framework/__init__.py",
@@ -441,7 +441,7 @@
     {
       "path": "pyproject.toml",
       "bytes": 521,
-      "sha256": "e62952748e9e792545752a2ebdc13f3583afd4f9686b58b295f74ffd0199a01a"
+      "sha256": "de549b22482a3184602b96c7d9b9bcc1158cf032eb7c21dff91f20b30fb9246d"
     },
     {
       "path": "requirements-training.txt",
@@ -525,8 +525,108 @@
     },
     {
       "path": "scenes/freeway_traffic/README.md",
-      "bytes": 4082,
-      "sha256": "b565b7646613606400c1c1f2f65dc4f30bfc8d6dec2dca6c480c8d1a849f0ee1"
+      "bytes": 8530,
+      "sha256": "518ee08718d0b08e630d4f04ee684714d336a572a0cd2e33f45bf9cd6156eb44"
+    },
+    {
+      "path": "scenes/freeway_traffic/asset_catalog.json",
+      "bytes": 2504,
+      "sha256": "a2c591def4a4423a39f1a22547367db708a4c0976a1f726808dc862899dd1261"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/data/PEMS08.csv",
+      "bytes": 3736,
+      "sha256": "e5ab2a62f275741e6b07d3fba1623883ff9d692d406a44724d26efddc5e24b20"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/action_mapping.json",
+      "bytes": 2066,
+      "sha256": "8c842896d91ef92e19c070c300f914bd858cc615406199c7abad3a81d07b28ba"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/README.md",
+      "bytes": 495,
+      "sha256": "36d9f18dec008477c4ee4ae78d2fd5738e64433536029afd513b9b3cb416783b"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/action_mapping.json",
+      "bytes": 2066,
+      "sha256": "8c842896d91ef92e19c070c300f914bd858cc615406199c7abad3a81d07b28ba"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/adapter_config.json",
+      "bytes": 1096,
+      "sha256": "2f5e14f0c852f8c74310efb68d0dafb43f546b15ff389fac78923e83f010ccbe"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/adapter_model.safetensors",
+      "bytes": 25584224,
+      "sha256": "639a1edf13f9c41c6d19c6c7c33ee4a30eb83cbc313971081410d5f5d9c69924"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/evidence/deployment.json",
+      "bytes": 1983,
+      "sha256": "d683181f9c5b5bdf0f94d686d2877681757e8d5dacc8a63878bedef7357aa869"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/evidence/distillation.json",
+      "bytes": 3032,
+      "sha256": "8017a5505cf513b458028eabb8239d50ade4f1a2bb00d1db05a36d176d14e4c4"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/scene_adapter_manifest.json",
+      "bytes": 4885,
+      "sha256": "3fcdeadbd1a1fef6c6bad90a42e612f7749240795f5ef729b0090b6835b074e1"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/base_manifest.json",
+      "bytes": 2726,
+      "sha256": "2832e36a971974075c14694b1e2af506d0183e6a229eff2871b0283d24179af3"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/edge_llm/package_spec.json",
+      "bytes": 2658,
+      "sha256": "790919ac2456334cd48509b43ab8d4b7cb23e0df6231f922befa99c0709c53a2"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/models/cloud_coordinator_topology_fused.joblib",
+      "bytes": 26277606,
+      "sha256": "5ee22aa91a2d5137d29f2b9a152e67917b6a14b0fffaeb80e7d371686622c017"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/models/edge_defer_gate.npz",
+      "bytes": 676016,
+      "sha256": "f4191ab8212cf6c42b5a9c04adb07a12874b645e788c3371a81b3b3eef056a41"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/models/edge_student_freeway_joint_metis4.json",
+      "bytes": 2266986,
+      "sha256": "bcad5b7f87dd2833e2c95afd2679bbf5b9176c66bcc0d4e35ec7a01a2fadceb2"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/models/joint_risk_astgcn_metis4_flowprio2_frozen.pt",
+      "bytes": 867237,
+      "sha256": "c85382832697fbd235b79e764ee367a71a02236b2d71bcaa7b2430abd6ae3473"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/models/region_risk_conformal.json",
+      "bytes": 1134,
+      "sha256": "f25899d9eec52934c4ea66b686253f90ef90f9c9650c8a29fc39511c80fc3dbf"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/models/traffic_region_topology_metis4.json",
+      "bytes": 2597,
+      "sha256": "df12ac50b8c4803f4bbd0f916c8881ecb23186994176d9c5ad81cb90869004d2"
+    },
+    {
+      "path": "scenes/freeway_traffic/assets/models/traffic_tree_feature_codec_topology_v1.npz",
+      "bytes": 3266531,
+      "sha256": "fdf2a6e384ff4f0ace09d988dd298e9dbb564122c26a1af8f4e0394851574676"
+    },
+    {
+      "path": "scenes/freeway_traffic/configurations/PEMS08_astgcn.conf",
+      "bytes": 595,
+      "sha256": "d36e6b581192b1f3bff7435bded5a88d8caa39385ca5b2e4b599e4283721a16b"
     },
     {
       "path": "scenes/freeway_traffic/deployment/cloud_service.json",
@@ -544,9 +644,74 @@
       "sha256": "484543d38548e34d5110993bdb41c01589a1584272fd22bbc34df339b54306c6"
     },
     {
+      "path": "scenes/freeway_traffic/deployment/full/cloud_qwen9b_ollama.json",
+      "bytes": 393,
+      "sha256": "dd5e1f44b35ec7d4f573c33d1616a2d3e99a94eb8b3d52c19878c04c00e90c39"
+    },
+    {
+      "path": "scenes/freeway_traffic/deployment/full/cloud_service.json",
+      "bytes": 600,
+      "sha256": "a19afdff696abd9c2104b4431e87fa1f384d6d28b89e94ddb6909486462a4284"
+    },
+    {
+      "path": "scenes/freeway_traffic/deployment/full/cloud_service_qwen9b.json",
+      "bytes": 763,
+      "sha256": "a5f8fa5ad2473c7ac8f55e64d417c6422c246fa1fc48f29a8ea8e63c8af180f2"
+    },
+    {
+      "path": "scenes/freeway_traffic/deployment/full/edge_llm_runtime.json",
+      "bytes": 443,
+      "sha256": "9ec9f14202ff2b6fc08d7a6c21e09312b0ae16c6ccc23883bb469795851fc462"
+    },
+    {
+      "path": "scenes/freeway_traffic/deployment/full/edge_service.json",
+      "bytes": 1487,
+      "sha256": "2e4ffe8e20368566f063b71698de6293a977d24d7cb7a0af3eb9f203510e7a3e"
+    },
+    {
+      "path": "scenes/freeway_traffic/deployment/full/edge_service_qwen9b.json",
+      "bytes": 1491,
+      "sha256": "8cb6a35c24bbb6d8c21733c9c279b03d5bc1f400adeb4673196eb96f5a149e57"
+    },
+    {
+      "path": "scenes/freeway_traffic/deployment/full/scene_plugins_cloud.json",
+      "bytes": 571,
+      "sha256": "153a000b026a77997843ff6b2ecaa1683e2874621cb65c5a69b5a621d77de3f9"
+    },
+    {
+      "path": "scenes/freeway_traffic/deployment/full/scene_plugins_edge.json",
+      "bytes": 1155,
+      "sha256": "f57b69a68c9103e79e21f0a6ba32618af1dd54e442d6b35d1b8f7a6ddad4dc08"
+    },
+    {
       "path": "scenes/freeway_traffic/deployment/scene_plugins.json",
       "bytes": 296,
       "sha256": "69c2a3237bb286c4cf873d07b571145f3ebea7037b83c0377e43cb31ba056a4e"
+    },
+    {
+      "path": "scenes/freeway_traffic/evidence/本机完整系统实测.json",
+      "bytes": 2142,
+      "sha256": "2a5165251423f146d2fe51fadae9b505c13b751064cd281cf38c20825cf7cbbc"
+    },
+    {
+      "path": "scenes/freeway_traffic/evidence/本机完整系统实测.md",
+      "bytes": 2504,
+      "sha256": "52bfdad734dd26b11fb87ea8e5882d282b3b83c9a13551990751d2e494ef5e3a"
+    },
+    {
+      "path": "scenes/freeway_traffic/freeway_traffic_full/__init__.py",
+      "bytes": 172,
+      "sha256": "aa1718bf560ea44a3d08fd0e9a233b3bc0fde9d2c8b6eccbf3f331e82cc52966"
+    },
+    {
+      "path": "scenes/freeway_traffic/freeway_traffic_full/edge_llm.py",
+      "bytes": 11836,
+      "sha256": "f26197a0c5464d274ab42cdbae4af9ae2576279505d8c01cd47023d5590ed6e6"
+    },
+    {
+      "path": "scenes/freeway_traffic/freeway_traffic_full/plugin_impl.py",
+      "bytes": 49970,
+      "sha256": "dd2155cd78bb6954026196b567d108b62f6679c6c4efbc2a67a47d0eea7bca39"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_scene/__init__.py",
@@ -574,14 +739,59 @@
       "sha256": "591db60b322dcd32a214acc0197ece9a7ccf67ca7960409771033a1825d3e9ad"
     },
     {
+      "path": "scenes/freeway_traffic/install_full_assets.py",
+      "bytes": 5282,
+      "sha256": "a90a8201aaa0dda1b27aed86f7dfe7fabd1a2e2162e961f6d1e3f305d5b49fc2"
+    },
+    {
+      "path": "scenes/freeway_traffic/lib/__init__.py",
+      "bytes": 35,
+      "sha256": "9c8066324024b9837e3f31d92e877afc77b02ae250d137a242412658f6959785"
+    },
+    {
+      "path": "scenes/freeway_traffic/lib/metrics.py",
+      "bytes": 2613,
+      "sha256": "d9c02c68dc7e53f3e0be27c104d904f9c871bf8c6181249757ea18847e2b1dad"
+    },
+    {
+      "path": "scenes/freeway_traffic/lib/utils.py",
+      "bytes": 14158,
+      "sha256": "dbdf2735f708ee1b9f1395f9f462dc85bc2910bf2badf42a52e487ca70d4a862"
+    },
+    {
+      "path": "scenes/freeway_traffic/model/ASTGCN_r.py",
+      "bytes": 11888,
+      "sha256": "22f528d1bf8f1155b40ee42494e3344f3142037fd68b83687f71b268a2a4f2af"
+    },
+    {
+      "path": "scenes/freeway_traffic/model/MSTGCN_r.py",
+      "bytes": 5015,
+      "sha256": "0be0d178207a48f6a096552bd045ceb504c52aaaec71ff8d64039af7f2428ade"
+    },
+    {
+      "path": "scenes/freeway_traffic/model/__init__.py",
+      "bytes": 32,
+      "sha256": "f24587de4ec204e1b6e13a943d83f269c57205c906372d06aef87b99468b5cca"
+    },
+    {
       "path": "scenes/freeway_traffic/model_assets.example.json",
-      "bytes": 923,
-      "sha256": "cf77ad69362481ae59097abcb866d9aab6aa443387118cfa9de5c5ad618e401c"
+      "bytes": 1092,
+      "sha256": "d98e6da6ef416f86087e3935608fc79e4e5010a0347e9887c167e3af2aa3b462"
     },
     {
       "path": "scenes/freeway_traffic/pyproject.toml",
-      "bytes": 454,
-      "sha256": "3d5a29bd60fd1662b658c07144a44aef949a17139623f32932541740ec0d508b"
+      "bytes": 557,
+      "sha256": "dcf3e5015dd56fee943bbd74649c940be5e2dd7f7bb63b78919267d9e4ec2c23"
+    },
+    {
+      "path": "scenes/freeway_traffic/requirements-runtime.txt",
+      "bytes": 275,
+      "sha256": "df45b89a54cd0831dd841e6936100f68e7e48f46ff4e15910a7c8073e499fb0c"
+    },
+    {
+      "path": "scenes/freeway_traffic/run_full_acceptance.py",
+      "bytes": 3764,
+      "sha256": "47543ee0c11f5fdd8464d494d87c51caf2d7eccc62feaad8c3d841c7929b90b4"
     },
     {
       "path": "scenes/freeway_traffic/samples/edge_a_event.json",
@@ -592,6 +802,411 @@
       "path": "scenes/freeway_traffic/samples/edge_b_event.json",
       "bytes": 1841,
       "sha256": "b94974d0e7df7ecddd5b494d0788eb5f42ea621e7b8ae1931c75cbad1e3e4863"
+    },
+    {
+      "path": "scenes/freeway_traffic/schemas/scenes/traffic_edge_event_v1.schema.json",
+      "bytes": 4378,
+      "sha256": "b38e22f617c7396f091e380d304c3aadfbb1070c9a401c271666723e621f4f12"
+    },
+    {
+      "path": "scenes/freeway_traffic/send_real_partitions.py",
+      "bytes": 6305,
+      "sha256": "0900b1e8122b58b13105640caa3c6f82aae65ec14ca18edcc0e4695a21cf8cf5"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/__init__.py",
+      "bytes": 85,
+      "sha256": "9d369d2db070adaae4ce0e26a3882d9abace197436376b09b2fcba529fe52ed3"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/accept_traffic_framework.py",
+      "bytes": 66221,
+      "sha256": "aaf0781410c1668d1e0725681f3057a41948b04e0d90bbd57a538778424f6bc5"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/autonomy.py",
+      "bytes": 5125,
+      "sha256": "232e2bc11e4e36a092770c8299d4b0a557c82ed691ad5d6f0ec387d297ccc663"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/benchmark_collaboration_framework.py",
+      "bytes": 16674,
+      "sha256": "a387a1dabb28879b16ad6b68be676a31111b1044b8131aa6fa24348c16a32a77"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/benchmark_continuous_edge_cloud.py",
+      "bytes": 34373,
+      "sha256": "5cedcc642b151ddca8d4593bbe4c0572de276729fbd6f7836dc1a7bfb1f40a5d"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/benchmark_coordinate_http.py",
+      "bytes": 3657,
+      "sha256": "20c3c07330f558948322a60d036791617d1da89079410cb0a03bcc35e58e2232"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/benchmark_llama_cpp_action_streaming.py",
+      "bytes": 14801,
+      "sha256": "8fa415ab5b2bae059da79ac72c5037d58d640abf0f72344f8b64a7699c58b254"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/benchmark_measured_architectures.py",
+      "bytes": 24530,
+      "sha256": "805b114fb45e058e719bb70d11b4a264b0e822d2725b1ea9530134e41b67cdd6"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/benchmark_multi_edge_cloud_load.py",
+      "bytes": 8945,
+      "sha256": "84504b91ad06582618bc8af5d23f364d3eb190588de5e21c9a9d5398c34e1a79"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/benchmark_ollama_streaming.py",
+      "bytes": 9260,
+      "sha256": "dc6a8f1f226f7caa6a8bdb7df4bb2ab9599f92e31f04c3d52866d678e81d6c3f"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/benchmark_tree_feature_codec.py",
+      "bytes": 10485,
+      "sha256": "dbadae7701584b4a998459b0e19b767cbf1fc976b891a73b917d25031cfe46ea"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/benchmark_utils.py",
+      "bytes": 9082,
+      "sha256": "1b90a022447d0420623bbf7357992a6e075c1d19494f4f56a57c53c8b439330a"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_correction_distillation_dataset.py",
+      "bytes": 5905,
+      "sha256": "f4d4ff414db18388bc938a5454765a3d8b0f3996acd04aeee0b5654fd0c6b97b"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_framework_truth_cases.py",
+      "bytes": 7472,
+      "sha256": "cc755f6d02589c8dd0c3ce17356b485680fab835a94ca5c4920ccc80cb38dc7c"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_general_capability_benchmark.py",
+      "bytes": 5093,
+      "sha256": "70f02a9166d27e8ec84a6190a52651e3f68d02aacb0ca25450ac00c0861361c6"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_llm_sft_dataset.py",
+      "bytes": 20275,
+      "sha256": "a6c39eafd440307899bf6983c9a137ce828ad46426f0f9867e69f8bd08243484"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_mixed_capability_distillation_dataset.py",
+      "bytes": 8590,
+      "sha256": "40ad63e4172d9ef1739bb1e2917e94aa934f28380e5fb3762ee1518587c17d3c"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_paper_risk_labels.py",
+      "bytes": 30633,
+      "sha256": "24093cb66b7f4e096944c2f4eaa7f2965493c71793ff29cc6abf62686ecae79d"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_preference_distillation_dataset.py",
+      "bytes": 8555,
+      "sha256": "99080ec13ab639e639bae5b71dbbbd762739423dbd08a3cc7173bcc79cbb770f"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_region_topology.py",
+      "bytes": 5389,
+      "sha256": "c7936903a3515d5a608257a4a48e8c54d9e49781e94b74b429c8ca0e3ac23151"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_traffic_requirement_report.py",
+      "bytes": 32530,
+      "sha256": "9f9d87b5b2123e4da303f8f50bae4804dbf4bd58d5d484045726f0aa395a81fd"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/build_ultracompact_llm_dataset.py",
+      "bytes": 3856,
+      "sha256": "c2679fea28f354905e0a1a91ff48fde76e355834c5a594dc116e9ff127cd264a"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/calibrate_conformal_risk.py",
+      "bytes": 18678,
+      "sha256": "4b59176753ac313232c351a6071588e26690b5591864db7847dafce5a22d1ea4"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/centralized_cloud_server.py",
+      "bytes": 11916,
+      "sha256": "2bef207e7471fdfe017226b7cfe64898788a3a5bc7862e8d099efe49d7bc2339"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/cloud_coordinator.py",
+      "bytes": 2461,
+      "sha256": "5c98109e5be7d03edcc9d9c01272577e11b05f7f65c5c867c5583ec5d7200d78"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/cloud_llm_review.py",
+      "bytes": 10569,
+      "sha256": "e270b5849689490db38b32cf23e0ce5833460744b7235dced4b257b045e8b17d"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/cloud_server.py",
+      "bytes": 25132,
+      "sha256": "d84ef1e895793b1ba94e113a876a9ec88b42ab4acd53db4902e45e5e88b20f82"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/conflict_coordinator.py",
+      "bytes": 14485,
+      "sha256": "cd11e6f4fd9099ab100e3b46bb37beb90dca714f57a24d25bd708d5d9f6f4eb0"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/conformal_risk.py",
+      "bytes": 9905,
+      "sha256": "91ffe546333f56a823d0baa856ac9c578e9979b9d48568aa73018452c67173fd"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/constrain_teacher_labels.py",
+      "bytes": 4233,
+      "sha256": "0725ef8d07f496dd61c7dc43563e5c553a18b833b0c493778ec01855f9920a1e"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/decision_utils.py",
+      "bytes": 35326,
+      "sha256": "4865bd2e7bcfcddbb3e7961090c2431bf9b109107e5cb4bbda9cb21299813d5b"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/defer_gate.py",
+      "bytes": 9979,
+      "sha256": "1b703fe900a09a7adf6d1c6681dee895a22b48e3aaed5e1e0aa81f1fbd103c4d"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/edge_orchestrator.py",
+      "bytes": 13457,
+      "sha256": "3f4b85973afb95102097e1536aa25b30b416705130fe6fc736f1f8b8de4c9cb5"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/edge_qwen_action_infer.py",
+      "bytes": 4971,
+      "sha256": "b7179917df005eeb25d1dd03ab21cd0d20210ab4af674beffa3e349c41b53a48"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/edge_student.py",
+      "bytes": 6192,
+      "sha256": "8e0e05532a21c4721d39c0639fe7144aae628cdc7c676cf2c7ae31a173b309ab"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/eval_conflicts.py",
+      "bytes": 15646,
+      "sha256": "a38e29d23741573685f4b558bc9a50616ef3beea309dc511eb34454089d61e26"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/eval_edge_qwen_collaboration.py",
+      "bytes": 6845,
+      "sha256": "f9e4008ee96e90919171980a0a3a35cec0ced68938f67121ebb921f9636e6e10"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/eval_general_capability_retention.py",
+      "bytes": 17300,
+      "sha256": "215230bc42fd36c4a037647eb5ed73fff07a7cefd46e1d09d87272d9c2a557b5"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/eval_llm_sft_student.py",
+      "bytes": 15059,
+      "sha256": "e765de38d8b9e182895e8bc930d29aeeb0ad9a4fa282b020c0a332ece65f8998"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/eval_policy_sync.py",
+      "bytes": 3913,
+      "sha256": "b2e9dc559d3e81dffb07cafc5e610f8b96f571c81f8b3d615c749e71bbacfab0"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/eval_scheduler.py",
+      "bytes": 9261,
+      "sha256": "01002951448c6888139e34b60be9ddc5341cd9f599772f7e715a97873b4bb2c6"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/evaluate_conformal_scheduler.py",
+      "bytes": 21236,
+      "sha256": "548135faf244f739d3be7cd454fcb91783f7ab27fcb915c0157159dd39cf232b"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/evaluate_edge_cloud_retention.py",
+      "bytes": 20394,
+      "sha256": "2e796908ee1f3bea8337c2ae453f383907f8ba6e12816132a4552948ce12105d"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/evaluate_edge_qwen_role_ablation.py",
+      "bytes": 28451,
+      "sha256": "2c23a656adcb4e67bfcde6487d33ee6db622d382c259e50aad753c6188a75ed8"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/evaluate_future_truth_policy.py",
+      "bytes": 27245,
+      "sha256": "e867ef5e74294965388cbc94a91ff719a7762ef7bac95b29ebfc75ac0235d95e"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/evaluate_risk_channel_ablation.py",
+      "bytes": 12440,
+      "sha256": "c2005fb836f7b518af645bec4e82808e5d4e04229662bc76b0e9f060fb655ad9"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/evaluate_routing_ablation.py",
+      "bytes": 25300,
+      "sha256": "ec78a7f33453fa8c8a2c015a7b07f2ddd6bc5fe866e4f1979b6631ba99d075dc"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/generate_joint_edge_events.py",
+      "bytes": 11095,
+      "sha256": "05ad30e82dc29c748feee89d5c84c1a58cdab0a4900ad9beb234e1f3bd2b51f7"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/generate_teacher_labels.py",
+      "bytes": 10870,
+      "sha256": "2792b4f554971ac5f34522a69843a1e44e2eee81dab6b79bdcb24c1be3257a2c"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/graph_partition.py",
+      "bytes": 17720,
+      "sha256": "9896499827dc2501463d8fb6d2115c00fd07b8b17b3494faed36e5f6894f4e67"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/infer_joint_risk_astgcn.py",
+      "bytes": 14127,
+      "sha256": "352ed27c38fb877f2eba264ccbbe099b3bd4b34dd44ecb8e0eb39fc4a6cb8539"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/merge_llm_lora.py",
+      "bytes": 3146,
+      "sha256": "ab96fbc0cb665f87f8471063feea53244a873db78d6701a536fe4e532ba4cc6d"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/model_modality.py",
+      "bytes": 2487,
+      "sha256": "0b66e82887fd2c35b86d2afcb99e742671a226ce8f27421c8f10291b5d51b2fa"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/network_fault_proxy.py",
+      "bytes": 6137,
+      "sha256": "5c4be9ed1c0ce8b386dd12a975341f2ac8302e5b03a0b6179372391eb94bb39a"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/policy_store.py",
+      "bytes": 12810,
+      "sha256": "49f39955756ea2d626b6a39d14754bcfbf2ad9e99a2a889bc6970eebdeea6baf"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/qwen_action_load_generator.py",
+      "bytes": 2848,
+      "sha256": "6aa9c3778531b3395abcc4425430eafecc436705a6f58abaad1624c7682148cc"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/risk_labels.py",
+      "bytes": 8172,
+      "sha256": "c5fb17a14640c3086b413714b38715bea52c32a787c804c520c982c717e4eed5"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/risk_model.py",
+      "bytes": 3238,
+      "sha256": "3a8388eeea642effe51cbd5f80880eaae468884ef1f883e4313c821fd3ce71e7"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/safety_filter.py",
+      "bytes": 15834,
+      "sha256": "15976c74434e727c6b90f577d838252cecc55c8bfed9d9b7763af7000043c0f5"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/scene_event.py",
+      "bytes": 3084,
+      "sha256": "751ac5c9632033a06b972eeadd2338f04122455f4fdb1b626a8b5decffd86c68"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/scheduler.py",
+      "bytes": 8063,
+      "sha256": "cbb1b60a788658b8197a198b7a73fb353cea4592c31c03b72470449e19f48f11"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/summarize_adaptive_network_benchmark.py",
+      "bytes": 12211,
+      "sha256": "741cae9b3ae54f260105fdc2a5e5f7de61d81f5d05cfa4181141d2a220d9e911"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/summarize_architecture_baselines.py",
+      "bytes": 4182,
+      "sha256": "681b17a878990887c5fe80cc77da1f8d3775136aad1af63fdec6e888fadc3112"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/summarize_llm_distillation_stages.py",
+      "bytes": 3650,
+      "sha256": "83f563b1e03faf6b5595f6b6398db95d09796753f75b52fbcbd16384b0063ba3"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/summarize_selective_defer_benchmark.py",
+      "bytes": 10553,
+      "sha256": "aa5d37836a0db2e79147b83dc7a8e2d70adde379820253a2188ebee4c226e9f2"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/sync_edge_policy.py",
+      "bytes": 15211,
+      "sha256": "2882b6d02c05cf93ff900f1cd00df17098b8125733f4e58a41883ff4b0c4d312"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/sync_policy.py",
+      "bytes": 1684,
+      "sha256": "4040c7158d8805cd906fbe21de1fb360608d4fc9fa7abbce8e9efd3dacb1dfbd"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/traffic_perception_runtime.py",
+      "bytes": 9448,
+      "sha256": "ec48c0693a63291448720aea0d4182a5d31c800ce20bb59541866c47af82087e"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/train_cloud_coordinator.py",
+      "bytes": 3026,
+      "sha256": "04285fc5905b55fd7f78b7973c90496850b2677ba6ae9e39b86b41a4846951a9"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/train_defer_gate.py",
+      "bytes": 14142,
+      "sha256": "b9b54328f8912b707b818eb5da7451ae9973147cb197e6ac762efe7d362ef075"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/train_edge_student.py",
+      "bytes": 17432,
+      "sha256": "46c1af12d8a8d4077d041698062ba0f08e7a8d8a5aca12ebdefed2e964e84e2e"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/train_future_calibrated_cloud_coordinator.py",
+      "bytes": 26652,
+      "sha256": "4336a2953c425f681e772973400de35b861a053a45c3e28d37e09a8c8604787b"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/train_joint_risk_astgcn.py",
+      "bytes": 19779,
+      "sha256": "7ff119bb621ad0b61b608be9fd3b35a0976ed67d6052bc9430f6ce461d2c5349"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/train_llm_dpo_lora.py",
+      "bytes": 11646,
+      "sha256": "4640159cb034cca6fd462deda228679837347359f4fc7d09aa4c3474be4499a0"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/train_llm_sft_lora.py",
+      "bytes": 15423,
+      "sha256": "06b22edbf29d9704d8b8b73863fa9da8fa19c6891a190f8249fd9b39daba5972"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/tree_feature_codec.py",
+      "bytes": 12696,
+      "sha256": "7ff6d1a3a1a48bd0d338038c196a5876e873614373f8d102f93e4aedda0bb04f"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/ultracompact_codec.py",
+      "bytes": 1951,
+      "sha256": "5a1e1cd198d9bd63279cf8363197c8098f29c93e6d32f7cffbbb90c047b7ece2"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/verify_policy_artifacts.py",
+      "bytes": 3012,
+      "sha256": "b55ec388221d8bd68f505829408dadaa89728d4e88872c70c1edc8fa8974da6a"
+    },
+    {
+      "path": "scenes/freeway_traffic/verify_real_two_edge.py",
+      "bytes": 4116,
+      "sha256": "ec45bcdd6c9ad2976271c5c416420c284dfd478266faad545b969d6ad16b52fe"
     },
     {
       "path": "schemas/decision_envelope.schema.json",
@@ -655,12 +1270,11 @@
     }
   ],
   "excluded_assets": [
-    "ASTGCN code and checkpoints",
-    "PEMS08 data",
-    "traffic Student and cloud model artifacts",
+    "PEMS08 prepared inference array (downloaded by traffic asset installer)",
+    "traffic Edge-Qwen GGUF (downloaded by traffic asset installer)",
     "traffic benchmark results",
-    "traffic LoRA and traffic action mapping",
-    "portable traffic plugin is included; all traffic model weights remain external",
+    "Qwen 9B weights (installed from the official Ollama registry)",
+    "Edge-Qwen GGUF and prepared PEMS08 array (downloaded and hash-verified)",
     "Qwen base weights (manifest only)"
   ]
 }
