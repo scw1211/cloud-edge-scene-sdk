@@ -1,7 +1,9 @@
 """用途：运行只承担复核、协调、反馈和幂等去重的独立云端服务。"""
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
+import threading
 import time
 from typing import Any, Dict, Mapping
 
@@ -75,6 +77,36 @@ class CloudApiService:
             max_entries=config.idempotency.max_entries,
         )
         self.metrics = FrameworkMetrics(self.role)
+        self._aggregation_stop = threading.Event()
+        self._aggregation_worker_state: Dict[str, Any] = {
+            "running": True,
+            "cycles": 0,
+            "completed": 0,
+            "errors": [],
+        }
+        self._aggregation_worker = threading.Thread(
+            target=self._aggregation_flush_loop,
+            name="cloud-aggregation-timeout-flusher",
+            daemon=True,
+        )
+        self._aggregation_worker.start()
+
+    def _aggregation_flush_loop(self) -> None:
+        while not self._aggregation_stop.wait(0.05):
+            try:
+                result = self.flush_aggregations(64)
+                self._aggregation_worker_state["cycles"] += 1
+                self._aggregation_worker_state["completed"] += int(
+                    result["completed"]
+                )
+                if result["errors"]:
+                    self._aggregation_worker_state["errors"] = result[
+                        "errors"
+                    ][-10:]
+            except Exception as exc:  # noqa: BLE001
+                self._aggregation_worker_state["errors"] = [
+                    "{}: {}".format(type(exc).__name__, exc)
+                ]
 
     def health(self) -> Dict[str, Any]:
         return {
@@ -87,6 +119,10 @@ class CloudApiService:
             "idempotency": self.idempotency.snapshot(),
             "artifacts": self.artifact_store.snapshot(),
             "aggregations": self.aggregator.snapshot(),
+            "aggregation_worker": {
+                **self._aggregation_worker_state,
+                "running": self._aggregation_worker.is_alive(),
+            },
         }
 
     def protocol(self) -> Dict[str, Any]:
@@ -209,9 +245,60 @@ class CloudApiService:
         submission = self.aggregator.submit(event, spec)
         lease = self.aggregator.claim(str(submission["group_id"]))
         if lease is None:
-            return {"aggregation": submission, "coordination": submission.get("result")}
+            coordination = submission.get("result")
+            if (
+                submission.get("state") == "completed"
+                and isinstance(coordination, dict)
+                and not any(
+                    event.event_id in raw_decision.get("event_ids", [])
+                    for raw_decision in coordination.get("decisions", [])
+                    if isinstance(raw_decision, dict)
+                )
+            ):
+                # A member arriving after a timeout-completed partial group
+                # cannot change the decision already returned to earlier
+                # members. Give the late member a safe individual cloud final
+                # instead of leaving its edge review queued forever.
+                with self.manager.lease() as snapshot:
+                    decision = snapshot.require_cloud().decide(event)
+                metadata = dict(decision.metadata)
+                metadata.update(
+                    {
+                        "aggregation_late_member": True,
+                        "aggregation_group_id": submission["group_id"],
+                        "aggregation_completion_reason": submission.get(
+                            "completion_reason"
+                        ),
+                    }
+                )
+                decision = replace(decision, metadata=metadata)
+                coordination = {
+                    "decisions": [decision.to_dict()],
+                    "event_count": 1,
+                    "scenes": [event.scene],
+                    "correlation_groups": [[event.event_id]],
+                    "initial_conflict_count": 0,
+                    "residual_conflict_count": 0,
+                    "resolution_success_rate": 1.0,
+                    "globally_consistent": True,
+                    "late_member_fallback": True,
+                }
+                return {
+                    "aggregation": submission,
+                    "coordination": coordination,
+                    "late_submission": True,
+                }
+            return {
+                "aggregation": submission,
+                "coordination": coordination,
+                "late_submission": False,
+            }
         completed = self._complete_aggregation_lease(lease)
-        return {"aggregation": completed, "coordination": completed.get("result")}
+        return {
+            "aggregation": completed,
+            "coordination": completed.get("result"),
+            "late_submission": False,
+        }
 
     def flush_aggregations(self, limit: int = 64) -> Dict[str, Any]:
         leases = self.aggregator.claim_due(limit)
@@ -315,6 +402,9 @@ class CloudApiService:
         self.metrics.record_failure("{} {}".format(method, path))
 
     def close(self) -> None:
+        self._aggregation_stop.set()
+        self._aggregation_worker.join(timeout=1.0)
+        self._aggregation_worker_state["running"] = False
         self.manager.close()
         self.aggregator.close()
 
