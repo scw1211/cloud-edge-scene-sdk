@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "role": "edge",
+  "plugin_config": "scenes/freeway_traffic/deployment/scene_plugins.json",
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 18101,
+    "max_body_bytes": 8388608,
+    "access_log": false
+  },
+  "storage": {
+    "outbox": "runtime/freeway_traffic/edge_a_outbox.sqlite3",
+    "performance_profiles": "runtime/freeway_traffic/edge_a_performance.json",
+    "feedback": "runtime/freeway_traffic/edge_a_feedback.jsonl",
+    "idempotency": "runtime/freeway_traffic/edge_a_idempotency.sqlite3",
+    "reviews": "runtime/freeway_traffic/edge_a_reviews.sqlite3",
+    "monitoring": "runtime/freeway_traffic/edge_a_monitoring.sqlite3"
+  },
+  "scheduler": {
+    "confidence_threshold": 0.75,
+    "jitter_guard": 1.645
+  },
+  "cloud": {
+    "base_url": "http://127.0.0.1:18100",
+    "timeout_seconds": 0.5,
+    "max_attempts": 2,
+    "retry_backoff_seconds": 0.025
+  },
+  "network_probe": {
+    "interval_seconds": 0.5,
+    "window_size": 10,
+    "failure_threshold": 2,
+    "uplink_mbps": 100.0,
+    "downlink_mbps": 100.0,
+    "expected_response_bytes": 4096,
+    "cloud_queue_ms": 1.0,
+    "cloud_compute_ms": 2.0
+  },
+  "replay": {
+    "interval_seconds": 0.2,
+    "batch_size": 32,
+    "lease_seconds": 5.0,
+    "max_backoff_seconds": 2.0
+  },
+  "idempotency": {
+    "ttl_seconds": 86400,
+    "max_entries": 100000
+  },
+  "monitoring": {
+    "enabled": true,
+    "window_size": 500,
+    "min_labeled_samples": 50,
+    "min_drift_samples": 50,
+    "bootstrap_reference_size": 200,
+    "evaluation_interval_events": 25,
+    "evaluation_max_staleness_ms": 1000
+  }
+}

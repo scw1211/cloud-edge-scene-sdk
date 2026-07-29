@@ -1,0 +1,64 @@
+{
+  "specversion": "1.0",
+  "id": "traffic_demo_edge_b",
+  "source": "urn:edge:traffic_edge_b:external-traffic-model",
+  "type": "com.cloudedge.traffic.edge-event.v1",
+  "scene": "freeway_traffic_management",
+  "edgeid": "traffic_edge_b",
+  "subject": "portable_demo_001",
+  "time": "2026-07-29T00:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://cloud-edge.local/schemas/scenes/traffic-edge-event-v1.json",
+  "data": {
+    "sample_id": "portable_demo_001",
+    "sample_split": "demo",
+    "dataset": "portable_traffic",
+    "region_id": "region_b",
+    "shared_resource": "corridor:I-5-demo",
+    "prediction_horizon_minutes": 60,
+    "managed_node_ids": [26, 167],
+    "region_summary": {
+      "region_risk_level": "high",
+      "region_risk_score": 0.81,
+      "region_risk_confidence": 0.86,
+      "region_risk_probabilities": {
+        "low": 0.03,
+        "medium": 0.08,
+        "high": 0.86,
+        "severe": 0.03
+      },
+      "region_risk_calibration": {
+        "method": "portable_demo",
+        "calibrated_confidence": 0.86,
+        "prediction_set": ["high"]
+      },
+      "congestion_cluster_detected": true
+    },
+    "top_k_risk_nodes": [
+      {
+        "node_id": 167,
+        "risk_level": "high",
+        "risk_score": 0.84,
+        "risk_confidence": 0.88,
+        "forecast": {"speed_mean": 38, "flow_mean": 525}
+      }
+    ],
+    "control_capabilities": {
+      "variable_speed_limit_nodes": [26, 167],
+      "ramp_meter_nodes": [167]
+    },
+    "aggregation": {
+      "member": "edge_b",
+      "expected_members": ["edge_a", "edge_b"],
+      "minimum_members": 1,
+      "timeout_ms": 300
+    },
+    "deadline_ms": 200,
+    "preprocessing_latency_ms": 3.0,
+    "inference_latency_ms": 34.0,
+    "model": {
+      "name": "portable_demo_external_input",
+      "version": "1"
+    }
+  }
+}

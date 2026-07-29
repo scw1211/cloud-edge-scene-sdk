@@ -4,14 +4,15 @@
 
 > 通用框架只固定外层事件信封和内部统一语义事件，不固定`data`中的业务字段。`scene_plugin_template/`默认采用异常检测，仅用于演示如何定义场景Schema和转换逻辑；复制模板后应改成自己的场景名称、字段和动作，不能把示例中的8个字段理解成SDK统一输入。
 
-当前SDK版本为0.11.0，对应公共框架0.3.0。本版新增：
+当前SDK版本为0.12.0，对应公共框架0.4.0。本版新增：
 
 - 真实证据文件上传、SHA-256校验、去重和实际通信量统计；
-- 按场景关联键进行多边缘持久汇聚，支持超时部分汇聚；
+- 在线聚合事件自动上报、多边缘持久汇聚、超时部分汇聚和边缘最终结果回填；
 - 边缘临时判断、待复核、云端最终结果和修正率的完整生命周期；
 - 公共校准误差、风险集合覆盖率和数据漂移监测；
 - 学习式效用路由的影子模式与主动模式；
 - 可选云端大模型结构化复核，失败时保留场景专业模型基线。
+- `scenes/freeway_traffic/`提供不带模型权重、可直接运行的双边缘交通参考场景。
 
 固定分工如下：
 
@@ -40,6 +41,7 @@ cloud_edge_scene_sdk/
 ├── edge_llm/general_distillation.md 通用 Teacher 行为蒸馏方法与实测
 ├── scene_plugin_template/         可复制改名的场景插件
 ├── scene_adapter_template/        场景 LoRA、动作映射和流水线模板
+├── scenes/freeway_traffic/         可独立安装的交通双边缘参考场景
 ├── schemas/                       统一事件和决策协议
 ├── deployment/framework/          插件加载配置
 ├── HANDOFF_CHECKLIST.md           场景团队交付清单
@@ -66,6 +68,17 @@ python -m scene_plugin_template.smoke_test
 - 云端完成冲突消解。
 
 这只能证明框架接通，不代表场景模型已经满足准确率要求。
+
+如需验证双 Jetson 汇聚、冲突协调和断网补传，再执行：
+
+```bash
+python -m pip install -e ./scenes/freeway_traffic --no-deps
+python -m freeway_traffic_scene.smoke_test
+```
+
+学校三机部署与逐文件说明见
+`scenes/freeway_traffic/README.md`。该演示默认使用确定性规则产生动作，
+用于验证框架闭环；它不会冒充 ASTGCN、Student、ExtraTrees 或 Qwen 的模型效果。
 
 ## 安装默认模型
 

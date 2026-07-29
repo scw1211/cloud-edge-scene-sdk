@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "role": "cloud",
+  "plugin_config": "scenes/freeway_traffic/deployment/scene_plugins.json",
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 18100,
+    "max_body_bytes": 8388608,
+    "access_log": false
+  },
+  "storage": {
+    "feedback": "runtime/freeway_traffic/cloud_feedback.jsonl",
+    "idempotency": "runtime/freeway_traffic/cloud_idempotency.sqlite3",
+    "artifacts": "runtime/freeway_traffic/cloud_artifacts",
+    "aggregations": "runtime/freeway_traffic/cloud_aggregations.sqlite3"
+  },
+  "idempotency": {
+    "ttl_seconds": 86400,
+    "max_entries": 100000
+  }
+}

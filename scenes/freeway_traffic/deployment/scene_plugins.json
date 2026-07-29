@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "discover_entry_points": false,
+  "plugins": [
+    {
+      "spec": "freeway_traffic_scene.plugin:FreewayTrafficPlugin",
+      "enabled": true,
+      "options": {
+        "policy_version": "traffic-portable-0.1.0",
+        "portable_demo_mode": true
+      }
+    }
+  ]
+}

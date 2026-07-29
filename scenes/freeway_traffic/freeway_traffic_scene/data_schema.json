@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloud-edge.local/schemas/scenes/traffic-edge-event-v1.json",
+  "title": "交通边缘感知摘要",
+  "type": "object",
+  "required": [
+    "sample_id",
+    "region_id",
+    "prediction_horizon_minutes",
+    "managed_node_ids",
+    "region_summary",
+    "top_k_risk_nodes"
+  ],
+  "properties": {
+    "sample_id": {"type": "string", "minLength": 1},
+    "sample_split": {"type": "string", "minLength": 1},
+    "dataset": {"type": "string", "minLength": 1},
+    "region_id": {"type": "string", "minLength": 1},
+    "prediction_horizon_minutes": {"type": "integer", "minimum": 1},
+    "managed_node_ids": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0},
+      "uniqueItems": true
+    },
+    "region_summary": {
+      "type": "object",
+      "required": [
+        "region_risk_level",
+        "region_risk_score",
+        "region_risk_confidence"
+      ],
+      "properties": {
+        "region_risk_level": {"enum": ["low", "medium", "high", "severe"]},
+        "region_risk_score": {"type": "number", "minimum": 0, "maximum": 1},
+        "region_risk_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "region_risk_probabilities": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "region_risk_calibration": {"type": "object"},
+        "congestion_cluster_detected": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "top_k_risk_nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node_id", "risk_level", "risk_score"],
+        "properties": {
+          "node_id": {"type": "integer", "minimum": 0},
+          "risk_level": {"enum": ["low", "medium", "high", "severe"]},
+          "risk_score": {"type": "number", "minimum": 0, "maximum": 1},
+          "risk_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "forecast": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "control_capabilities": {
+      "type": "object",
+      "properties": {
+        "variable_speed_limit_nodes": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 0}
+        },
+        "ramp_meter_nodes": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 0}
+        }
+      },
+      "additionalProperties": true
+    },
+    "aggregation": {
+      "type": "object",
+      "required": ["member", "expected_members"],
+      "properties": {
+        "member": {"type": "string", "minLength": 1},
+        "expected_members": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "minimum_members": {"type": "integer", "minimum": 1},
+        "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 600000}
+      },
+      "additionalProperties": false
+    },
+    "deadline_ms": {"type": "number", "exclusiveMinimum": 0},
+    "preprocessing_latency_ms": {"type": "number", "minimum": 0},
+    "inference_latency_ms": {"type": "number", "minimum": 0},
+    "model": {"type": "object"}
+  },
+  "additionalProperties": true
+}

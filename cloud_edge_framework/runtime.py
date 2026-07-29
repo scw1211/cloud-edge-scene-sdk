@@ -214,6 +214,52 @@ class EdgeRuntime:
         metadata.pop(_REVIEW_CONTEXT_KEY, None)
         return replace(event, metadata=metadata)
 
+    @staticmethod
+    def _coordination_decision(
+        coordination: Any,
+        event_id: str,
+    ) -> Optional[DecisionEnvelope]:
+        if not isinstance(coordination, dict):
+            return None
+        for raw_decision in coordination.get("decisions", []):
+            if not isinstance(raw_decision, dict):
+                continue
+            decision = DecisionEnvelope.from_dict(raw_decision)
+            if event_id in decision.event_ids:
+                return decision
+        return None
+
+    @classmethod
+    def _aggregation_decision(
+        cls,
+        response: Dict[str, Any],
+        event_id: str,
+    ) -> Optional[DecisionEnvelope]:
+        decision = cls._coordination_decision(
+            response.get("coordination"),
+            event_id,
+        )
+        if decision is None:
+            return None
+        metadata = dict(decision.metadata)
+        aggregation = response.get("aggregation")
+        if isinstance(aggregation, dict):
+            metadata["aggregation"] = {
+                "group_id": aggregation.get("group_id"),
+                "state": aggregation.get("state"),
+                "completion_reason": aggregation.get("completion_reason"),
+                "received_members": list(
+                    aggregation.get("received_members", [])
+                ),
+                "missing_members": list(
+                    aggregation.get("missing_members", [])
+                ),
+            }
+        transport = response.get("transport")
+        if isinstance(transport, dict):
+            metadata["transport"] = dict(transport)
+        return replace(decision, metadata=metadata)
+
 
     @staticmethod
     def _routing_features(
@@ -413,6 +459,9 @@ class EdgeRuntime:
         cloud_event = plugin.prepare_cloud_event(
             selected_event, evidence_plan.required_level
         )
+        aggregation_spec = plugin.aggregation_spec(cloud_event)
+        if aggregation_spec is not None and not isinstance(aggregation_spec, dict):
+            raise ValueError("scene aggregation_spec must return an object or None")
         include_scene_payload = bool(
             cloud_event.metadata.get("transport_include_scene_payload", False)
         )
@@ -444,6 +493,11 @@ class EdgeRuntime:
         cloud_review_requested = bool(
             event.metadata.get("cloud_review_requested", False)
         )
+        if aggregation_spec is not None:
+            # Multi-edge summaries must reach the coordinator whenever the cloud
+            # path is usable. The first submission does not wait for its peer;
+            # it becomes an asynchronously tracked provisional result.
+            cloud_review_requested = True
         if _requires_cloud_confirmation(local):
             cloud_review_requested = True
         if bool(routing_advice.get("cloud_review_requested", False)):
@@ -497,6 +551,23 @@ class EdgeRuntime:
                 else None
             ),
         )
+        if (
+            aggregation_spec is not None
+            and snapshot.available
+            and snapshot.loss_rate < 0.95
+            and schedule.route != "cloud_sync"
+        ):
+            schedule = replace(
+                schedule,
+                route="cloud_sync",
+                reason=(
+                    "submit the lightweight multi-edge summary immediately; "
+                    "the final fused result may complete asynchronously"
+                ),
+                cloud_requested=True,
+                waits_for_cloud=False,
+                explicit_cloud_review_requested=True,
+            )
         warning = ""
         if schedule.cloud_requested and not evidence_plan.complete:
             warning = "required {} evidence is unavailable".format(evidence_plan.missing_level)
@@ -517,27 +588,20 @@ class EdgeRuntime:
             self.review_tracker.start([event.event_id], "sync")
             cloud_started = time.perf_counter()
             try:
-                final = _with_action_authorization(
-                    self.cloud.decide(cloud_event),
-                    cloud_confirmed=True,
-                )
-                review_record = self.review_tracker.complete(
-                    event.event_id, final, "sync"
-                )
-                final = replace(
-                    final,
-                    metadata={
-                        **final.metadata,
-                        "review_id": review_id,
-                        "review_state": review_record["state"],
-                        "decision_changed": review_record["decision_changed"],
-                        "eventual_completion_ms": review_record[
-                            "eventual_completion_ms"
-                        ],
-                    },
-                )
+                aggregation_response = None
+                if aggregation_spec is not None and hasattr(self.cloud, "aggregate"):
+                    aggregation_response = self.cloud.aggregate(cloud_event)
+                    final = self._aggregation_decision(
+                        aggregation_response, event.event_id
+                    )
+                else:
+                    final = self.cloud.decide(cloud_event)
                 cloud_elapsed_ms = (time.perf_counter() - cloud_started) * 1000.0
-                transport = final.metadata.get("transport", {})
+                transport = (
+                    aggregation_response.get("transport", {})
+                    if isinstance(aggregation_response, dict)
+                    else final.metadata.get("transport", {})
+                )
                 if not isinstance(transport, dict):
                     transport = {}
                 if transport or hasattr(self.cloud, "base_url"):
@@ -550,33 +614,107 @@ class EdgeRuntime:
                         int(transport.get("request_bytes", planned_upload_bytes)),
                         int(transport.get("response_bytes", 0)),
                     )
+                if final is None:
+                    waiting = (
+                        aggregation_response.get("aggregation", {})
+                        if isinstance(aggregation_response, dict)
+                        else {}
+                    )
+                    self.review_tracker.retry(
+                        [event.event_id],
+                        "aggregation is waiting for peer summaries",
+                    )
+                    self.review_store.append(
+                        self._pending_review_event(
+                            cloud_event,
+                            local,
+                            evidence_plan.required_level,
+                            snapshot,
+                            int(
+                                transport.get(
+                                    "request_bytes", planned_upload_bytes
+                                )
+                            ),
+                        )
+                    )
+                    metadata = dict(local.metadata)
+                    metadata.update(
+                        {
+                            "cloud_review_queued": True,
+                            "review_id": review_id,
+                            "review_state": "queued",
+                            "aggregation": {
+                                "group_id": waiting.get("group_id"),
+                                "state": waiting.get("state", "waiting"),
+                                "received_members": list(
+                                    waiting.get("received_members", [])
+                                ),
+                                "missing_members": list(
+                                    waiting.get("missing_members", [])
+                                ),
+                            },
+                            "transport": dict(transport),
+                        }
+                    )
+                    final = _with_action_authorization(
+                        replace(
+                            local,
+                            route="cloud_async",
+                            status="queued",
+                            metadata=metadata,
+                        ),
+                        cloud_confirmed=False,
+                    )
+                else:
+                    final = _with_action_authorization(
+                        final,
+                        cloud_confirmed=True,
+                    )
+                    review_record = self.review_tracker.complete(
+                        event.event_id, final, "sync"
+                    )
+                    final = replace(
+                        final,
+                        metadata={
+                            **final.metadata,
+                            "review_id": review_id,
+                            "review_state": review_record["state"],
+                            "decision_changed": review_record[
+                                "decision_changed"
+                            ],
+                            "eventual_completion_ms": review_record[
+                                "eventual_completion_ms"
+                            ],
+                        },
+                    )
                 feedback_request_bytes = int(
                     transport.get("request_bytes", planned_upload_bytes)
                 )
-                self.feedback_store.enqueue(
-                    cloud_event,
-                    local,
-                    final,
-                    evidence_plan.required_level,
-                    network_class(snapshot),
-                    feedback_request_bytes,
-                )
-                if hasattr(self.cloud, "submit_feedback"):
-                    try:
-                        self.cloud.submit_feedback(
-                            cloud_event,
-                            local,
-                            final,
-                            evidence_plan.required_level,
-                            network_class(snapshot),
-                            feedback_request_bytes,
-                        )
-                    except Exception as feedback_exc:  # noqa: BLE001
-                        metadata = dict(final.metadata)
-                        metadata["feedback_sync_error"] = "{}: {}".format(
-                            type(feedback_exc).__name__, feedback_exc
-                        )
-                        final = replace(final, metadata=metadata)
+                if final.status == "final":
+                    self.feedback_store.enqueue(
+                        cloud_event,
+                        local,
+                        final,
+                        evidence_plan.required_level,
+                        network_class(snapshot),
+                        feedback_request_bytes,
+                    )
+                    if hasattr(self.cloud, "submit_feedback"):
+                        try:
+                            self.cloud.submit_feedback(
+                                cloud_event,
+                                local,
+                                final,
+                                evidence_plan.required_level,
+                                network_class(snapshot),
+                                feedback_request_bytes,
+                            )
+                        except Exception as feedback_exc:  # noqa: BLE001
+                            metadata = dict(final.metadata)
+                            metadata["feedback_sync_error"] = "{}: {}".format(
+                                type(feedback_exc).__name__, feedback_exc
+                            )
+                            final = replace(final, metadata=metadata)
             except Exception as exc:  # noqa: BLE001
                 self.review_tracker.retry(
                     [event.event_id], "{}: {}".format(type(exc).__name__, exc)
@@ -812,53 +950,144 @@ class EdgeRuntime:
         event_ids = [event.event_id for event in pending]
         self.review_tracker.start(event_ids, "replay")
         cloud_events = [self._clean_pending_event(event) for event in pending]
-        try:
-            coordination = self.cloud.coordinate(cloud_events)
-            feedback = self._record_replayed_feedback(
-                pending, cloud_events, coordination
-            )
-            review_completions = []
-            pending_ids = set(event_ids)
-            for raw_decision in coordination.get("decisions", []):
-                if not isinstance(raw_decision, dict):
+        aggregation_items = []
+        regular_items = []
+        for stored_event, cloud_event in zip(pending, cloud_events):
+            plugin = self.registry.get(cloud_event.scene)
+            if (
+                plugin.aggregation_spec(cloud_event) is not None
+                and hasattr(self.cloud, "aggregate")
+            ):
+                aggregation_items.append((stored_event, cloud_event))
+            else:
+                regular_items.append((stored_event, cloud_event))
+
+        completed_ids: List[str] = []
+        retry_ids: List[str] = []
+        errors: List[Dict[str, str]] = []
+        review_completions = []
+        feedback_totals = {
+            "local_records": 0,
+            "cloud_submissions": 0,
+            "legacy_events_skipped": 0,
+            "cloud_submission_errors": [],
+        }
+        coordination_results = []
+
+        for stored_event, cloud_event in aggregation_items:
+            try:
+                response = self.cloud.aggregate(cloud_event)
+                coordination = response.get("coordination")
+                decision = self._aggregation_decision(
+                    response, cloud_event.event_id
+                )
+                if decision is None or not isinstance(coordination, dict):
+                    retry_ids.append(cloud_event.event_id)
+                    self.review_tracker.retry(
+                        [cloud_event.event_id],
+                        "aggregation is waiting for peer summaries",
+                    )
                     continue
-                decision = DecisionEnvelope.from_dict(raw_decision)
-                for decision_event_id in decision.event_ids:
-                    if decision_event_id not in pending_ids:
-                        continue
+                feedback = self._record_replayed_feedback(
+                    [stored_event], [cloud_event], coordination
+                )
+                for name in (
+                    "local_records",
+                    "cloud_submissions",
+                    "legacy_events_skipped",
+                ):
+                    feedback_totals[name] += int(feedback[name])
+                feedback_totals["cloud_submission_errors"].extend(
+                    feedback["cloud_submission_errors"]
+                )
+                try:
+                    review_completions.append(
+                        self.review_tracker.complete(
+                            cloud_event.event_id, decision, "replay"
+                        )
+                    )
+                except KeyError:
+                    pass
+                completed_ids.append(cloud_event.event_id)
+                coordination_results.append(response)
+            except Exception as exc:  # noqa: BLE001
+                error = "{}: {}".format(type(exc).__name__, exc)
+                retry_ids.append(cloud_event.event_id)
+                errors.append(
+                    {"event_id": cloud_event.event_id, "error": error}
+                )
+                self.review_tracker.retry([cloud_event.event_id], error)
+
+        if regular_items:
+            regular_stored = [item[0] for item in regular_items]
+            regular_cloud = [item[1] for item in regular_items]
+            regular_ids = [event.event_id for event in regular_cloud]
+            try:
+                coordination = self.cloud.coordinate(regular_cloud)
+                feedback = self._record_replayed_feedback(
+                    regular_stored, regular_cloud, coordination
+                )
+                for name in (
+                    "local_records",
+                    "cloud_submissions",
+                    "legacy_events_skipped",
+                ):
+                    feedback_totals[name] += int(feedback[name])
+                feedback_totals["cloud_submission_errors"].extend(
+                    feedback["cloud_submission_errors"]
+                )
+                for cloud_event in regular_cloud:
+                    decision = self._coordination_decision(
+                        coordination, cloud_event.event_id
+                    )
+                    if decision is None:
+                        raise ValueError(
+                            "cloud coordination omitted decision for {}".format(
+                                cloud_event.event_id
+                            )
+                        )
                     try:
                         review_completions.append(
                             self.review_tracker.complete(
-                                decision_event_id, decision, "replay"
+                                cloud_event.event_id, decision, "replay"
                             )
                         )
                     except KeyError:
-                        continue
-        except Exception as exc:  # noqa: BLE001
-            error = "{}: {}".format(type(exc).__name__, exc)
-            self.review_tracker.retry(event_ids, error)
-            if leases is not None:
+                        pass
+                completed_ids.extend(regular_ids)
+                coordination_results.append(coordination)
+            except Exception as exc:  # noqa: BLE001
+                error = "{}: {}".format(type(exc).__name__, exc)
+                retry_ids.extend(regular_ids)
+                errors.extend(
+                    {"event_id": event_id, "error": error}
+                    for event_id in regular_ids
+                )
+                self.review_tracker.retry(regular_ids, error)
+
+        if leases is not None:
+            if completed_ids:
+                self.review_store.acknowledge(completed_ids)
+            if retry_ids:
                 self.review_store.release(
-                    event_ids,
-                    error,
+                    retry_ids,
+                    errors[0]["error"] if errors else "aggregation waiting",
                     max_backoff_seconds,
                 )
-            return {
-                "attempted": len(pending),
-                "completed": 0,
-                "coordination": None,
-                "error": error,
-                "remaining": self.review_store.count(),
-            }
-        if leases is not None:
-            self.review_store.acknowledge(event_ids)
-        else:
+        elif not retry_ids:
             self.review_store.clear()
+
         return {
             "attempted": len(pending),
-            "completed": len(pending),
-            "coordination": coordination,
-            "feedback": feedback,
+            "completed": len(completed_ids),
+            "waiting": len(retry_ids),
+            "coordination": (
+                coordination_results[0]
+                if len(coordination_results) == 1
+                else coordination_results
+            ),
+            "feedback": feedback_totals,
+            "errors": errors,
             "review_completions": review_completions,
             "review_lifecycle": self.review_tracker.snapshot(),
             "remaining": self.review_store.count(),
