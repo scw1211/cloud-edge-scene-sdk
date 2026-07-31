@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.13.0",
-  "built_at_utc": "2026-07-31T07:26:08.989398+00:00",
+  "built_at_utc": "2026-07-31T07:30:46.738525+00:00",
   "python_requires": ">=3.8",
   "included_files": [
     {
@@ -1202,6 +1202,256 @@
       "path": "scenes/freeway_traffic/verify_real_two_edge.py",
       "bytes": 4116,
       "sha256": "ec45bcdd6c9ad2976271c5c416420c284dfd478266faad545b969d6ad16b52fe"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/CMakeLists.txt",
+      "bytes": 1600,
+      "sha256": "3b864175b4fc142a3d981429b347afadace09f93d9ed4d0aff23c407aa93edd7"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/README.md",
+      "bytes": 3084,
+      "sha256": "76ad35207018c2b4aec8e350a34b03e0fff02ce6a6a0764c8e2c3653eadcafa4"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/config.yaml",
+      "bytes": 33,
+      "sha256": "1ec066332e80198c3f59f90c742ee28343d88486aac0d99098d5ee1e52c6dd08"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/docs/jetson_tx2_setup.md",
+      "bytes": 2957,
+      "sha256": "f1c37201077dc105384a19c0fc59b77b6a4d067728d269c2c4ce548cabceb6c3"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/acceptance.sh",
+      "bytes": 4003,
+      "sha256": "b272665908f22d600c04bcd87a3640c7c5ab123be23662210959b066e9a6a84f"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/build_engine.sh",
+      "bytes": 544,
+      "sha256": "1463710b1edc59a92f0e4fe79785253a19adacf071e9b529c6e3e58eb98d5ab2"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/build_runtime.sh",
+      "bytes": 468,
+      "sha256": "c52f9984576f8d0dfd4bb44c0aa0134391b98977edc1691b46f6e113c83fef65"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/check_environment.sh",
+      "bytes": 1700,
+      "sha256": "fbe76f4192bdf617b952fe55256027ddfae330b69f45c10af61c47d3555fa4cb"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/evaluate_metrics.sh",
+      "bytes": 813,
+      "sha256": "6eda101db7293a259cf49581de4664b25ec112075907beeba0c494b8ca0ddd8f"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/package_offline.sh",
+      "bytes": 1220,
+      "sha256": "b002a6c50622fffbc6506753f40d1291031800e2e67b35d3a1abfe9be7873b46"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/prepare_assets.sh",
+      "bytes": 1237,
+      "sha256": "e935fa0d8855974ddd53b7df10b6115f0564d63a0783c055f477c1b464a8140a"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/prepare_dataset.sh",
+      "bytes": 771,
+      "sha256": "4f8a6324da26ab37e104a2e4afa2dac6535107b02090f69abd855f83ea6d6734"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/run_predict.sh",
+      "bytes": 1266,
+      "sha256": "7903b5f3a945f1f85f0c7114e08a3b83a13d8f8eb77045d76e0916b0979df8d8"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/run_predict_preprocessed.sh",
+      "bytes": 1615,
+      "sha256": "4006141d8026fac7e305494c5a41267a511b1f963e5b357aca4a54d15e33e28d"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/src/main.cpp",
+      "bytes": 27943,
+      "sha256": "155f7dacaf7e8c30d94392b30bfa60b4bced89c16eb6267aed4aebc1d2bd06b1"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/src/main.cpp.bak",
+      "bytes": 26487,
+      "sha256": "05541d356743b2cfd2ec15cdabf669ab3cda8db38fdf892a4afad32c4614ec0b"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/src/patchcore_cuda.cu",
+      "bytes": 8186,
+      "sha256": "0eff5eb68c82a26428d6d1ae2aeda53ba085b427c14acf19e36c5ab6e9cd8276"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/src/patchcore_cuda.h",
+      "bytes": 1179,
+      "sha256": "d24b5f0e4f47d315b88dfcdcd1f2318fa60e28aad6e24542e5b29c431cdc3e72"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/compare_feature_parity.py",
+      "bytes": 5024,
+      "sha256": "7fa842c802277846a6117aa99ed065ab81726b0db40d9a2993586a20e8e0173e"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/compress_pcbank.py",
+      "bytes": 2113,
+      "sha256": "6b67b9a455ee5f8eac369468e6a1b0d1a25359168c464675ceeb0309b0aea951"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/convert_memory_bank.py",
+      "bytes": 1516,
+      "sha256": "760015ab0d7716917e0515cea805d04707a1ecbfaad9ac1782821dd789457151"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/export_onnx.py",
+      "bytes": 1433,
+      "sha256": "b47057c6e8d462d7a5382302e80c17d17d00ff0ebd88177126188586dcd51006"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/measure_rss.py",
+      "bytes": 2215,
+      "sha256": "68c9de9577b686680887fcd1319a8a007b25f43e177f2815f4c255f4d4b5e05a"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/prepare_inputs.py",
+      "bytes": 2034,
+      "sha256": "9b6d8b880d8c261f8dab2364898d84db9140022a0d5ad243ff72900c43905061"
+    },
+    {
+      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/verify_metrics.py",
+      "bytes": 5670,
+      "sha256": "2732c2e3dc819d8229f041b6fc0dd0c2372004cb339744994e934b21e7f1b9c9"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/CMakeLists.txt",
+      "bytes": 1588,
+      "sha256": "2782e7d81e6ffde717e281cf7bf771fa98b5fdad18ab3d1413f5df723d0572e4"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/README.md",
+      "bytes": 6134,
+      "sha256": "99fdb706ec4ccae9468caed5da21c38253732ecd8eca939ee85ed99e236600e0"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/config.yaml",
+      "bytes": 33,
+      "sha256": "1ec066332e80198c3f59f90c742ee28343d88486aac0d99098d5ee1e52c6dd08"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/docs/jetson_tx2_setup.md",
+      "bytes": 2957,
+      "sha256": "f1c37201077dc105384a19c0fc59b77b6a4d067728d269c2c4ce548cabceb6c3"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/acceptance.sh",
+      "bytes": 3632,
+      "sha256": "48d619b07431a80142de541df4b6657a8481059e28595ed02fe3b4b339427ba8"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/build_engine.sh",
+      "bytes": 489,
+      "sha256": "fd1f6f3a312f1a69402bcef59ece4044b86022dace06faad82f10726c47ca649"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/build_runtime.sh",
+      "bytes": 466,
+      "sha256": "67d2d308f21fbbd52f4355e532cc175accbb98eb8ecd8199cf073b6b099b4ddf"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/check_environment.sh",
+      "bytes": 1700,
+      "sha256": "fbe76f4192bdf617b952fe55256027ddfae330b69f45c10af61c47d3555fa4cb"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/evaluate_metrics.sh",
+      "bytes": 773,
+      "sha256": "56f5857619884cbbe605a7b56b225e0cddb990529136eae811053342e6609659"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/package_offline.sh",
+      "bytes": 1231,
+      "sha256": "d259c756d6cf9cf6f0d269194967464696d3883ca3616d9ae65821e25dc26140"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/prepare_assets.sh",
+      "bytes": 1107,
+      "sha256": "37d9e99b57fe8433e0d850e1a5fbc7e6c5aa7c91db34204bc35f78ce849d0567"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/prepare_dataset.sh",
+      "bytes": 806,
+      "sha256": "858031416242ccc6e29b56e243d3ce81142357a26dcc914fa3ab0a856019bba6"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/run_predict.sh",
+      "bytes": 1069,
+      "sha256": "d364c338196a2c181ff8fe2e747a9d349b9446336607a7978d2f5e6d43a28d2d"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/run_predict_preprocessed.sh",
+      "bytes": 1415,
+      "sha256": "95858a8195646925baafed93b060fbd4ffebc897ed078b65a818ad6c1df51ef7"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/src/main.cpp",
+      "bytes": 27535,
+      "sha256": "58a2c1779fa4f6c47c4c31ddb10d43f6e941002b663a08eb15fd97f270b7b3e6"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/src/main.cpp.bak",
+      "bytes": 26462,
+      "sha256": "ddc8692d4db0385c33ef5e80383e8e0916255b65a4fca5bd9e637ede5cf91226"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/src/patchcore_cuda.cu",
+      "bytes": 8186,
+      "sha256": "0eff5eb68c82a26428d6d1ae2aeda53ba085b427c14acf19e36c5ab6e9cd8276"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/src/patchcore_cuda.h",
+      "bytes": 1179,
+      "sha256": "d24b5f0e4f47d315b88dfcdcd1f2318fa60e28aad6e24542e5b29c431cdc3e72"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/compare_feature_parity.py",
+      "bytes": 5024,
+      "sha256": "7fa842c802277846a6117aa99ed065ab81726b0db40d9a2993586a20e8e0173e"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/compress_pcbank.py",
+      "bytes": 2113,
+      "sha256": "6b67b9a455ee5f8eac369468e6a1b0d1a25359168c464675ceeb0309b0aea951"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/convert_memory_bank.py",
+      "bytes": 1516,
+      "sha256": "760015ab0d7716917e0515cea805d04707a1ecbfaad9ac1782821dd789457151"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/export_onnx.py",
+      "bytes": 1451,
+      "sha256": "e02b98a78a90c5be61c71a9e9fed93a27ad3b8975fda4f625b4d20c0222d7f9a"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/measure_rss.py",
+      "bytes": 2215,
+      "sha256": "68c9de9577b686680887fcd1319a8a007b25f43e177f2815f4c255f4d4b5e05a"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/prepare_inputs.py",
+      "bytes": 2034,
+      "sha256": "95f071b5096a03598207889ca44d08780ec4a7b18dfd881d86586e662a07b925"
+    },
+    {
+      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/verify_metrics.py",
+      "bytes": 5552,
+      "sha256": "01dccd2d5d626541dcef303648850164595a3971cf3acb293d384a88e7e3fc18"
     },
     {
       "path": "schemas/decision_envelope.schema.json",
