@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "method": "temperature_scaled_deterministic_aps",
+  "deployment_method": "marginal_aps",
+  "risk_classes": [
+    "low",
+    "medium",
+    "high",
+    "severe"
+  ],
+  "target_coverage": 0.9,
+  "alpha": 0.1,
+  "temperature": 0.35315413,
+  "thresholds": {
+    "marginal_aps": 0.74201791,
+    "class_conditional_aps": {
+      "low": 0.0,
+      "medium": 0.63526194,
+      "high": 0.77088073,
+      "severe": 0.98394407
+    },
+    "simultaneous_window_aps": 0.95192537
+  },
+  "calibration_split": {
+    "source": "validation",
+    "strategy": "contiguous_time_split",
+    "total_windows": 3567,
+    "temperature_windows": [
+      0,
+      1784
+    ],
+    "conformal_windows": [
+      1784,
+      3567
+    ],
+    "regions_per_window": 4
+  },
+  "checkpoint": "experiments/PEMS08/joint_risk_astgcn_metis4_flowprio2_frozen/best.pt",
+  "reference": "frozen FCM proxy region labels built from future observed traffic state",
+  "guarantee_note": "Temporal traffic windows are not assumed exchangeable; target coverage is evaluated empirically on the later test split and is not reported as a formal i.i.d. guarantee."
+}

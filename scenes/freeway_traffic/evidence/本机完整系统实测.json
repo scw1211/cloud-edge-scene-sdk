@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "scope": "真实权重、真实 HTTP 服务、四分区汇聚和 provisional 到 final 回填",
+  "assets": {
+    "astgcn_checkpoint_sha256": "c85382832697fbd235b79e764ee367a71a02236b2d71bcaa7b2430abd6ae3473",
+    "edge_qwen_gguf_sha256": "57b74ab01a85f7e83c6ee8a0b10a7cd5da2e439108175372220c5ebd76aaeef9",
+    "cloud_extratrees_sha256": "5ee22aa91a2d5137d29f2b9a152e67917b6a14b0fffaeb80e7d371686622c017",
+    "pems08_array_sha256": "5773ea315e13aea4b9e459472056132281d015323b9af3cde32cf072393e1e5c"
+  },
+  "source_tree_complete_run": {
+    "request_success_rate": 1.0,
+    "edge_qwen_selected": 4,
+    "edge_qwen_accepted": 4,
+    "complete_aggregation_rate": 1.0,
+    "received_members": 4,
+    "missing_members": 0,
+    "final_completion_rate": 1.0,
+    "residual_conflict_count": 0,
+    "astgcn_perception_ms": 10.304478,
+    "edge_qwen_average_ms": 45.418725,
+    "external_full_loop_average_ms": 348.866115,
+    "external_full_loop_deadline_rate": 0.25,
+    "provisional_to_final_average_ms": 837.0,
+    "cloud_request_reduction_ratio": 0.489698
+  },
+  "standalone_sdk_complete_run": {
+    "request_success_rate": 1.0,
+    "complete_aggregation_rate": 1.0,
+    "final_completion_rate": 1.0,
+    "residual_conflict_count": 0,
+    "astgcn_perception_ms": 12.512952,
+    "edge_qwen_average_ms": 46.288025,
+    "external_full_loop_average_ms": 343.337169,
+    "cloud_request_reduction_ratio": 0.493313
+  },
+  "qwen9b_exception_path": {
+    "model": "qwen3.5:9b",
+    "structured_review_count": 4,
+    "accepted_count": 4,
+    "average_resident_review_ms": 1260.23435,
+    "full_group_wall_ms": 5573.096752,
+    "routing": "exception-only asynchronous enhancement"
+  },
+  "honest_boundary": {
+    "single_host_contention": "四个逻辑边共享一个 parallel=1 Edge-Qwen 服务，平均外部时延不能作为两台 Jetson 的结果。",
+    "jetson_pending": "两台 Jetson 各自运行 Edge-Qwen 后的四边到达偏差、端到端 P95 和断网恢复仍需实验室实测。",
+    "portable_smoke_excluded": "无权重规则冒烟不计入任何模型效果或性能指标。"
+  }
+}

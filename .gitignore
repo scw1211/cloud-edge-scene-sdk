@@ -16,3 +16,11 @@ results/
 *.bin
 *.zip
 .env
+
+# 真实交通场景的小型已验证模型属于 SDK 交付物。
+!scenes/freeway_traffic/assets/models/
+!scenes/freeway_traffic/assets/models/**
+!scenes/freeway_traffic/assets/edge_llm/adapter_package/adapter_model.safetensors
+
+# 两个大文件由 install_full_assets.py 下载，不进入 Git。
+scenes/freeway_traffic/assets/downloads/

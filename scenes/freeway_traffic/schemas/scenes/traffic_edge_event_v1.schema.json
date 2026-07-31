@@ -1,0 +1,173 @@
+{
+   "$defs" : {
+      "regionSummary" : {
+         "additionalProperties" : true,
+         "properties" : {
+            "max_node_risk_level" : {
+               "$ref" : "#/$defs/riskLevel"
+            },
+            "mean_node_risk_score" : {
+               "$ref" : "#/$defs/unitScore"
+            },
+            "node_risk_counts" : {
+               "additionalProperties" : {
+                  "minimum" : 0,
+                  "type" : "integer"
+               },
+               "type" : "object"
+            },
+            "region_risk_calibration" : {
+               "type" : "object"
+            },
+            "region_risk_confidence" : {
+               "$ref" : "#/$defs/unitScore"
+            },
+            "region_risk_level" : {
+               "$ref" : "#/$defs/riskLevel"
+            },
+            "region_risk_probabilities" : {
+               "additionalProperties" : {
+                  "$ref" : "#/$defs/unitScore"
+               },
+               "type" : "object"
+            },
+            "region_risk_score" : {
+               "$ref" : "#/$defs/unitScore"
+            }
+         },
+         "required" : [
+            "region_risk_level",
+            "region_risk_score",
+            "region_risk_confidence"
+         ],
+         "type" : "object"
+      },
+      "riskLevel" : {
+         "enum" : [
+            "low",
+            "medium",
+            "high",
+            "severe"
+         ]
+      },
+      "riskNode" : {
+         "additionalProperties" : true,
+         "properties" : {
+            "forecast" : {
+               "additionalProperties" : {
+                  "type" : "number"
+               },
+               "type" : "object"
+            },
+            "node_id" : {
+               "minimum" : 0,
+               "type" : "integer"
+            },
+            "risk_confidence" : {
+               "$ref" : "#/$defs/unitScore"
+            },
+            "risk_level" : {
+               "$ref" : "#/$defs/riskLevel"
+            },
+            "risk_probabilities" : {
+               "additionalProperties" : {
+                  "$ref" : "#/$defs/unitScore"
+               },
+               "type" : "object"
+            },
+            "risk_score" : {
+               "$ref" : "#/$defs/unitScore"
+            }
+         },
+         "required" : [
+            "node_id",
+            "risk_level",
+            "risk_score"
+         ],
+         "type" : "object"
+      },
+      "unitScore" : {
+         "maximum" : 1,
+         "minimum" : 0,
+         "type" : "number"
+      }
+   },
+   "$id" : "https://cloud-edge.local/schemas/scenes/traffic-edge-event-v1.json",
+   "$schema" : "https://json-schema.org/draft/2020-12/schema",
+   "additionalProperties" : true,
+   "properties" : {
+      "checkpoint" : {
+         "type" : "string"
+      },
+      "control_capabilities" : {
+         "type" : "object"
+      },
+      "dataset" : {
+         "minLength" : 1,
+         "type" : "string"
+      },
+      "deadline_ms" : {
+         "exclusiveMinimum" : 0,
+         "type" : "number"
+      },
+      "inference_latency_ms" : {
+         "minimum" : 0,
+         "type" : "number"
+      },
+      "managed_node_ids" : {
+         "items" : {
+            "minimum" : 0,
+            "type" : "integer"
+         },
+         "type" : "array",
+         "uniqueItems" : true
+      },
+      "model" : {
+         "minLength" : 1,
+         "type" : "string"
+      },
+      "prediction_horizon_minutes" : {
+         "minimum" : 1,
+         "type" : "integer"
+      },
+      "preprocessing_latency_ms" : {
+         "minimum" : 0,
+         "type" : "number"
+      },
+      "raw_evidence" : {
+         "type" : "object"
+      },
+      "region_id" : {
+         "minLength" : 1,
+         "type" : "string"
+      },
+      "region_summary" : {
+         "$ref" : "#/$defs/regionSummary"
+      },
+      "task" : {
+         "minLength" : 1,
+         "type" : "string"
+      },
+      "top_k_risk_nodes" : {
+         "items" : {
+            "$ref" : "#/$defs/riskNode"
+         },
+         "type" : "array"
+      },
+      "upload_level" : {
+         "type" : "string"
+      },
+      "upload_required" : {
+         "type" : "boolean"
+      }
+   },
+   "required" : [
+      "region_id",
+      "prediction_horizon_minutes",
+      "managed_node_ids",
+      "region_summary",
+      "top_k_risk_nodes"
+   ],
+   "title" : "Traffic edge perception and risk output",
+   "type" : "object"
+}

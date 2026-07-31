@@ -4,7 +4,7 @@
 
 > 通用框架只固定外层事件信封和内部统一语义事件，不固定`data`中的业务字段。`scene_plugin_template/`默认采用异常检测，仅用于演示如何定义场景Schema和转换逻辑；复制模板后应改成自己的场景名称、字段和动作，不能把示例中的8个字段理解成SDK统一输入。
 
-当前SDK版本为0.12.0，对应公共框架0.4.0。本版新增：
+当前SDK版本为0.13.0，对应公共框架0.4.0。本版新增：
 
 - 真实证据文件上传、SHA-256校验、去重和实际通信量统计；
 - 在线聚合事件自动上报、多边缘持久汇聚、超时部分汇聚和边缘最终结果回填；
@@ -12,7 +12,9 @@
 - 公共校准误差、风险集合覆盖率和数据漂移监测；
 - 学习式效用路由的影子模式与主动模式；
 - 可选云端大模型结构化复核，失败时保留场景专业模型基线。
-- `scenes/freeway_traffic/`提供不带模型权重、可直接运行的双边缘交通参考场景。
+- `scenes/freeway_traffic/`交付真实 ASTGCN、交通 Student、defer gate、特征编码器、云端 ExtraTrees 和 Edge-Qwen 适配器；大文件由安装器下载并校验 SHA-256；
+- 一键真实全链路验收会强制检查四分区全部汇聚、provisional→final 全部回填和残余冲突为零；
+- 两台 Jetson 可按 `0,1` 与 `2,3` 分区在同一时刻运行真实感知并向云端汇聚。
 
 固定分工如下：
 
@@ -21,7 +23,10 @@
 - 每个场景维护独立 LoRA 和动作映射，由边缘 Qwen 输出一个动作 token；
 - 云端 Teacher 生成和纠错标签，云端协调器处理跨节点冲突。
 
-源码仓库不直接提交交通模型、PEMS08、ASTGCN 或大模型权重。云端原始 Teacher 与边缘通用蒸馏模型由 `model_bundle/` 锁定身份、下载地址和 SHA-256，安装时独立拉取。模板决策只验证接口，不能作为效果提交。
+源码仓库直接交付体积较小的交通 ASTGCN、Student、defer gate、特征编码器、
+ExtraTrees 和 Edge-Qwen 适配器包。PEMS08 推理数组、0.8B GGUF 和 Qwen 9B
+不进入 Git，由资产清单锁定下载地址、字节数和 SHA-256。模板决策只验证接口；
+交通正式效果必须运行真实全链路验收。
 
 第一次阅读建议先看 [`FRAMEWORK_STUDY_GUIDE.md`](FRAMEWORK_STUDY_GUIDE.md)。它按完整请求、弱网可靠性、模型生命周期和逐文件职责解释整个 SDK。
 
@@ -50,9 +55,16 @@ cloud_edge_scene_sdk/
 └── requirements-training.txt      LoRA 训练依赖
 ```
 
+## 从零部署完整交通系统
+
+全新云服务器和两台 Jetson 的安装、CUDA `llama-server` 编译、真实模型下载、
+节点启动及四分区验收见
+[`docs/从零部署真实交通系统.md`](docs/从零部署真实交通系统.md)。
+完整部署不依赖原 ASTGCN 工程，也不使用无权重冒烟结果。
+
 ## 先验证 SDK
 
-要求 Python 3.9 及以上。运行时使用 `jsonschema` 校验插件自有数据结构。
+要求 Python 3.8 及以上。运行时使用 `jsonschema` 校验插件自有数据结构。
 
 ```bash
 cd cloud_edge_scene_sdk
@@ -77,8 +89,8 @@ python -m freeway_traffic_scene.smoke_test
 ```
 
 学校三机部署与逐文件说明见
-`scenes/freeway_traffic/README.md`。该演示默认使用确定性规则产生动作，
-用于验证框架闭环；它不会冒充 ASTGCN、Student、ExtraTrees 或 Qwen 的模型效果。
+`scenes/freeway_traffic/README.md`。其中“便携冒烟”只验证接口；正式验收必须运行
+`run_full_acceptance.py`，输出会记录每个真实模型是否执行、四边汇聚状态和最终回填。
 
 ## 安装默认模型
 
