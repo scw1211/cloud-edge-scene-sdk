@@ -55,9 +55,16 @@ cloud_edge_scene_sdk/
 └── requirements-training.txt      LoRA 训练依赖
 ```
 
+## 从零部署完整交通系统
+
+全新云服务器和两台 Jetson 的安装、CUDA `llama-server` 编译、真实模型下载、
+节点启动及四分区验收见
+[`docs/从零部署真实交通系统.md`](docs/从零部署真实交通系统.md)。
+完整部署不依赖原 ASTGCN 工程，也不使用无权重冒烟结果。
+
 ## 先验证 SDK
 
-要求 Python 3.9 及以上。运行时使用 `jsonschema` 校验插件自有数据结构。
+要求 Python 3.8 及以上。运行时使用 `jsonschema` 校验插件自有数据结构。
 
 ```bash
 cd cloud_edge_scene_sdk

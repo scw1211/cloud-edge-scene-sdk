@@ -45,6 +45,11 @@ PEMS08 时空窗口
 
 ## 一、安装
 
+全新机器建议直接按照
+[`../../docs/从零部署真实交通系统.md`](../../docs/从零部署真实交通系统.md)
+执行。脚本会创建独立环境、安装依赖、编译 Jetson CUDA `llama-server`、
+下载真实资产并做 SHA-256 核验。
+
 三台机器都拉取同一个 Git commit：
 
 ```bash
@@ -163,6 +168,7 @@ python -m edge_llm_factory serve-release \
   --port 18190 \
   --context-tokens 128 \
   --threads 4 \
+  --parallel 2 \
   --gpu-layers 99
 ```
 

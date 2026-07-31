@@ -40,6 +40,7 @@ class ActiveReleaseLlamaServer:
         port: int,
         context_tokens: int,
         threads: int,
+        parallel: int,
         gpu_layers: int,
         poll_seconds: float,
         startup_timeout_seconds: float,
@@ -53,13 +54,20 @@ class ActiveReleaseLlamaServer:
         self.port = int(port)
         self.context_tokens = int(context_tokens)
         self.threads = int(threads)
+        self.parallel = int(parallel)
         self.gpu_layers = int(gpu_layers)
         self.poll_seconds = float(poll_seconds)
         self.startup_timeout_seconds = float(startup_timeout_seconds)
         if self.port <= 0 or self.port > 65535:
             raise ValueError("port must be in [1, 65535]")
-        if min(self.context_tokens, self.threads) <= 0 or self.gpu_layers < 0:
-            raise ValueError("context_tokens/threads must be positive and gpu_layers non-negative")
+        if (
+            min(self.context_tokens, self.threads, self.parallel) <= 0
+            or self.gpu_layers < 0
+        ):
+            raise ValueError(
+                "context_tokens/threads/parallel must be positive and "
+                "gpu_layers non-negative"
+            )
         if min(self.poll_seconds, self.startup_timeout_seconds) <= 0:
             raise ValueError("poll and startup timeout must be positive")
         self.process: Optional[subprocess.Popen] = None
@@ -94,7 +102,7 @@ class ActiveReleaseLlamaServer:
             "--ubatch-size",
             "16",
             "--parallel",
-            "1",
+            str(self.parallel),
             "--gpu-layers",
             str(self.gpu_layers),
             "--reasoning",
@@ -260,6 +268,12 @@ def main(argv: Optional[list] = None) -> None:
     parser.add_argument("--port", type=int, default=18190)
     parser.add_argument("--context-tokens", type=int, default=128)
     parser.add_argument("--threads", type=int, default=max(1, os.cpu_count() or 1))
+    parser.add_argument(
+        "--parallel",
+        type=int,
+        default=1,
+        help="llama-server 并发槽数量；每块板负责两个分区时建议设为 2",
+    )
     parser.add_argument("--gpu-layers", type=int, default=0)
     parser.add_argument("--poll-seconds", type=float, default=2.0)
     parser.add_argument("--startup-timeout-seconds", type=float, default=60.0)
@@ -273,6 +287,7 @@ def main(argv: Optional[list] = None) -> None:
         port=args.port,
         context_tokens=args.context_tokens,
         threads=args.threads,
+        parallel=args.parallel,
         gpu_layers=args.gpu_layers,
         poll_seconds=args.poll_seconds,
         startup_timeout_seconds=args.startup_timeout_seconds,

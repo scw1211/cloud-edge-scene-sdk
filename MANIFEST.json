@@ -1,7 +1,7 @@
 {
   "sdk_version": "0.13.0",
-  "built_at_utc": "2026-07-29T05:44:14.040370+00:00",
-  "python_requires": ">=3.9",
+  "built_at_utc": "2026-07-31T07:26:08.989398+00:00",
+  "python_requires": ">=3.8",
   "included_files": [
     {
       "path": ".gitignore",
@@ -25,8 +25,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 18729,
-      "sha256": "a89274d809920bff32aeb3afb191c610b00aa64963e218d6de105ecbe2f31be5"
+      "bytes": 19061,
+      "sha256": "8f77c76aea27bbc8f0b1856304da44aa6a342b4f2d07e11cb8bc68fd0d15392a"
     },
     {
       "path": "VERSION",
@@ -395,8 +395,8 @@
     },
     {
       "path": "edge_llm_factory/serve_release.py",
-      "bytes": 11040,
-      "sha256": "423b5d57d25c41d2eca12fea6b550a06aca0cdaa144564bb4fd001c16e340567"
+      "bytes": 11439,
+      "sha256": "c765e06b289b3cd051ad77fe71a3b7abc26fc04e41a506ed6b0e42dd52cdb8f5"
     },
     {
       "path": "edge_llm_factory/text_base.py",
@@ -441,7 +441,7 @@
     {
       "path": "pyproject.toml",
       "bytes": 521,
-      "sha256": "de549b22482a3184602b96c7d9b9bcc1158cf032eb7c21dff91f20b30fb9246d"
+      "sha256": "883112897dce146ff1534ad2df1d7ad6ffcf374741386b84a3b46a5a1e10c776"
     },
     {
       "path": "requirements-training.txt",
@@ -525,8 +525,8 @@
     },
     {
       "path": "scenes/freeway_traffic/README.md",
-      "bytes": 8530,
-      "sha256": "518ee08718d0b08e630d4f04ee684714d336a572a0cd2e33f45bf9cd6156eb44"
+      "bytes": 8808,
+      "sha256": "d2e05ce66103bd733dc4a1d31de7f4a2170433c291c4503937693b981fcc8e2c"
     },
     {
       "path": "scenes/freeway_traffic/asset_catalog.json",
@@ -629,6 +629,11 @@
       "sha256": "d36e6b581192b1f3bff7435bded5a88d8caa39385ca5b2e4b599e4283721a16b"
     },
     {
+      "path": "scenes/freeway_traffic/deploy_node.py",
+      "bytes": 11734,
+      "sha256": "2a5afe3e00d008b2287ff76351fbd4b279bcef07b053ece87c5ed80e232699c5"
+    },
+    {
       "path": "scenes/freeway_traffic/deployment/cloud_service.json",
       "bytes": 601,
       "sha256": "7a0e5d833335aba1f251552f29c4373c75307b7a2d86ee662968e67e387e1e50"
@@ -660,8 +665,8 @@
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/edge_llm_runtime.json",
-      "bytes": 443,
-      "sha256": "9ec9f14202ff2b6fc08d7a6c21e09312b0ae16c6ccc23883bb469795851fc462"
+      "bytes": 442,
+      "sha256": "c4bc801e14dbd20d0630ca6414ce9a01b0872b1c9bde3ba60cd103e83f8d0060"
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/edge_service.json",
@@ -687,16 +692,6 @@
       "path": "scenes/freeway_traffic/deployment/scene_plugins.json",
       "bytes": 296,
       "sha256": "69c2a3237bb286c4cf873d07b571145f3ebea7037b83c0377e43cb31ba056a4e"
-    },
-    {
-      "path": "scenes/freeway_traffic/evidence/本机完整系统实测.json",
-      "bytes": 2142,
-      "sha256": "2a5165251423f146d2fe51fadae9b505c13b751064cd281cf38c20825cf7cbbc"
-    },
-    {
-      "path": "scenes/freeway_traffic/evidence/本机完整系统实测.md",
-      "bytes": 2504,
-      "sha256": "52bfdad734dd26b11fb87ea8e5882d282b3b83c9a13551990751d2e494ef5e3a"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_full/__init__.py",
@@ -781,12 +776,12 @@
     {
       "path": "scenes/freeway_traffic/pyproject.toml",
       "bytes": 557,
-      "sha256": "dcf3e5015dd56fee943bbd74649c940be5e2dd7f7bb63b78919267d9e4ec2c23"
+      "sha256": "7bfbd91a48ed147e3fa7f803519ae0125daa8011a68877a13208a2f7c68a61b7"
     },
     {
       "path": "scenes/freeway_traffic/requirements-runtime.txt",
-      "bytes": 275,
-      "sha256": "df45b89a54cd0831dd841e6936100f68e7e48f46ff4e15910a7c8073e499fb0c"
+      "bytes": 345,
+      "sha256": "618ddfaf55056e7024c3451c70711207d2e5a458ec9a4e325050d0ff0cf886f1"
     },
     {
       "path": "scenes/freeway_traffic/run_full_acceptance.py",
@@ -810,8 +805,8 @@
     },
     {
       "path": "scenes/freeway_traffic/send_real_partitions.py",
-      "bytes": 6305,
-      "sha256": "0900b1e8122b58b13105640caa3c6f82aae65ec14ca18edcc0e4695a21cf8cf5"
+      "bytes": 7276,
+      "sha256": "9b8177169f2c4287d5a64253fb8a9235e594b64d3ef90aad1137a8ade7b2d2a1"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/__init__.py",
@@ -1267,6 +1262,26 @@
       "path": "schemas/semantic_event.schema.json",
       "bytes": 4979,
       "sha256": "91d681aa9eccbe791174dce006763369617bcd9625141f55a3e399cccf08ff65"
+    },
+    {
+      "path": "scripts/bootstrap_traffic_node.sh",
+      "bytes": 2469,
+      "sha256": "1d49462bba162bbd4405c9e403b7d3a4682871ba3749fa83865e61f154a73928"
+    },
+    {
+      "path": "scripts/build_llama_cpp_jetson.sh",
+      "bytes": 1877,
+      "sha256": "f0b69e9d970d0c482e9a8f0ea3598d4e1705165ff139cb3704108ee369346d62"
+    },
+    {
+      "path": "scripts/build_manifest.py",
+      "bytes": 2013,
+      "sha256": "031ce8372e12c8eb3e7f663f0ff78b287973c2fb4f2ade9da423938e500dcc99"
+    },
+    {
+      "path": "scripts/install_traffic_systemd.sh",
+      "bytes": 2063,
+      "sha256": "3cb23a9c7475a1fe1e2ba4a293a9435260064414a2dc42210fbe8b3352cb1d79"
     }
   ],
   "excluded_assets": [
@@ -1274,7 +1289,6 @@
     "traffic Edge-Qwen GGUF (downloaded by traffic asset installer)",
     "traffic benchmark results",
     "Qwen 9B weights (installed from the official Ollama registry)",
-    "Edge-Qwen GGUF and prepared PEMS08 array (downloaded and hash-verified)",
     "Qwen base weights (manifest only)"
   ]
 }

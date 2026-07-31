@@ -2,6 +2,7 @@
 
 import argparse
 import copy
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 from pathlib import Path
@@ -111,14 +112,7 @@ def main():
     if invalid:
         raise ValueError("分区编号越界：{}".format(invalid))
 
-    if args.start_at_ms:
-        remaining_seconds = (args.start_at_ms / 1000.0) - time.time()
-        if remaining_seconds < -0.5:
-            raise ValueError("start-at-ms 已经过期")
-        if remaining_seconds > 0:
-            time.sleep(remaining_seconds)
-
-    records = []
+    prepared = []
     for native in perception.events:
         if int(native["partition_id"]) not in selected:
             continue
@@ -129,22 +123,49 @@ def main():
         )
         measured["aggregation_timeout_ms"] = args.aggregation_timeout_ms
         envelope = traffic_event_from_output(measured)
+        prepared.append(
+            (int(measured["partition_id"]), envelope)
+        )
+    if not prepared:
+        raise RuntimeError("感知结果中没有找到请求的分区")
+
+    if args.start_at_ms:
+        remaining_seconds = (args.start_at_ms / 1000.0) - time.time()
+        if remaining_seconds < -0.5:
+            raise ValueError("start-at-ms 已经过期")
+        if remaining_seconds > 0:
+            time.sleep(remaining_seconds)
+
+    dispatch_zero = time.perf_counter()
+
+    def submit(partition_id, envelope):
+        dispatch_ms = (time.perf_counter() - dispatch_zero) * 1000.0
         response, wall_ms, request_bytes = _post(
             args.edge_url, envelope, args.timeout_seconds
         )
-        records.append(
-            {
-                "partition_id": measured["partition_id"],
-                "event_id": envelope["id"],
-                "client_wall_ms": wall_ms,
-                "request_bytes": request_bytes,
-                "route": response["final_decision"]["route"],
-                "status": response["final_decision"]["status"],
-                "edge_decision_path": response["local_decision"]
-                .get("metadata", {})
-                .get("edge_decision_path"),
-            }
-        )
+        return {
+            "partition_id": partition_id,
+            "event_id": envelope["id"],
+            "local_dispatch_ms": round(dispatch_ms, 6),
+            "client_wall_ms": wall_ms,
+            "request_bytes": request_bytes,
+            "route": response["final_decision"]["route"],
+            "status": response["final_decision"]["status"],
+            "edge_decision_path": response["local_decision"]
+            .get("metadata", {})
+            .get("edge_decision_path"),
+        }
+
+    records = []
+    with ThreadPoolExecutor(max_workers=len(prepared)) as executor:
+        futures = [
+            executor.submit(submit, partition_id, envelope)
+            for partition_id, envelope in prepared
+        ]
+        for future in as_completed(futures):
+            records.append(future.result())
+    records.sort(key=lambda item: item["partition_id"])
+    dispatch_values = [item["local_dispatch_ms"] for item in records]
 
     result = {
         "status": "submitted",
@@ -156,6 +177,11 @@ def main():
         "model_load_ms": runtime.load_latency_ms,
         "model_forward_ms": perception.model_forward_ms,
         "perception_ms": perception.perception_ms,
+        "local_dispatch_spread_ms": round(
+            max(dispatch_values) - min(dispatch_values), 6
+        )
+        if dispatch_values
+        else 0.0,
         "records": records,
     }
     output = Path(args.output).resolve()
