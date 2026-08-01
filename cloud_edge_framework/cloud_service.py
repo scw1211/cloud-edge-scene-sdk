@@ -9,7 +9,12 @@ from typing import Any, Dict, Mapping
 
 from cloud_edge_framework.aggregation import AggregationSpec, MultiEdgeEventAggregator
 from cloud_edge_framework.artifacts import EvidenceArtifactStore
-from cloud_edge_framework.contracts import SCHEMA_VERSION, SemanticEvent, stable_id
+from cloud_edge_framework.contracts import (
+    SCHEMA_VERSION,
+    DecisionEnvelope,
+    SemanticEvent,
+    stable_id,
+)
 from cloud_edge_framework.feedback import DecisionFeedbackStore
 from cloud_edge_framework.http_api import ApiNotFoundError, create_http_server
 from cloud_edge_framework.metrics import FrameworkMetrics
@@ -158,6 +163,7 @@ class CloudApiService:
         payload: Dict[str, Any],
         headers: Mapping[str, str],
     ) -> Dict[str, Any]:
+        cloud_accepted_at_ms = int(time.time() * 1000)
         event = payload.get("event")
         if not isinstance(event, dict):
             raise ValueError("request.event must be an object")
@@ -167,14 +173,23 @@ class CloudApiService:
         request_key = self._idempotency_key(headers, "cloud_request", event_id)
         started = time.perf_counter()
         with self.manager.lease() as snapshot:
+            def decide_once() -> Dict[str, Any]:
+                response = dict(snapshot.require_cloud().decide_payload(event))
+                response["cloud_accepted_at_ms"] = cloud_accepted_at_ms
+                return response
+
             result, replayed = self.idempotency.execute(
                 request_key,
                 payload,
-                lambda: snapshot.require_cloud().decide_payload(event),
+                decide_once,
             )
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         result["idempotency_key"] = request_key
         result["idempotency_replay"] = replayed
+        # Legacy cache rows may not contain the ingress timestamp.  New rows
+        # persist it inside the idempotent response so retries retain the first
+        # accepted time rather than reporting the retry time.
+        result.setdefault("cloud_accepted_at_ms", cloud_accepted_at_ms)
         result["trace_id"] = str(headers.get("x-trace-id", "")) or str(
             event.get("metadata", {}).get("trace_id", "")
         )
@@ -186,6 +201,7 @@ class CloudApiService:
         payload: Dict[str, Any],
         headers: Mapping[str, str],
     ) -> Dict[str, Any]:
+        cloud_accepted_at_ms = int(time.time() * 1000)
         events = payload.get("events")
         if not isinstance(events, list) or not events:
             raise ValueError("request.events must be a non-empty list")
@@ -199,14 +215,20 @@ class CloudApiService:
         )
         started = time.perf_counter()
         with self.manager.lease() as snapshot:
+            def coordinate_once() -> Dict[str, Any]:
+                response = dict(snapshot.require_cloud().coordinate_payloads(events))
+                response["cloud_accepted_at_ms"] = cloud_accepted_at_ms
+                return response
+
             result, replayed = self.idempotency.execute(
                 request_key,
                 payload,
-                lambda: snapshot.require_cloud().coordinate_payloads(events),
+                coordinate_once,
             )
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         result["idempotency_key"] = request_key
         result["idempotency_replay"] = replayed
+        result.setdefault("cloud_accepted_at_ms", cloud_accepted_at_ms)
         result["trace_id"] = str(headers.get("x-trace-id", ""))
         self.metrics.record_cloud_request("coordinate", elapsed_ms, replayed)
         self.metrics.record_coordination_result(result, replayed)
@@ -217,6 +239,7 @@ class CloudApiService:
         try:
             with self.manager.lease() as snapshot:
                 coordination = snapshot.require_cloud().coordinate(lease.events)
+            coordination = self._mark_aggregation_finality(coordination, lease)
             self.aggregator.complete(lease.group_id, coordination)
         except Exception as exc:
             self.aggregator.release(
@@ -228,9 +251,119 @@ class CloudApiService:
         self.metrics.record_coordination_result(coordination, False)
         return self.aggregator.get(lease.group_id)
 
+    @staticmethod
+    def _mark_aggregation_finality(
+        coordination: Dict[str, Any],
+        lease: Any,
+    ) -> Dict[str, Any]:
+        """Mark a timeout result as useful but non-authoritative.
+
+        ``DecisionEnvelope.status`` deliberately keeps the version-1.0 enum:
+        an incomplete cloud result is a cloud-derived provisional decision,
+        while ``metadata.aggregation.finality`` carries the additive
+        ``partial_final`` refinement.
+        """
+        if not isinstance(coordination, dict):
+            raise ValueError("aggregation coordination result must be an object")
+        expected_members = list(lease.expected_members)
+        received_members = list(lease.received_members)
+        missing_members = list(lease.missing_members)
+        evidence_complete = (
+            lease.completion_reason == "all_expected_members"
+            and not missing_members
+            and set(expected_members).issubset(set(received_members))
+        )
+        finality = "final" if evidence_complete else "partial_final"
+        observed_members_consistent = bool(
+            coordination.get("globally_consistent", False)
+        )
+        global_confirmation = bool(
+            evidence_complete and observed_members_consistent
+        )
+        aggregation_metadata = {
+            "group_id": lease.group_id,
+            "group_key": lease.group_key,
+            "completion_reason": lease.completion_reason,
+            "expected_members": expected_members,
+            "received_members": received_members,
+            "missing_members": missing_members,
+            "finality": finality,
+            "evidence_complete": evidence_complete,
+            "completeness_basis": "expected_aggregation_members",
+            "cloud_confirmed": global_confirmation,
+            "global_confirmation": global_confirmation,
+            "result_revision": int(lease.result_revision),
+        }
+        decisions = []
+        for index, raw_decision in enumerate(coordination.get("decisions", [])):
+            if not isinstance(raw_decision, dict):
+                raise ValueError(
+                    "aggregation coordination decision {} must be an object".format(
+                        index
+                    )
+                )
+            decision = DecisionEnvelope.from_dict(raw_decision)
+            metadata = dict(decision.metadata)
+            previous_aggregation = metadata.get("aggregation")
+            merged_aggregation = (
+                dict(previous_aggregation)
+                if isinstance(previous_aggregation, dict)
+                else {}
+            )
+            merged_aggregation.update(aggregation_metadata)
+            metadata["aggregation"] = merged_aggregation
+            immediate_actions = []
+            deferred_actions = []
+            for action in decision.actions:
+                if (
+                    action.parameters.get("requires_cloud_confirmation") is True
+                    and not global_confirmation
+                ):
+                    deferred_actions.append(action.action_type)
+                else:
+                    immediate_actions.append(action.action_type)
+            metadata.update(
+                {
+                    # The cloud did inspect the members that were present, but
+                    # only a complete, consistent group is globally confirmed.
+                    "cloud_reviewed": True,
+                    "cloud_verified": global_confirmation,
+                    "action_authorization": {
+                        "cloud_confirmed": global_confirmation,
+                        "immediate_action_types": immediate_actions,
+                        "deferred_action_types": deferred_actions,
+                        "all_actions_authorized": not deferred_actions,
+                    },
+                }
+            )
+            decisions.append(
+                replace(
+                    decision,
+                    route="cloud_sync" if evidence_complete else "cloud_async",
+                    status="final" if evidence_complete else "provisional",
+                    metadata=metadata,
+                ).to_dict()
+            )
+        result = dict(coordination)
+        result.update(
+            {
+                "decisions": decisions,
+                "aggregation_finality": finality,
+                "evidence_complete": evidence_complete,
+                "global_confirmation": global_confirmation,
+                "result_revision": int(lease.result_revision),
+                "observed_members_consistent": observed_members_consistent,
+                # Consistency among received members is not proof of global
+                # consistency while one or more expected members are absent.
+                "globally_consistent": global_confirmation,
+            }
+        )
+        return result
+
     def aggregate(
         self, payload: Dict[str, Any], headers: Mapping[str, str]
     ) -> Dict[str, Any]:
+        request_received_at_ms = int(time.time() * 1000)
         del headers
         raw_event = payload.get("event")
         if not isinstance(raw_event, dict):
@@ -243,61 +376,24 @@ class CloudApiService:
             raise ValueError("scene event does not request multi-edge aggregation")
         spec = AggregationSpec.from_dict(raw_spec)
         submission = self.aggregator.submit(event, spec)
+        cloud_accepted_at_ms = int(
+            submission.get("submitted_event_received_at_ms", request_received_at_ms)
+        )
         lease = self.aggregator.claim(str(submission["group_id"]))
         if lease is None:
             coordination = submission.get("result")
-            if (
-                submission.get("state") == "completed"
-                and isinstance(coordination, dict)
-                and not any(
-                    event.event_id in raw_decision.get("event_ids", [])
-                    for raw_decision in coordination.get("decisions", [])
-                    if isinstance(raw_decision, dict)
-                )
-            ):
-                # A member arriving after a timeout-completed partial group
-                # cannot change the decision already returned to earlier
-                # members. Give the late member a safe individual cloud final
-                # instead of leaving its edge review queued forever.
-                with self.manager.lease() as snapshot:
-                    decision = snapshot.require_cloud().decide(event)
-                metadata = dict(decision.metadata)
-                metadata.update(
-                    {
-                        "aggregation_late_member": True,
-                        "aggregation_group_id": submission["group_id"],
-                        "aggregation_completion_reason": submission.get(
-                            "completion_reason"
-                        ),
-                    }
-                )
-                decision = replace(decision, metadata=metadata)
-                coordination = {
-                    "decisions": [decision.to_dict()],
-                    "event_count": 1,
-                    "scenes": [event.scene],
-                    "correlation_groups": [[event.event_id]],
-                    "initial_conflict_count": 0,
-                    "residual_conflict_count": 0,
-                    "resolution_success_rate": 1.0,
-                    "globally_consistent": True,
-                    "late_member_fallback": True,
-                }
-                return {
-                    "aggregation": submission,
-                    "coordination": coordination,
-                    "late_submission": True,
-                }
             return {
                 "aggregation": submission,
                 "coordination": coordination,
                 "late_submission": False,
+                "cloud_accepted_at_ms": cloud_accepted_at_ms,
             }
         completed = self._complete_aggregation_lease(lease)
         return {
             "aggregation": completed,
             "coordination": completed.get("result"),
             "late_submission": False,
+            "cloud_accepted_at_ms": cloud_accepted_at_ms,
         }
 
     def flush_aggregations(self, limit: int = 64) -> Dict[str, Any]:

@@ -160,6 +160,25 @@ class ScenePlugin(ABC):
         del event, local_decision
         return {}
 
+    def evidence_advice(
+        self,
+        event: SemanticEvent,
+        local_decision: DecisionEnvelope,
+        conflict_suspected: bool,
+    ) -> Dict[str, Any]:
+        """Return scene-owned evidence intent without overloading common risk fields."""
+        del event, local_decision, conflict_suspected
+        return {}
+
+    def cloud_submission_metadata(
+        self,
+        event: SemanticEvent,
+        local_decision: DecisionEnvelope,
+    ) -> Dict[str, Any]:
+        """Return local-decision semantics that must accompany cloud delivery."""
+        del event, local_decision
+        return {}
+
     def aggregation_spec(
         self, event: SemanticEvent
     ) -> Optional[Dict[str, Any]]:

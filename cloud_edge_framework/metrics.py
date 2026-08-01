@@ -4,7 +4,7 @@ from collections import Counter, defaultdict, deque
 import math
 import threading
 import time
-from typing import Any, Deque, Dict, Iterable, Mapping
+from typing import Any, Deque, Dict, Iterable, Mapping, Optional
 
 
 def _percentile(values: Iterable[float], percentile: float) -> float:
@@ -107,6 +107,26 @@ class FrameworkMetrics:
         event_count = int(result.get("event_count", 0))
         initial = int(result.get("initial_conflict_count", 0))
         residual = int(result.get("residual_conflict_count", 0))
+        if str(result.get("aggregation_finality", "")) == "partial_final":
+            # A partial aggregation can later be recomputed after additional
+            # members arrive.  Keep it observable, but do not count the same
+            # group revision in the authoritative consistency denominator.
+            self.increment("coordination_partial_revisions_total")
+            self.increment("coordination_partial_events_total", event_count)
+            self.increment(
+                "coordination_partial_conflicts_initial_total", initial
+            )
+            self.increment(
+                "coordination_partial_conflicts_residual_total", residual
+            )
+            self.observe(
+                "coordination_partial_resolution_success_rate",
+                result.get(
+                    "resolution_success_rate",
+                    1.0 if initial == 0 else 0.0,
+                ),
+            )
+            return
         self.increment("coordination_events_total", event_count)
         self.increment("coordination_conflicts_initial_total", initial)
         self.increment("coordination_conflicts_residual_total", residual)
@@ -122,11 +142,54 @@ class FrameworkMetrics:
     def record_failure(self, operation: str) -> None:
         self.increment("request_failures_total", operation=operation)
 
-    def record_replay(self, attempted: int, completed: int) -> None:
+    def record_async_delivery(
+        self,
+        http_ms: float,
+        request_bytes: int,
+        response_bytes: int,
+        success: bool = True,
+    ) -> None:
+        """Record the background summary transport independently of final latency."""
+        self.increment("async_cloud_delivery_attempts_total")
+        if success:
+            self.increment("async_cloud_delivery_successes_total")
+        else:
+            self.increment("async_cloud_delivery_failures_total")
+        self.observe("async_cloud_delivery_ms", max(0.0, float(http_ms)))
+        self.observe("async_http_request_bytes", max(0, int(request_bytes)))
+        self.observe("async_http_response_bytes", max(0, int(response_bytes)))
+
+    def record_replay(
+        self,
+        attempted: int,
+        completed: int,
+        waiting: int = 0,
+        errors: Optional[int] = None,
+    ) -> None:
+        attempted_count = max(0, int(attempted))
+        completed_count = max(0, int(completed))
+        waiting_count = max(0, int(waiting))
+        if errors is not None:
+            error_count = max(0, int(errors))
+        elif waiting_count:
+            error_count = max(
+                0, attempted_count - completed_count - waiting_count
+            )
+        else:
+            # Preserve the v1 two-argument behavior: a partially successful run
+            # was not reported as failed because its uncompleted items were not
+            # classified. New callers should pass waiting/errors explicitly.
+            error_count = (
+                attempted_count
+                if attempted_count and completed_count == 0
+                else 0
+            )
         self.increment("outbox_replay_runs_total")
-        self.increment("outbox_replay_attempted_total", attempted)
-        self.increment("outbox_replay_completed_total", completed)
-        if attempted and not completed:
+        self.increment("outbox_replay_attempted_total", attempted_count)
+        self.increment("outbox_replay_completed_total", completed_count)
+        self.increment("outbox_replay_waiting_total", waiting_count)
+        self.increment("outbox_replay_errors_total", error_count)
+        if error_count:
             self.increment("outbox_replay_failures_total")
 
     @staticmethod

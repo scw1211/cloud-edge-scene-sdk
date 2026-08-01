@@ -1,5 +1,6 @@
 """用途：串联场景适配、边缘决策、动态调度、云端复核和冲突协调。"""
 
+import hashlib
 import json
 import time
 from dataclasses import replace
@@ -22,6 +23,8 @@ from cloud_edge_framework.scheduling import (
 
 
 _REVIEW_CONTEXT_KEY = "_edge_review_context"
+_SOURCE_ENVELOPE_SHA256_KEY = "_source_envelope_sha256"
+_SOURCE_BUSINESS_CONTEXT_KEY = "_source_business_control_context"
 _RISK_PRIORITY = {"low": 0, "medium": 1, "high": 2, "severe": 3}
 
 
@@ -78,12 +81,16 @@ class CloudRuntime:
     def decide(self, event: SemanticEvent) -> DecisionEnvelope:
         plugin = self.registry.get(event.scene)
         decision = plugin.cloud_decide(event)
-        if self.reviewer is not None and self.reviewer.should_review(event):
+        if self.reviewer is not None:
+            review_stage = "eligibility"
             try:
-                review = self.reviewer.review(event, decision)
-                decision = plugin.apply_cloud_llm_review(
-                    event, decision, review.to_dict()
-                )
+                if self.reviewer.should_review(event):
+                    review_stage = "inference"
+                    review = self.reviewer.review(event, decision)
+                    review_stage = "application"
+                    decision = plugin.apply_cloud_llm_review(
+                        event, decision, review.to_dict()
+                    )
             except Exception as exc:  # noqa: BLE001
                 decision = replace(
                     decision,
@@ -92,6 +99,8 @@ class CloudRuntime:
                         "cloud_llm_review_error": "{}: {}".format(
                             type(exc).__name__, exc
                         ),
+                        "cloud_llm_review_error_stage": review_stage,
+                        "cloud_llm_baseline_preserved": True,
                     },
                 )
         metadata = dict(decision.metadata)
@@ -148,6 +157,8 @@ class CloudRuntime:
                     }
                     for event in fused_events
                 ],
+                "coordination_semantics": "global_information_fusion_and_consistency_coordination",
+                "global_optimality_claimed": False,
                 "cloud_runtime_ms": round((time.perf_counter() - started) * 1000.0, 6),
             }
         )
@@ -195,16 +206,118 @@ class EdgeRuntime:
         evidence_level: str,
         snapshot: NetworkSnapshot,
         request_bytes: int,
+        delivery_operation: str,
+        requested_route: str,
+        requested_at_ms: int,
+        preliminary_latency_ms: float,
+        routing_features: Dict[str, Any],
     ) -> SemanticEvent:
+        operation = str(delivery_operation).strip()
+        if operation not in {"aggregate", "coordinate"}:
+            raise ValueError("pending review delivery_operation is invalid")
         metadata = dict(event.metadata)
         metadata[_REVIEW_CONTEXT_KEY] = {
-            "schema_version": 1,
+            "schema_version": 3,
+            # Freeze the operation when the event is accepted.  A later plugin
+            # reload must not silently turn a multi-edge summary into a regular
+            # coordination request (or the reverse).
+            "delivery_operation": operation,
             "local_decision": local.to_dict(),
+            "requested_route": str(requested_route),
+            "requested_at_ms": int(requested_at_ms),
+            "preliminary_latency_ms": max(0.0, float(preliminary_latency_ms)),
             "evidence_level": evidence_level,
             "network_class": network_class(snapshot),
+            "network_snapshot": {
+                "available": snapshot.available,
+                "rtt_ms": snapshot.rtt_ms,
+                "jitter_ms": snapshot.jitter_ms,
+                "loss_rate": snapshot.loss_rate,
+                "cloud_queue_ms": snapshot.cloud_queue_ms,
+                "cloud_compute_ms": snapshot.cloud_compute_ms,
+                "uplink_mbps": snapshot.uplink_mbps,
+                "downlink_mbps": snapshot.downlink_mbps,
+                "expected_response_bytes": snapshot.expected_response_bytes,
+            },
             "request_bytes": max(0, int(request_bytes)),
+            "routing_features": dict(routing_features),
         }
         return replace(event, metadata=metadata)
+
+    def _recover_pending_review_lifecycle(self, event: SemanticEvent) -> str:
+        """Rebuild a missing auxiliary lifecycle row from the durable Outbox.
+
+        Outbox persistence intentionally precedes lifecycle persistence.  This
+        method closes that crash window before any replay can be delivered and
+        acknowledged by using the frozen context stored with the event.
+        """
+        try:
+            existing_review_id = str(
+                self.review_tracker.get(event.event_id)["review_id"]
+            )
+        except KeyError:
+            existing_review_id = None
+        context = event.metadata.get(_REVIEW_CONTEXT_KEY)
+        if not isinstance(context, dict):
+            # Version-1 rows can rely on an already-persisted lifecycle record,
+            # but a missing row cannot be reconstructed without the frozen
+            # local decision and timing inputs introduced in version 2/3.
+            if existing_review_id is not None:
+                return existing_review_id
+            raise ValueError(
+                "pending Outbox event is missing durable review context: {}".format(
+                    event.event_id
+                )
+            )
+        raw_local = context.get("local_decision")
+        if not isinstance(raw_local, dict):
+            raise ValueError(
+                "pending Outbox event is missing its local decision: {}".format(
+                    event.event_id
+                )
+            )
+        local = DecisionEnvelope.from_dict(raw_local)
+        now_ms = int(time.time() * 1000)
+        requested_at_ms = int(context.get("requested_at_ms", now_ms))
+        preliminary_latency_ms = float(context.get("preliminary_latency_ms", 0.0))
+        routing_features = context.get("routing_features", {})
+        if not isinstance(routing_features, dict):
+            raise ValueError("pending review routing_features must be an object")
+        requested_route = str(context.get("requested_route", "cloud_async"))
+        evidence_level = str(context.get("evidence_level", "summary"))
+        request_bytes = max(0, int(context.get("request_bytes", 0)))
+        # Queue is deliberately called even when a row already exists: besides
+        # being idempotent, it validates that the durable Outbox event carries
+        # the same immutable source/business identity as the lifecycle row.
+        return self.review_tracker.queue(
+            event,
+            local,
+            requested_route,
+            evidence_level,
+            requested_at_ms,
+            preliminary_latency_ms,
+            request_bytes,
+            routing_features,
+        )
+
+    @staticmethod
+    def _pending_delivery_operation(
+        stored_event: SemanticEvent,
+        cloud_event: SemanticEvent,
+        plugin: Any,
+    ) -> str:
+        context = stored_event.metadata.get(_REVIEW_CONTEXT_KEY)
+        if isinstance(context, dict):
+            operation = str(context.get("delivery_operation", "")).strip()
+            if operation in {"aggregate", "coordinate"}:
+                return operation
+        # Compatibility for version-1 Outbox records written before the
+        # operation was frozen in the durable context.
+        return (
+            "aggregate"
+            if plugin.aggregation_spec(cloud_event) is not None
+            else "coordinate"
+        )
 
     @staticmethod
     def _clean_pending_event(event: SemanticEvent) -> SemanticEvent:
@@ -213,6 +326,24 @@ class EdgeRuntime:
         metadata = dict(event.metadata)
         metadata.pop(_REVIEW_CONTEXT_KEY, None)
         return replace(event, metadata=metadata)
+
+    @staticmethod
+    def _pending_network_snapshot(event: SemanticEvent) -> NetworkSnapshot:
+        context = event.metadata.get(_REVIEW_CONTEXT_KEY)
+        if isinstance(context, dict) and isinstance(
+            context.get("network_snapshot"), dict
+        ):
+            return NetworkSnapshot.from_dict(context["network_snapshot"])
+        # Legacy Outbox rows did not retain the full observation.  Use the
+        # neutral default rather than fabricating precision from a class label.
+        return NetworkSnapshot()
+
+    @staticmethod
+    def _pending_evidence_level(event: SemanticEvent) -> str:
+        context = event.metadata.get(_REVIEW_CONTEXT_KEY)
+        if not isinstance(context, dict):
+            return "summary"
+        return str(context.get("evidence_level", "summary"))
 
     @staticmethod
     def _coordination_decision(
@@ -248,6 +379,12 @@ class EdgeRuntime:
                 "group_id": aggregation.get("group_id"),
                 "state": aggregation.get("state"),
                 "completion_reason": aggregation.get("completion_reason"),
+                "finality": aggregation.get("finality", "pending"),
+                "evidence_complete": cls._aggregation_evidence_complete(response),
+                "global_confirmation": cls._aggregation_globally_confirmed(response),
+                "result_revision": int(
+                    aggregation.get("result_revision", 0) or 0
+                ),
                 "received_members": list(
                     aggregation.get("received_members", [])
                 ),
@@ -258,7 +395,121 @@ class EdgeRuntime:
         transport = response.get("transport")
         if isinstance(transport, dict):
             metadata["transport"] = dict(transport)
-        return replace(decision, metadata=metadata)
+        decision = replace(decision, metadata=metadata)
+        return _with_action_authorization(
+            decision,
+            cloud_confirmed=cls._aggregation_globally_confirmed(response),
+        )
+
+    @staticmethod
+    def _aggregation_globally_confirmed(response: Dict[str, Any]) -> bool:
+        if not EdgeRuntime._aggregation_evidence_complete(response):
+            return False
+        aggregation = response.get("aggregation")
+        coordination = response.get("coordination")
+        if not isinstance(aggregation, dict) or not isinstance(coordination, dict):
+            return False
+        if "global_confirmation" in aggregation:
+            confirmation = aggregation.get("global_confirmation") is True
+        elif "cloud_confirmed" in aggregation:
+            confirmation = aggregation.get("cloud_confirmed") is True
+        else:
+            # v1 cloud responses predate the explicit finality fields.  A
+            # fully completed join plus a globally-consistent coordination is
+            # the old protocol's equivalent of global confirmation.
+            confirmation = True
+        return bool(
+            confirmation
+            and coordination.get("globally_consistent", False) is True
+        )
+
+    @staticmethod
+    def _aggregation_evidence_complete(response: Dict[str, Any]) -> bool:
+        aggregation = response.get("aggregation")
+        if not isinstance(aggregation, dict):
+            return False
+        structurally_complete = bool(
+            aggregation.get("state") == "completed"
+            and aggregation.get("completion_reason") == "all_expected_members"
+            and not list(aggregation.get("missing_members", []))
+        )
+        if not structurally_complete:
+            return False
+        if "evidence_complete" not in aggregation:
+            # Backward compatibility with the original aggregation response.
+            return True
+        return aggregation.get("evidence_complete") is True
+
+    @staticmethod
+    def _response_transport(response: Any) -> Dict[str, Any]:
+        if not isinstance(response, dict):
+            return {}
+        transport = response.get("transport", {})
+        return dict(transport) if isinstance(transport, dict) else {}
+
+    @staticmethod
+    def _cloud_accepted_at_ms(response: Any) -> Optional[int]:
+        """Read a cloud application-ingress timestamp without inventing one.
+
+        A timestamp observed after the HTTP response would include coordination
+        and optional LLM work, so it must never be labelled as cloud receipt.
+        """
+        value: Any = None
+        if isinstance(response, DecisionEnvelope):
+            value = response.metadata.get("cloud_accepted_at_ms")
+        elif isinstance(response, dict):
+            value = response.get("cloud_accepted_at_ms")
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            accepted_at_ms = int(value)
+        except (TypeError, ValueError):
+            return None
+        return accepted_at_ms if accepted_at_ms >= 0 else None
+
+    @staticmethod
+    def _complete_review(
+        tracker: Any,
+        event_id: str,
+        decision: DecisionEnvelope,
+        completion_mode: str,
+        completion_stage: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Call the v2 lifecycle API without breaking injected v1 trackers."""
+        if completion_stage is None:
+            return tracker.complete(event_id, decision, completion_mode)
+        try:
+            return tracker.complete(
+                event_id,
+                decision,
+                completion_mode,
+                completion_stage=completion_stage,
+            )
+        except TypeError as exc:
+            if "completion_stage" not in str(exc):
+                raise
+            return tracker.complete(event_id, decision, completion_mode)
+
+    @staticmethod
+    def _plan_evidence(
+        planner: Any,
+        event: SemanticEvent,
+        conflict_suspected: bool,
+        scene_policy: Dict[str, Any],
+    ) -> Any:
+        """Use scene-aware evidence planning while accepting the v1 extension API."""
+        try:
+            return planner.plan(
+                event,
+                conflict_suspected,
+                scene_policy=scene_policy,
+            )
+        except TypeError as exc:
+            # Only retry the exact old-signature failure; an implementation's
+            # own TypeError must still surface.
+            if "scene_policy" not in str(exc):
+                raise
+            return planner.plan(event, conflict_suspected)
 
 
     @staticmethod
@@ -272,9 +523,41 @@ class EdgeRuntime:
         model_disagreement: bool,
         monitoring_force_cloud_review: bool,
     ) -> Dict[str, Any]:
+        safety = event.metadata.get("operational_safety_risk", {})
+        safety = dict(safety) if isinstance(safety, dict) else {}
+        safety_level = str(safety.get("level", event.risk.level))
+        if safety_level not in _RISK_PRIORITY:
+            safety_level = event.risk.level
+        safety_score = float(safety.get("score", event.risk.score))
+        regional = event.metadata.get("regional_state", {})
+        regional = dict(regional) if isinstance(regional, dict) else {}
+        expected_gain = event.metadata.get("escalation_expected_gain", {})
+        expected_gain = (
+            dict(expected_gain) if isinstance(expected_gain, dict) else {}
+        )
+        gain_values: List[float] = []
+        for key in ("edge_qwen", "cloud", "score", "expected_gain"):
+            try:
+                gain_values.append(float(expected_gain.get(key, 0.0) or 0.0))
+            except (TypeError, ValueError):
+                continue
+        expected_gain_score = max(gain_values, default=0.0)
+        evidence_state = event.metadata.get("evidence_completeness", {})
+        evidence_state = (
+            dict(evidence_state) if isinstance(evidence_state, dict) else {}
+        )
         return {
-            "risk_priority": _RISK_PRIORITY[event.risk.level],
-            "risk_score": float(event.risk.score),
+            # v1 model field names are retained, but their traffic meaning is
+            # now the consequence of executing the proposed action, not the
+            # maximum congestion score of any observed node.
+            "risk_priority": _RISK_PRIORITY[safety_level],
+            "risk_score": safety_score,
+            "operational_safety_level": safety_level,
+            "regional_state_level": str(
+                regional.get("level", event.prediction.label)
+            ),
+            "escalation_expected_gain": expected_gain_score,
+            "evidence_complete": 1 if evidence_state.get("complete", True) else 0,
             "prediction_confidence": float(event.prediction.confidence),
             "uncertainty_confidence": float(event.uncertainty.confidence),
             "prediction_set_size": len(
@@ -379,6 +662,18 @@ class EdgeRuntime:
         started = time.perf_counter()
         requested_at_ms = int(time.time() * 1000)
         envelope = SceneEventEnvelope.from_dict(payload)
+        source_envelope_sha256 = hashlib.sha256(
+            json.dumps(
+                envelope.to_dict(),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        source_business_context = {
+            "conflict_suspected": bool(conflict_suspected),
+            "model_disagreement": bool(model_disagreement),
+        }
         plugin = self.registry.for_envelope(envelope)
         event = plugin.normalize(envelope)
         snapshot = network or NetworkSnapshot()
@@ -392,6 +687,8 @@ class EdgeRuntime:
                 "edge_runtime_network_available": snapshot.available,
                 "edge_runtime_network_rtt_ms": snapshot.rtt_ms,
                 "edge_runtime_network_loss_rate": snapshot.loss_rate,
+                _SOURCE_ENVELOPE_SHA256_KEY: source_envelope_sha256,
+                _SOURCE_BUSINESS_CONTEXT_KEY: source_business_context,
             }
         )
         event = replace(event, metadata=event_metadata)
@@ -424,9 +721,29 @@ class EdgeRuntime:
             ),
             cloud_confirmed=False,
         )
+        cloud_submission_metadata = plugin.cloud_submission_metadata(event, local)
+        if not isinstance(cloud_submission_metadata, dict):
+            raise ValueError("scene cloud_submission_metadata must return an object")
+        if (
+            _SOURCE_ENVELOPE_SHA256_KEY in cloud_submission_metadata
+            or _SOURCE_BUSINESS_CONTEXT_KEY in cloud_submission_metadata
+        ):
+            raise ValueError(
+                "scene cloud_submission_metadata cannot replace source identity"
+            )
+        if cloud_submission_metadata:
+            event = replace(
+                event,
+                metadata={**event.metadata, **cloud_submission_metadata},
+            )
         routing_advice = plugin.routing_advice(event, local)
         if not isinstance(routing_advice, dict):
             raise ValueError("scene routing_advice must return an object")
+        evidence_advice = plugin.evidence_advice(
+            event, local, conflict_suspected
+        )
+        if not isinstance(evidence_advice, dict):
+            raise ValueError("scene evidence_advice must return an object")
         edge_decision_runtime_ms = (time.perf_counter() - edge_decision_started) * 1000.0
         event = replace(
             event,
@@ -441,7 +758,12 @@ class EdgeRuntime:
             + scene_edge_inference_ms
             + (edge_decision_done - started) * 1000.0
         )
-        evidence_plan = self.evidence_planner.plan(event, conflict_suspected)
+        evidence_plan = self._plan_evidence(
+            self.evidence_planner,
+            event,
+            conflict_suspected,
+            evidence_advice,
+        )
         selected_evidence_ids = set(evidence_plan.selected_evidence_ids)
         selected_event = replace(
             event,
@@ -459,9 +781,20 @@ class EdgeRuntime:
         cloud_event = plugin.prepare_cloud_event(
             selected_event, evidence_plan.required_level
         )
+        cloud_event = replace(
+            cloud_event,
+            metadata={
+                **cloud_event.metadata,
+                _SOURCE_ENVELOPE_SHA256_KEY: source_envelope_sha256,
+                _SOURCE_BUSINESS_CONTEXT_KEY: source_business_context,
+            },
+        )
         aggregation_spec = plugin.aggregation_spec(cloud_event)
         if aggregation_spec is not None and not isinstance(aggregation_spec, dict):
             raise ValueError("scene aggregation_spec must return an object or None")
+        delivery_operation = (
+            "aggregate" if aggregation_spec is not None else "coordinate"
+        )
         include_scene_payload = bool(
             cloud_event.metadata.get("transport_include_scene_payload", False)
         )
@@ -493,11 +826,10 @@ class EdgeRuntime:
         cloud_review_requested = bool(
             event.metadata.get("cloud_review_requested", False)
         )
-        if aggregation_spec is not None:
-            # Multi-edge summaries must reach the coordinator whenever the cloud
-            # path is usable. The first submission does not wait for its peer;
-            # it becomes an asynchronously tracked provisional result.
-            cloud_review_requested = True
+        # Multi-edge summaries are delivered for global visibility, but delivery
+        # alone is not a request to block the business path for cloud review.
+        # Whether the caller waits is decided independently below.
+        summary_delivery_required = aggregation_spec is not None
         if _requires_cloud_confirmation(local):
             cloud_review_requested = True
         if bool(routing_advice.get("cloud_review_requested", False)):
@@ -551,22 +883,23 @@ class EdgeRuntime:
                 else None
             ),
         )
+        scheduler_selected_route = schedule.route
+        scheduler_selected_wait = bool(schedule.waits_for_cloud)
         if (
-            aggregation_spec is not None
+            summary_delivery_required
             and snapshot.available
             and snapshot.loss_rate < 0.95
-            and schedule.route != "cloud_sync"
+            and schedule.route == "edge_only"
         ):
             schedule = replace(
                 schedule,
-                route="cloud_sync",
+                route="cloud_async",
                 reason=(
-                    "submit the lightweight multi-edge summary immediately; "
-                    "the final fused result may complete asynchronously"
+                    "return the provisional decision immediately and deliver the "
+                    "lightweight multi-edge summary through the background outbox"
                 ),
                 cloud_requested=True,
                 waits_for_cloud=False,
-                explicit_cloud_review_requested=True,
             )
         warning = ""
         if schedule.cloud_requested and not evidence_plan.complete:
@@ -614,7 +947,20 @@ class EdgeRuntime:
                         int(transport.get("request_bytes", planned_upload_bytes)),
                         int(transport.get("response_bytes", 0)),
                     )
-                if final is None:
+                accepted_at_ms = self._cloud_accepted_at_ms(
+                    aggregation_response if aggregation_response is not None else final
+                )
+                if accepted_at_ms is not None and hasattr(
+                    self.review_tracker, "received"
+                ):
+                    self.review_tracker.received(
+                        [event.event_id], received_at_ms=accepted_at_ms
+                    )
+                aggregation_complete = (
+                    aggregation_response is None
+                    or self._aggregation_evidence_complete(aggregation_response)
+                )
+                if final is None or not aggregation_complete:
                     waiting = (
                         aggregation_response.get("aggregation", {})
                         if isinstance(aggregation_response, dict)
@@ -635,32 +981,61 @@ class EdgeRuntime:
                                     "request_bytes", planned_upload_bytes
                                 )
                             ),
+                            delivery_operation,
+                            "cloud_sync",
+                            requested_at_ms,
+                            edge_preliminary_decision_ms,
+                            routing_features,
                         )
                     )
                     metadata = dict(local.metadata)
+                    if final is not None:
+                        metadata.update(final.metadata)
+                    aggregation_metadata = metadata.get("aggregation", {})
+                    aggregation_metadata = (
+                        dict(aggregation_metadata)
+                        if isinstance(aggregation_metadata, dict)
+                        else {}
+                    )
+                    aggregation_metadata.update(
+                        {
+                            "group_id": waiting.get("group_id"),
+                            "state": waiting.get("state", "waiting"),
+                            "completion_reason": waiting.get(
+                                "completion_reason", ""
+                            ),
+                            "finality": waiting.get("finality", "pending"),
+                            "evidence_complete": bool(
+                                waiting.get("evidence_complete", False)
+                            ),
+                            "global_confirmation": bool(
+                                waiting.get("global_confirmation", False)
+                            ),
+                            "result_revision": int(
+                                waiting.get("result_revision", 0) or 0
+                            ),
+                            "received_members": list(
+                                waiting.get("received_members", [])
+                            ),
+                            "missing_members": list(
+                                waiting.get("missing_members", [])
+                            ),
+                        }
+                    )
                     metadata.update(
                         {
                             "cloud_review_queued": True,
                             "review_id": review_id,
                             "review_state": "queued",
-                            "aggregation": {
-                                "group_id": waiting.get("group_id"),
-                                "state": waiting.get("state", "waiting"),
-                                "received_members": list(
-                                    waiting.get("received_members", [])
-                                ),
-                                "missing_members": list(
-                                    waiting.get("missing_members", [])
-                                ),
-                            },
+                            "aggregation": aggregation_metadata,
                             "transport": dict(transport),
                         }
                     )
                     final = _with_action_authorization(
                         replace(
-                            local,
+                            final if final is not None else local,
                             route="cloud_async",
-                            status="queued",
+                            status="provisional",
                             metadata=metadata,
                         ),
                         cloud_confirmed=False,
@@ -668,7 +1043,12 @@ class EdgeRuntime:
                 else:
                     final = _with_action_authorization(
                         final,
-                        cloud_confirmed=True,
+                        cloud_confirmed=(
+                            aggregation_response is None
+                            or self._aggregation_globally_confirmed(
+                                aggregation_response
+                            )
+                        ),
                     )
                     review_record = self.review_tracker.complete(
                         event.event_id, final, "sync"
@@ -737,6 +1117,11 @@ class EdgeRuntime:
                         evidence_plan.required_level,
                         snapshot,
                         planned_upload_bytes,
+                        delivery_operation,
+                        "cloud_sync",
+                        requested_at_ms,
+                        edge_preliminary_decision_ms,
+                        routing_features,
                     )
                 )
                 metadata = dict(local.metadata)
@@ -752,11 +1137,28 @@ class EdgeRuntime:
                 final = replace(
                     local,
                     route="local_autonomy",
-                    status="queued",
+                    status="provisional",
                     metadata=metadata,
                 )
                 final = _with_action_authorization(final, cloud_confirmed=False)
         elif schedule.route == "cloud_async":
+            # The durable Outbox is the source of truth.  Persist it before the
+            # auxiliary lifecycle row so a process crash can never lose an
+            # accepted summary merely because the two stores are not atomic.
+            self.review_store.append(
+                self._pending_review_event(
+                    cloud_event,
+                    local,
+                    evidence_plan.required_level,
+                    snapshot,
+                    planned_upload_bytes,
+                    delivery_operation,
+                    "cloud_async",
+                    requested_at_ms,
+                    edge_preliminary_decision_ms,
+                    routing_features,
+                )
+            )
             review_id = self.review_tracker.queue(
                 event,
                 local,
@@ -766,15 +1168,6 @@ class EdgeRuntime:
                 edge_preliminary_decision_ms,
                 planned_upload_bytes,
                 routing_features,
-            )
-            self.review_store.append(
-                self._pending_review_event(
-                    cloud_event,
-                    local,
-                    evidence_plan.required_level,
-                    snapshot,
-                    planned_upload_bytes,
-                )
             )
             metadata = dict(local.metadata)
             metadata.update(
@@ -788,15 +1181,31 @@ class EdgeRuntime:
             final = replace(
                 local,
                 route="cloud_async",
-                status="queued",
+                status="provisional",
                 metadata=metadata,
             )
             final = _with_action_authorization(final, cloud_confirmed=False)
         elif schedule.route == "local_autonomy":
             review_queued = (
-                event.risk.level in {"high", "severe"} or cloud_review_requested
+                summary_delivery_required
+                or event.risk.level in {"high", "severe"}
+                or cloud_review_requested
             )
             if review_queued:
+                self.review_store.append(
+                    self._pending_review_event(
+                        cloud_event,
+                        local,
+                        evidence_plan.required_level,
+                        snapshot,
+                        planned_upload_bytes,
+                        delivery_operation,
+                        "local_autonomy",
+                        requested_at_ms,
+                        edge_preliminary_decision_ms,
+                        routing_features,
+                    )
+                )
                 review_id = self.review_tracker.queue(
                     event,
                     local,
@@ -806,15 +1215,6 @@ class EdgeRuntime:
                     edge_preliminary_decision_ms,
                     planned_upload_bytes,
                     routing_features,
-                )
-                self.review_store.append(
-                    self._pending_review_event(
-                        cloud_event,
-                        local,
-                        evidence_plan.required_level,
-                        snapshot,
-                        planned_upload_bytes,
-                    )
                 )
             metadata = dict(local.metadata)
             metadata.update(
@@ -828,7 +1228,7 @@ class EdgeRuntime:
             final = replace(
                 local,
                 route="local_autonomy",
-                status="queued" if review_queued else "final",
+                status="provisional" if review_queued else "final",
                 metadata=metadata,
             )
             final = _with_action_authorization(final, cloud_confirmed=False)
@@ -863,6 +1263,14 @@ class EdgeRuntime:
             "schedule": schedule.to_dict(),
             "evidence_plan": evidence_plan.to_dict(),
             "data_plane": {
+                "summary_delivery_required": summary_delivery_required,
+                "summary_delivery_mode": (
+                    "background_outbox"
+                    if summary_delivery_required
+                    else "scheduler_selected"
+                ),
+                "scheduler_selected_route": scheduler_selected_route,
+                "scheduler_selected_wait": scheduler_selected_wait,
                 "legacy_full_request_bytes": legacy_request_bytes,
                 "selected_request_bytes": cloud_request_bytes,
                 "planned_artifact_request_bytes": planned_artifact_bytes,
@@ -933,10 +1341,44 @@ class EdgeRuntime:
         batch_size: int = 64,
         lease_seconds: float = 30.0,
         max_backoff_seconds: float = 60.0,
+        waiting_poll_seconds: float = 0.025,
+        partial_poll_seconds: float = 1.0,
+        aggregation_max_wait_seconds: float = 10.0,
+        reconciliation_poll_seconds: float = 5.0,
+        reconciliation_max_wait_seconds: float = 60.0,
     ) -> Dict[str, Any]:
         leases = None
+        reconciliation_ids = set()
+        reconciliation_swept_expired_ids: List[str] = []
         if hasattr(self.review_store, "claim"):
-            leases = self.review_store.claim(batch_size, lease_seconds)
+            if hasattr(self.review_store, "sweep_expired_reconciliation"):
+                reconciliation_swept_expired_ids = (
+                    self.review_store.sweep_expired_reconciliation()
+                )
+            reconciliation_leases = []
+            if hasattr(self.review_store, "claim_reconciliation"):
+                # Reserve a small share so a continuous stream of ordinary
+                # summaries cannot starve already-low-frequency correction
+                # polls until their bounded deadline expires.
+                reconciliation_capacity = max(1, int(batch_size) // 4)
+                reconciliation_leases = self.review_store.claim_reconciliation(
+                    reconciliation_capacity,
+                    lease_seconds,
+                )
+                reconciliation_ids = {
+                    lease.event.event_id for lease in reconciliation_leases
+                }
+            ordinary_capacity = max(
+                0, int(batch_size) - len(reconciliation_leases)
+            )
+            leases = (
+                self.review_store.claim(ordinary_capacity, lease_seconds)
+                if ordinary_capacity
+                else []
+            )
+            # Deliver new members before reconciliation polls in the same
+            # batch, so a late B can complete the group before A re-reads it.
+            leases.extend(reconciliation_leases)
             pending = [lease.event for lease in leases]
         else:
             pending = self.review_store.events()
@@ -944,26 +1386,50 @@ class EdgeRuntime:
             return {
                 "attempted": 0,
                 "completed": 0,
+                "terminal": 0,
+                "waiting": 0,
+                "aggregation_waiting": 0,
+                "retrying": 0,
+                "reconciliation_waiting": 0,
+                "reconciliation_completed": 0,
+                "reconciliation_expired": len(
+                    reconciliation_swept_expired_ids
+                ),
                 "coordination": None,
-                "remaining": self.review_store.count(),
+                "remaining": (
+                    self.review_store.work_count()
+                    if hasattr(self.review_store, "work_count")
+                    else self.review_store.count()
+                ),
             }
         event_ids = [event.event_id for event in pending]
+        # The Outbox and lifecycle stores cannot share one SQLite transaction.
+        # Recreate any auxiliary row lost by a crash after durable Outbox append
+        # before the event is allowed to leave the edge.
+        for stored_event in pending:
+            self._recover_pending_review_lifecycle(stored_event)
         self.review_tracker.start(event_ids, "replay")
         cloud_events = [self._clean_pending_event(event) for event in pending]
         aggregation_items = []
         regular_items = []
         for stored_event, cloud_event in zip(pending, cloud_events):
             plugin = self.registry.get(cloud_event.scene)
-            if (
-                plugin.aggregation_spec(cloud_event) is not None
-                and hasattr(self.cloud, "aggregate")
-            ):
+            operation = self._pending_delivery_operation(
+                stored_event, cloud_event, plugin
+            )
+            if operation == "aggregate" and hasattr(self.cloud, "aggregate"):
                 aggregation_items.append((stored_event, cloud_event))
             else:
                 regular_items.append((stored_event, cloud_event))
 
         completed_ids: List[str] = []
         retry_ids: List[str] = []
+        waiting_ids: List[str] = []
+        partial_waiting_ids: List[str] = []
+        reconciliation_waiting_ids: List[str] = []
+        partial_decisions: Dict[str, DecisionEnvelope] = {}
+        reconciliation_completed_ids: List[str] = []
+        reconciliation_retry_ids: List[str] = []
         errors: List[Dict[str, str]] = []
         review_completions = []
         feedback_totals = {
@@ -973,21 +1439,96 @@ class EdgeRuntime:
             "cloud_submission_errors": [],
         }
         coordination_results = []
+        deliveries: List[Dict[str, Any]] = []
+        partial_results = 0
 
         for stored_event, cloud_event in aggregation_items:
+            is_reconciliation = cloud_event.event_id in reconciliation_ids
+            delivery_started = time.perf_counter()
+            delivery_recorded = False
             try:
                 response = self.cloud.aggregate(cloud_event)
+                delivery_elapsed_ms = (
+                    time.perf_counter() - delivery_started
+                ) * 1000.0
+                transport = self._response_transport(response)
+                deliveries.append(
+                    {
+                        "operation": "aggregate",
+                        "event_count": 1,
+                        "success": True,
+                        "http_round_trip_ms": float(
+                            transport.get("http_round_trip_ms", delivery_elapsed_ms)
+                        ),
+                        "request_bytes": int(transport.get("request_bytes", 0)),
+                        "response_bytes": int(transport.get("response_bytes", 0)),
+                    }
+                )
+                delivery_recorded = True
+                self.performance_store.record(
+                    cloud_event.scene,
+                    self._pending_evidence_level(stored_event),
+                    self._pending_network_snapshot(stored_event),
+                    True,
+                    float(transport.get("http_round_trip_ms", delivery_elapsed_ms)),
+                    int(transport.get("request_bytes", 0)),
+                    int(transport.get("response_bytes", 0)),
+                )
+                accepted_at_ms = self._cloud_accepted_at_ms(response)
+                if accepted_at_ms is not None and hasattr(
+                    self.review_tracker, "received"
+                ):
+                    self.review_tracker.received(
+                        [cloud_event.event_id], received_at_ms=accepted_at_ms
+                    )
                 coordination = response.get("coordination")
                 decision = self._aggregation_decision(
                     response, cloud_event.event_id
                 )
-                if decision is None or not isinstance(coordination, dict):
-                    retry_ids.append(cloud_event.event_id)
-                    self.review_tracker.retry(
-                        [cloud_event.event_id],
-                        "aggregation is waiting for peer summaries",
+                evidence_complete = self._aggregation_evidence_complete(response)
+                if (
+                    decision is None
+                    or not isinstance(coordination, dict)
+                    or not evidence_complete
+                ):
+                    if is_reconciliation:
+                        reconciliation_waiting_ids.append(cloud_event.event_id)
+                        if decision is not None:
+                            coordination_results.append(response)
+                    elif decision is not None:
+                        partial_waiting_ids.append(cloud_event.event_id)
+                        partial_decisions[cloud_event.event_id] = decision
+                        partial_results += 1
+                        if hasattr(self.review_tracker, "record_partial"):
+                            self.review_tracker.record_partial(
+                                cloud_event.event_id, decision
+                            )
+                        coordination_results.append(response)
+                    elif not is_reconciliation:
+                        waiting_ids.append(cloud_event.event_id)
+                    waiting_reason = (
+                        "partial aggregation is waiting for all expected members"
+                        if decision is not None
+                        else "aggregation is waiting for peer summaries"
                     )
+                    if is_reconciliation:
+                        # Its lifecycle is already terminal at partial/local
+                        # timeout.  Keep that visible until a richer, complete
+                        # revision arrives; only the bounded poll queue moves.
+                        pass
+                    elif hasattr(self.review_tracker, "waiting"):
+                        self.review_tracker.waiting(
+                            [cloud_event.event_id], waiting_reason
+                        )
+                    else:
+                        self.review_tracker.retry(
+                            [cloud_event.event_id], waiting_reason
+                        )
                     continue
+                decision = _with_action_authorization(
+                    replace(decision, route="cloud_async", status="final"),
+                    cloud_confirmed=self._aggregation_globally_confirmed(response),
+                )
                 feedback = self._record_replayed_feedback(
                     [stored_event], [cloud_event], coordination
                 )
@@ -1003,27 +1544,100 @@ class EdgeRuntime:
                 try:
                     review_completions.append(
                         self.review_tracker.complete(
-                            cloud_event.event_id, decision, "replay"
+                            cloud_event.event_id,
+                            decision,
+                            "reconciliation" if is_reconciliation else "replay",
                         )
                     )
                 except KeyError:
                     pass
-                completed_ids.append(cloud_event.event_id)
+                if is_reconciliation:
+                    reconciliation_completed_ids.append(cloud_event.event_id)
+                else:
+                    completed_ids.append(cloud_event.event_id)
                 coordination_results.append(response)
             except Exception as exc:  # noqa: BLE001
                 error = "{}: {}".format(type(exc).__name__, exc)
-                retry_ids.append(cloud_event.event_id)
+                if not delivery_recorded:
+                    deliveries.append(
+                        {
+                            "operation": "aggregate",
+                            "event_count": 1,
+                            "success": False,
+                            "http_round_trip_ms": round(
+                                (time.perf_counter() - delivery_started) * 1000.0,
+                                6,
+                            ),
+                            "request_bytes": 0,
+                            "response_bytes": 0,
+                        }
+                    )
+                    self.performance_store.record(
+                        cloud_event.scene,
+                        self._pending_evidence_level(stored_event),
+                        self._pending_network_snapshot(stored_event),
+                        False,
+                        (time.perf_counter() - delivery_started) * 1000.0,
+                        0,
+                        0,
+                    )
+                if is_reconciliation:
+                    reconciliation_retry_ids.append(cloud_event.event_id)
+                else:
+                    retry_ids.append(cloud_event.event_id)
                 errors.append(
                     {"event_id": cloud_event.event_id, "error": error}
                 )
-                self.review_tracker.retry([cloud_event.event_id], error)
+                if not is_reconciliation:
+                    self.review_tracker.retry([cloud_event.event_id], error)
 
         if regular_items:
             regular_stored = [item[0] for item in regular_items]
             regular_cloud = [item[1] for item in regular_items]
             regular_ids = [event.event_id for event in regular_cloud]
+            delivery_started = time.perf_counter()
+            delivery_recorded = False
             try:
                 coordination = self.cloud.coordinate(regular_cloud)
+                delivery_elapsed_ms = (
+                    time.perf_counter() - delivery_started
+                ) * 1000.0
+                transport = self._response_transport(coordination)
+                deliveries.append(
+                    {
+                        "operation": "coordinate",
+                        "event_count": len(regular_cloud),
+                        "success": True,
+                        "http_round_trip_ms": float(
+                            transport.get("http_round_trip_ms", delivery_elapsed_ms)
+                        ),
+                        "request_bytes": int(transport.get("request_bytes", 0)),
+                        "response_bytes": int(transport.get("response_bytes", 0)),
+                    }
+                )
+                delivery_recorded = True
+                item_count = max(1, len(regular_items))
+                for stored_event, cloud_event in regular_items:
+                    self.performance_store.record(
+                        cloud_event.scene,
+                        self._pending_evidence_level(stored_event),
+                        self._pending_network_snapshot(stored_event),
+                        True,
+                        float(
+                            transport.get(
+                                "http_round_trip_ms", delivery_elapsed_ms
+                            )
+                        ),
+                        int(transport.get("request_bytes", 0)) // item_count,
+                        int(transport.get("response_bytes", 0)) // item_count,
+                    )
+                accepted_at_ms = self._cloud_accepted_at_ms(coordination)
+                if accepted_at_ms is not None and hasattr(
+                    self.review_tracker, "received"
+                ):
+                    self.review_tracker.received(
+                        regular_ids, received_at_ms=accepted_at_ms
+                    )
                 feedback = self._record_replayed_feedback(
                     regular_stored, regular_cloud, coordination
                 )
@@ -1049,7 +1663,13 @@ class EdgeRuntime:
                     try:
                         review_completions.append(
                             self.review_tracker.complete(
-                                cloud_event.event_id, decision, "replay"
+                                cloud_event.event_id,
+                                replace(
+                                    decision,
+                                    route="cloud_async",
+                                    status="final",
+                                ),
+                                "replay",
                             )
                         )
                     except KeyError:
@@ -1058,6 +1678,30 @@ class EdgeRuntime:
                 coordination_results.append(coordination)
             except Exception as exc:  # noqa: BLE001
                 error = "{}: {}".format(type(exc).__name__, exc)
+                if not delivery_recorded:
+                    deliveries.append(
+                        {
+                            "operation": "coordinate",
+                            "event_count": len(regular_cloud),
+                            "success": False,
+                            "http_round_trip_ms": round(
+                                (time.perf_counter() - delivery_started) * 1000.0,
+                                6,
+                            ),
+                            "request_bytes": 0,
+                            "response_bytes": 0,
+                        }
+                    )
+                    for stored_event, cloud_event in regular_items:
+                        self.performance_store.record(
+                            cloud_event.scene,
+                            self._pending_evidence_level(stored_event),
+                            self._pending_network_snapshot(stored_event),
+                            False,
+                            (time.perf_counter() - delivery_started) * 1000.0,
+                            0,
+                            0,
+                        )
                 retry_ids.extend(regular_ids)
                 errors.extend(
                     {"event_id": event_id, "error": error}
@@ -1065,22 +1709,182 @@ class EdgeRuntime:
                 )
                 self.review_tracker.retry(regular_ids, error)
 
+        partial_expired_ids: List[str] = []
+        local_timeout_ids: List[str] = []
+        reconciliation_expired_ids: List[str] = list(
+            reconciliation_swept_expired_ids
+        )
         if leases is not None:
             if completed_ids:
                 self.review_store.acknowledge(completed_ids)
+            if reconciliation_completed_ids and hasattr(
+                self.review_store, "acknowledge_reconciliation"
+            ):
+                self.review_store.acknowledge_reconciliation(
+                    reconciliation_completed_ids
+                )
             if retry_ids:
                 self.review_store.release(
                     retry_ids,
                     errors[0]["error"] if errors else "aggregation waiting",
                     max_backoff_seconds,
                 )
-        elif not retry_ids:
+            if waiting_ids:
+                if hasattr(self.review_store, "defer_aggregation_wait"):
+                    local_timeout_ids = self.review_store.defer_aggregation_wait(
+                        waiting_ids,
+                        waiting_poll_seconds,
+                        aggregation_max_wait_seconds,
+                        reconciliation_poll_seconds,
+                        reconciliation_max_wait_seconds,
+                    )
+                elif hasattr(self.review_store, "defer_waiting"):
+                    self.review_store.defer_waiting(waiting_ids, waiting_poll_seconds)
+                else:
+                    self.review_store.release(
+                        waiting_ids,
+                        "aggregation waiting",
+                        waiting_poll_seconds,
+                    )
+            if partial_waiting_ids:
+                if hasattr(self.review_store, "defer_aggregation_wait"):
+                    partial_expired_ids = self.review_store.defer_aggregation_wait(
+                        partial_waiting_ids,
+                        partial_poll_seconds,
+                        aggregation_max_wait_seconds,
+                        reconciliation_poll_seconds,
+                        reconciliation_max_wait_seconds,
+                    )
+                elif hasattr(self.review_store, "defer_waiting"):
+                    self.review_store.defer_waiting(
+                        partial_waiting_ids, partial_poll_seconds
+                    )
+                else:
+                    self.review_store.release(
+                        partial_waiting_ids,
+                        "partial aggregation waiting",
+                        partial_poll_seconds,
+                    )
+            if reconciliation_waiting_ids and hasattr(
+                self.review_store, "defer_reconciliation"
+            ):
+                reconciliation_expired_ids.extend(
+                    self.review_store.defer_reconciliation(
+                        reconciliation_waiting_ids,
+                        reconciliation_poll_seconds,
+                    )
+                )
+            if reconciliation_retry_ids and hasattr(
+                self.review_store, "release_reconciliation"
+            ):
+                reconciliation_expired_ids.extend(
+                    self.review_store.release_reconciliation(
+                        reconciliation_retry_ids,
+                        errors[0]["error"] if errors else "reconciliation failed",
+                        max_backoff_seconds,
+                    )
+                )
+        elif not retry_ids and not waiting_ids and not partial_waiting_ids:
             self.review_store.clear()
+
+        for event_id in partial_expired_ids:
+            partial = partial_decisions[event_id]
+            metadata = dict(partial.metadata)
+            metadata["aggregation_wait_expired"] = {
+                "max_wait_seconds": float(aggregation_max_wait_seconds),
+                "outcome": "partial_final",
+                "evidence_complete": False,
+            }
+            try:
+                review_completions.append(
+                    self._complete_review(
+                        self.review_tracker,
+                        event_id,
+                        replace(
+                            partial,
+                            route="cloud_async",
+                            status="provisional",
+                            metadata=metadata,
+                        ),
+                        "partial_timeout",
+                        "partial_final",
+                    )
+                )
+            except KeyError:
+                pass
+
+        for event_id in local_timeout_ids:
+            try:
+                review = self.review_tracker.get(event_id)
+                local = DecisionEnvelope.from_dict(review["local_decision"])
+                metadata = dict(local.metadata)
+                metadata["aggregation_wait_expired"] = {
+                    "max_wait_seconds": float(aggregation_max_wait_seconds),
+                    "outcome": "local_only_timeout",
+                    "evidence_complete": False,
+                }
+                review_completions.append(
+                    self._complete_review(
+                        self.review_tracker,
+                        event_id,
+                        replace(
+                            local,
+                            route="local_autonomy",
+                            status="provisional",
+                            metadata=metadata,
+                        ),
+                        "aggregation_timeout",
+                        "local_only_timeout",
+                    )
+                )
+            except KeyError:
+                pass
+
+        expired_ids = set(partial_expired_ids + local_timeout_ids)
+        active_waiting_ids = [
+            event_id
+            for event_id in waiting_ids + partial_waiting_ids
+            if event_id not in expired_ids
+        ]
+        active_partial_ids = [
+            event_id
+            for event_id in partial_waiting_ids
+            if event_id not in expired_ids
+        ]
+        reconciliation_expired_set = set(reconciliation_expired_ids)
+        active_reconciliation_ids = [
+            event_id
+            for event_id in reconciliation_waiting_ids
+            + reconciliation_retry_ids
+            if event_id not in reconciliation_expired_set
+        ]
+
+        remaining = (
+            self.review_store.work_count()
+            if hasattr(self.review_store, "work_count")
+            else self.review_store.count()
+        )
 
         return {
             "attempted": len(pending),
-            "completed": len(completed_ids),
-            "waiting": len(retry_ids),
+            "completed": len(completed_ids) + len(reconciliation_completed_ids),
+            "terminal": len(completed_ids) + len(expired_ids),
+            # v1 compatibility: waiting meant every outstanding item,
+            # including delivery failures awaiting retry.
+            "waiting": len(active_waiting_ids)
+            + len(retry_ids)
+            + len(active_reconciliation_ids),
+            "aggregation_waiting": len(active_waiting_ids)
+            + len(active_reconciliation_ids),
+            "partial_waiting": len(active_partial_ids),
+            "retrying": len(retry_ids) + len(reconciliation_retry_ids),
+            "reconciliation_waiting": len(active_reconciliation_ids),
+            "reconciliation_completed": len(reconciliation_completed_ids),
+            "reconciliation_expired": len(reconciliation_expired_set),
+            "partial": partial_results,
+            "aggregation_expired": len(expired_ids),
+            "partial_expired": len(partial_expired_ids),
+            "local_timeout_expired": len(local_timeout_ids),
             "coordination": (
                 coordination_results[0]
                 if len(coordination_results) == 1
@@ -1088,7 +1892,8 @@ class EdgeRuntime:
             ),
             "feedback": feedback_totals,
             "errors": errors,
+            "deliveries": deliveries,
             "review_completions": review_completions,
             "review_lifecycle": self.review_tracker.snapshot(),
-            "remaining": self.review_store.count(),
+            "remaining": remaining,
         }

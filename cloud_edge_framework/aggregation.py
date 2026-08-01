@@ -9,6 +9,10 @@ import time
 from typing import Any, Dict, List, Optional, Sequence
 
 from cloud_edge_framework.contracts import SemanticEvent, stable_id
+from cloud_edge_framework.reliability import (
+    _configure_sqlite_connection,
+    IdempotencyConflictError,
+)
 
 
 @dataclass(frozen=True)
@@ -61,16 +65,35 @@ class AggregationLease:
     scene: str
     group_key: str
     completion_reason: str
+    expected_members: List[str]
+    received_members: List[str]
+    missing_members: List[str]
+    result_revision: int
     events: List[SemanticEvent]
 
 
 class MultiEdgeEventAggregator:
     """Durable event-time join with duplicate, missing-member and timeout handling."""
 
-    def __init__(self, path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        path: Optional[Path] = None,
+        retry_base_seconds: float = 0.25,
+        retry_max_seconds: float = 30.0,
+    ) -> None:
         self.path = Path(path).resolve() if path is not None else None
         if self.path is not None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.retry_base_seconds = float(retry_base_seconds)
+        self.retry_max_seconds = float(retry_max_seconds)
+        if (
+            self.retry_base_seconds <= 0
+            or self.retry_max_seconds <= 0
+            or self.retry_base_seconds > self.retry_max_seconds
+        ):
+            raise ValueError(
+                "aggregation retry seconds must be positive and base must not exceed max"
+            )
         self._lock = threading.RLock()
         self._connection = sqlite3.connect(
             str(self.path) if self.path is not None else ":memory:",
@@ -78,51 +101,98 @@ class MultiEdgeEventAggregator:
             check_same_thread=False,
         )
         self._connection.row_factory = sqlite3.Row
-        self._connection.execute("PRAGMA busy_timeout=10000")
-        if self.path is not None:
-            self._connection.execute("PRAGMA journal_mode=WAL")
-            self._connection.execute("PRAGMA synchronous=FULL")
+        _configure_sqlite_connection(
+            self._connection,
+            enable_wal=self.path is not None,
+        )
         self._initialize()
 
     def _initialize(self) -> None:
-        with self._lock, self._connection:
-            self._connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS aggregation_groups (
-                    group_id TEXT PRIMARY KEY,
-                    scene TEXT NOT NULL,
-                    group_key TEXT NOT NULL,
-                    expected_members_json TEXT NOT NULL,
-                    minimum_members INTEGER NOT NULL,
-                    timeout_ms INTEGER NOT NULL,
-                    state TEXT NOT NULL CHECK(state IN ('waiting','inflight','completed')),
-                    first_received_at_ms INTEGER NOT NULL,
-                    deadline_at_ms INTEGER NOT NULL,
-                    updated_at_ms INTEGER NOT NULL,
-                    completion_reason TEXT NOT NULL DEFAULT '',
-                    result_json TEXT,
-                    last_error TEXT NOT NULL DEFAULT '',
-                    UNIQUE(scene, group_key)
-                )
-                """
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._initialize_locked()
+            except BaseException:
+                self._connection.rollback()
+                raise
+            else:
+                self._connection.commit()
+
+    def _initialize_locked(self) -> None:
+        """Create/migrate the schema while holding SQLite's write lock."""
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS aggregation_groups (
+                group_id TEXT PRIMARY KEY,
+                scene TEXT NOT NULL,
+                group_key TEXT NOT NULL,
+                expected_members_json TEXT NOT NULL,
+                minimum_members INTEGER NOT NULL,
+                timeout_ms INTEGER NOT NULL,
+                state TEXT NOT NULL CHECK(state IN ('waiting','inflight','completed')),
+                first_received_at_ms INTEGER NOT NULL,
+                deadline_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                completion_reason TEXT NOT NULL DEFAULT '',
+                result_revision INTEGER NOT NULL DEFAULT 0,
+                claimed_member_count INTEGER NOT NULL DEFAULT 0,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at_ms INTEGER NOT NULL DEFAULT 0,
+                result_json TEXT,
+                last_error TEXT NOT NULL DEFAULT '',
+                UNIQUE(scene, group_key)
             )
+            """
+        )
+        # Re-read only after BEGIN IMMEDIATE succeeds. Another process may have
+        # completed the same migration while this connection waited.
+        columns = {
+            str(row["name"])
+            for row in self._connection.execute(
+                "PRAGMA table_info(aggregation_groups)"
+            ).fetchall()
+        }
+        if "result_revision" not in columns:
             self._connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS aggregation_events (
-                    group_id TEXT NOT NULL,
-                    event_id TEXT NOT NULL UNIQUE,
-                    member TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    received_at_ms INTEGER NOT NULL,
-                    PRIMARY KEY(group_id, member),
-                    FOREIGN KEY(group_id) REFERENCES aggregation_groups(group_id)
-                )
-                """
+                "ALTER TABLE aggregation_groups "
+                "ADD COLUMN result_revision INTEGER NOT NULL DEFAULT 0"
             )
+        if "claimed_member_count" not in columns:
             self._connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_aggregation_state "
-                "ON aggregation_groups(state, deadline_at_ms)"
+                "ALTER TABLE aggregation_groups "
+                "ADD COLUMN claimed_member_count INTEGER NOT NULL DEFAULT 0"
             )
+        if "attempts" not in columns:
+            self._connection.execute(
+                "ALTER TABLE aggregation_groups "
+                "ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"
+            )
+        if "next_attempt_at_ms" not in columns:
+            self._connection.execute(
+                "ALTER TABLE aggregation_groups "
+                "ADD COLUMN next_attempt_at_ms INTEGER NOT NULL DEFAULT 0"
+            )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS aggregation_events (
+                group_id TEXT NOT NULL,
+                event_id TEXT NOT NULL UNIQUE,
+                member TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                received_at_ms INTEGER NOT NULL,
+                PRIMARY KEY(group_id, member),
+                FOREIGN KEY(group_id) REFERENCES aggregation_groups(group_id)
+            )
+            """
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_aggregation_state "
+            "ON aggregation_groups(state, deadline_at_ms)"
+        )
+        self._connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_aggregation_retry_ready "
+            "ON aggregation_groups(state, next_attempt_at_ms, deadline_at_ms)"
+        )
 
     @staticmethod
     def _serialize_event(event: SemanticEvent) -> str:
@@ -140,6 +210,7 @@ class MultiEdgeEventAggregator:
         group_id = stable_id("aggregation", event.scene, spec.key)
         now_ms = int(time.time() * 1000)
         expected_json = json.dumps(spec.expected_members, separators=(",", ":"))
+        serialized_event = self._serialize_event(event)
         with self._lock, self._connection:
             row = self._connection.execute(
                 "SELECT * FROM aggregation_groups WHERE group_id=?", (group_id,)
@@ -173,33 +244,56 @@ class MultiEdgeEventAggregator:
                     or int(row["timeout_ms"]) != spec.timeout_ms
                 ):
                     raise ValueError("aggregation group was reused with a different policy")
-                if str(row["state"]) == "completed":
-                    return self.get(group_id)
-
             existing = self._connection.execute(
-                "SELECT event_id FROM aggregation_events WHERE group_id=? AND member=?",
+                "SELECT event_id, payload_json FROM aggregation_events "
+                "WHERE group_id=? AND member=?",
                 (group_id, spec.member),
             ).fetchone()
-            if existing is not None and str(existing["event_id"]) != event.event_id:
-                raise ValueError(
-                    "aggregation member {} already submitted another event".format(
-                        spec.member
+            if existing is not None:
+                if str(existing["event_id"]) != event.event_id:
+                    raise ValueError(
+                        "aggregation member {} already submitted another event".format(
+                            spec.member
+                        )
                     )
-                )
+                if str(existing["payload_json"]) != serialized_event:
+                    raise IdempotencyConflictError(
+                        "aggregation event_id/member was already used for a "
+                        "different semantic event"
+                    )
+                # An exact retry is a no-op in every group state.  In
+                # particular, do not reopen a partial result or rewrite the
+                # original receive timestamp.
+                return self.get(group_id, submitted_event_id=event.event_id)
             reused_event = self._connection.execute(
-                "SELECT group_id, member FROM aggregation_events WHERE event_id=?",
+                "SELECT group_id, member, payload_json FROM aggregation_events "
+                "WHERE event_id=?",
                 (event.event_id,),
             ).fetchone()
             if (
                 reused_event is not None
                 and str(reused_event["group_id"]) != group_id
             ):
-                raise ValueError(
-                    "aggregation event {} already belongs to another group".format(
-                        event.event_id
-                    )
+                raise IdempotencyConflictError(
+                    "aggregation event_id was already used for another group"
                 )
-            self._connection.execute(
+            if reused_event is not None:
+                if (
+                    str(reused_event["member"]) != spec.member
+                    or str(reused_event["payload_json"]) != serialized_event
+                ):
+                    raise IdempotencyConflictError(
+                        "aggregation event_id was already used for a different "
+                        "cloud submission"
+                    )
+                return self.get(group_id, submitted_event_id=event.event_id)
+            if (
+                row is not None
+                and str(row["state"]) == "completed"
+                and str(row["completion_reason"]) == "all_expected_members"
+            ):
+                return self.get(group_id, submitted_event_id=event.event_id)
+            inserted = self._connection.execute(
                 """
                 INSERT OR IGNORE INTO aggregation_events(
                     group_id, event_id, member, payload_json, received_at_ms
@@ -209,15 +303,58 @@ class MultiEdgeEventAggregator:
                     group_id,
                     event.event_id,
                     spec.member,
-                    self._serialize_event(event),
+                    serialized_event,
                     now_ms,
                 ),
             )
-            self._connection.execute(
-                "UPDATE aggregation_groups SET updated_at_ms=? WHERE group_id=?",
-                (now_ms, group_id),
-            )
-        return self.get(group_id)
+            if inserted.rowcount != 1:
+                # This is only reachable when another aggregator process won a
+                # cross-process UNIQUE race after the checks above.  Re-read
+                # the winning row and apply the same exact-retry contract.
+                raced = self._connection.execute(
+                    "SELECT group_id, member, payload_json "
+                    "FROM aggregation_events WHERE event_id=?",
+                    (event.event_id,),
+                ).fetchone()
+                if (
+                    raced is None
+                    or str(raced["group_id"]) != group_id
+                    or str(raced["member"]) != spec.member
+                    or str(raced["payload_json"]) != serialized_event
+                ):
+                    raise IdempotencyConflictError(
+                        "aggregation event_id was concurrently used for a "
+                        "different cloud submission"
+                    )
+                return self.get(group_id, submitted_event_id=event.event_id)
+            if (
+                row is not None
+                and str(row["state"]) == "completed"
+                and str(row["completion_reason"]) != "all_expected_members"
+                and inserted.rowcount == 1
+            ):
+                # A timeout result is explicitly partial.  A previously missing
+                # member may reopen it so the cloud can issue a later, complete
+                # correction.  A retry from an already stored member leaves the
+                # partial result untouched.
+                self._connection.execute(
+                    """
+                    UPDATE aggregation_groups
+                    SET state='waiting', completion_reason='', updated_at_ms=?,
+                        claimed_member_count=0, attempts=0,
+                        next_attempt_at_ms=0, last_error=''
+                    WHERE group_id=? AND state='completed'
+                    """,
+                    (now_ms, group_id),
+                )
+            else:
+                self._connection.execute(
+                    "UPDATE aggregation_groups "
+                    "SET updated_at_ms=?, attempts=0, next_attempt_at_ms=0, "
+                    "last_error='' WHERE group_id=?",
+                    (now_ms, group_id),
+                )
+        return self.get(group_id, submitted_event_id=event.event_id)
 
     @staticmethod
     def _members(connection: sqlite3.Connection, group_id: str) -> List[str]:
@@ -235,6 +372,8 @@ class MultiEdgeEventAggregator:
         ).fetchone()
         if row is None or str(row["state"]) != "waiting":
             return None
+        if now_ms < int(row["next_attempt_at_ms"]):
+            return None
         members = self._members(self._connection, group_id)
         expected = json.loads(str(row["expected_members_json"]))
         complete = set(expected).issubset(set(members))
@@ -246,10 +385,11 @@ class MultiEdgeEventAggregator:
         updated = self._connection.execute(
             """
             UPDATE aggregation_groups
-            SET state='inflight', completion_reason=?, updated_at_ms=?, last_error=''
-            WHERE group_id=? AND state='waiting'
+            SET state='inflight', completion_reason=?, claimed_member_count=?,
+                updated_at_ms=?
+            WHERE group_id=? AND state='waiting' AND next_attempt_at_ms <= ?
             """,
-            (reason, now_ms, group_id),
+            (reason, len(members), now_ms, group_id, now_ms),
         )
         if updated.rowcount != 1:
             return None
@@ -265,6 +405,10 @@ class MultiEdgeEventAggregator:
             scene=str(row["scene"]),
             group_key=str(row["group_key"]),
             completion_reason=reason,
+            expected_members=list(expected),
+            received_members=list(members),
+            missing_members=sorted(set(expected) - set(members)),
+            result_revision=int(row["result_revision"]) + 1,
             events=[
                 SemanticEvent.from_dict(json.loads(str(item["payload_json"])))
                 for item in event_rows
@@ -284,10 +428,11 @@ class MultiEdgeEventAggregator:
             rows = self._connection.execute(
                 """
                 SELECT group_id FROM aggregation_groups
-                WHERE state='waiting' AND deadline_at_ms <= ?
-                ORDER BY deadline_at_ms LIMIT ?
+                WHERE state='waiting' AND next_attempt_at_ms <= ?
+                  AND (deadline_at_ms <= ? OR attempts > 0)
+                ORDER BY next_attempt_at_ms, deadline_at_ms LIMIT ?
                 """,
-                (now_ms, int(limit)),
+                (now_ms, now_ms, int(limit)),
             ).fetchall()
             for row in rows:
                 lease = self._claim(str(row["group_id"]), now_ms)
@@ -300,13 +445,38 @@ class MultiEdgeEventAggregator:
             raise ValueError("aggregation result must be an object")
         now_ms = int(time.time() * 1000)
         with self._lock, self._connection:
+            row = self._connection.execute(
+                "SELECT state, completion_reason, claimed_member_count "
+                "FROM aggregation_groups "
+                "WHERE group_id=?",
+                (str(group_id),),
+            ).fetchone()
+            if row is None or str(row["state"]) != "inflight":
+                raise ValueError(
+                    "aggregation group is not inflight: {}".format(group_id)
+                )
+            current_member_count = len(
+                self._members(self._connection, str(group_id))
+            )
+            members_arrived_during_claim = (
+                current_member_count > int(row["claimed_member_count"])
+            )
             updated = self._connection.execute(
                 """
                 UPDATE aggregation_groups
-                SET state='completed', result_json=?, updated_at_ms=?, last_error=''
+                SET state=?, result_revision=result_revision+1,
+                    completion_reason=?, claimed_member_count=0,
+                    attempts=0, next_attempt_at_ms=0,
+                    result_json=?, updated_at_ms=?, last_error=''
                 WHERE group_id=? AND state='inflight'
                 """,
                 (
+                    "waiting" if members_arrived_during_claim else "completed",
+                    (
+                        ""
+                        if members_arrived_during_claim
+                        else str(row["completion_reason"])
+                    ),
                     json.dumps(
                         result,
                         ensure_ascii=False,
@@ -321,17 +491,58 @@ class MultiEdgeEventAggregator:
                 raise ValueError("aggregation group is not inflight: {}".format(group_id))
 
     def release(self, group_id: str, error: str) -> None:
+        now_ms = int(time.time() * 1000)
         with self._lock, self._connection:
+            row = self._connection.execute(
+                "SELECT attempts, claimed_member_count FROM aggregation_groups "
+                "WHERE group_id=? AND state='inflight'",
+                (str(group_id),),
+            ).fetchone()
+            if row is None:
+                return
+            current_member_count = len(
+                self._members(self._connection, str(group_id))
+            )
+            members_arrived_during_claim = (
+                current_member_count > int(row["claimed_member_count"])
+            )
+            if members_arrived_during_claim:
+                # The failed lease did not contain the newly arrived evidence;
+                # let the richer revision run immediately once before applying
+                # backoff to any subsequent failure.
+                attempts = 0
+                next_attempt_at_ms = 0
+            else:
+                attempts = max(0, int(row["attempts"])) + 1
+                delay_seconds = min(
+                    self.retry_max_seconds,
+                    self.retry_base_seconds * (2.0 ** min(attempts - 1, 30)),
+                )
+                next_attempt_at_ms = now_ms + max(
+                    1, int(delay_seconds * 1000.0)
+                )
             self._connection.execute(
                 """
                 UPDATE aggregation_groups
-                SET state='waiting', last_error=?, updated_at_ms=?
+                SET state='waiting', claimed_member_count=0,
+                    attempts=?, next_attempt_at_ms=?,
+                    last_error=?, updated_at_ms=?
                 WHERE group_id=? AND state='inflight'
                 """,
-                (str(error)[:2000], int(time.time() * 1000), str(group_id)),
+                (
+                    attempts,
+                    next_attempt_at_ms,
+                    str(error)[:2000],
+                    now_ms,
+                    str(group_id),
+                ),
             )
 
-    def get(self, group_id: str) -> Dict[str, Any]:
+    def get(
+        self,
+        group_id: str,
+        submitted_event_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         key = str(group_id).strip()
         with self._lock:
             row = self._connection.execute(
@@ -340,24 +551,63 @@ class MultiEdgeEventAggregator:
             if row is None:
                 raise KeyError("aggregation group not found: {}".format(key))
             members = self._members(self._connection, key)
+            submitted_received_at_ms = None
+            if submitted_event_id is not None:
+                submitted_row = self._connection.execute(
+                    "SELECT received_at_ms FROM aggregation_events "
+                    "WHERE group_id=? AND event_id=?",
+                    (key, str(submitted_event_id)),
+                ).fetchone()
+                if submitted_row is not None:
+                    submitted_received_at_ms = int(
+                        submitted_row["received_at_ms"]
+                    )
         expected = json.loads(str(row["expected_members_json"]))
         result_json = row["result_json"]
-        return {
+        result = json.loads(str(result_json)) if result_json else None
+        missing_members = sorted(set(expected) - set(members))
+        state = str(row["state"])
+        completion_reason = str(row["completion_reason"])
+        evidence_complete = (
+            state == "completed"
+            and completion_reason == "all_expected_members"
+            and not missing_members
+        )
+        if state == "completed" and result_json:
+            finality = "final" if evidence_complete else "partial_final"
+        else:
+            finality = "pending"
+        global_confirmation = bool(
+            evidence_complete
+            and isinstance(result, dict)
+            and result.get("global_confirmation", False)
+        )
+        response = {
             "group_id": key,
             "scene": str(row["scene"]),
             "group_key": str(row["group_key"]),
-            "state": str(row["state"]),
+            "state": state,
             "expected_members": expected,
             "received_members": members,
-            "missing_members": sorted(set(expected) - set(members)),
+            "missing_members": missing_members,
+            "evidence_complete": evidence_complete,
+            "finality": finality,
+            "cloud_confirmed": global_confirmation,
+            "global_confirmation": global_confirmation,
+            "result_revision": int(row["result_revision"]),
             "minimum_members": int(row["minimum_members"]),
             "timeout_ms": int(row["timeout_ms"]),
             "first_received_at_ms": int(row["first_received_at_ms"]),
             "deadline_at_ms": int(row["deadline_at_ms"]),
-            "completion_reason": str(row["completion_reason"]),
-            "result": json.loads(str(result_json)) if result_json else None,
+            "completion_reason": completion_reason,
+            "result": result,
+            "attempts": int(row["attempts"]),
+            "next_attempt_at_ms": int(row["next_attempt_at_ms"]),
             "last_error": str(row["last_error"]),
         }
+        if submitted_received_at_ms is not None:
+            response["submitted_event_received_at_ms"] = submitted_received_at_ms
+        return response
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
@@ -372,6 +622,12 @@ class MultiEdgeEventAggregator:
                     "SELECT COUNT(*) AS count FROM aggregation_events"
                 ).fetchone()["count"]
             )
+            retry_waiting = int(
+                self._connection.execute(
+                    "SELECT COUNT(*) AS count FROM aggregation_groups "
+                    "WHERE state='waiting' AND attempts > 0"
+                ).fetchone()["count"]
+            )
         return {
             "path": str(self.path) if self.path is not None else ":memory:",
             "states": {
@@ -380,6 +636,7 @@ class MultiEdgeEventAggregator:
                 "completed": counts.get("completed", 0),
             },
             "event_count": event_count,
+            "retry_waiting": retry_waiting,
         }
 
     def close(self) -> None:

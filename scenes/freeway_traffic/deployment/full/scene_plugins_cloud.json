@@ -9,7 +9,8 @@
         "cloud_model_path": "scenes/freeway_traffic/assets/models/cloud_coordinator_topology_fused.joblib",
         "feature_codec_path": "scenes/freeway_traffic/assets/models/traffic_tree_feature_codec_topology_v1.npz",
         "topology_path": "scenes/freeway_traffic/assets/models/traffic_region_topology_metis4.json",
-        "policy_version": "traffic-1.10.0"
+        "cloud_llm_min_expected_gain": 0.05,
+        "policy_version": "traffic-1.11.0"
       }
     }
   ]

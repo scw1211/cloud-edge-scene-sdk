@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cloud-edge-scene-sdk"
-version = "0.13.0"
+version = "0.13.1"
 description = "Scene plugin and standardized Edge-Qwen adapter SDK"
 requires-python = ">=3.8"
 dependencies = ["jsonschema>=4.21,<5"]
