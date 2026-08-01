@@ -1,7 +1,7 @@
 """用途：按风险和不确定性选择语义摘要、压缩特征或局部原始证据。"""
 
 from dataclasses import asdict, dataclass
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 from cloud_edge_framework.contracts import EVIDENCE_LEVELS, Evidence, SemanticEvent
 
@@ -30,8 +30,23 @@ class EvidencePlanner:
     def __init__(self, uncertainty_threshold: float = 0.75) -> None:
         self.uncertainty_threshold = float(uncertainty_threshold)
 
-    def required_level(self, event: SemanticEvent, conflict_suspected: bool = False) -> str:
-        if conflict_suspected:
+    def required_level(
+        self,
+        event: SemanticEvent,
+        conflict_suspected: bool = False,
+        scene_policy: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        policy = dict(scene_policy or {})
+        policy_level = policy.get("required_level")
+        if policy_level is not None:
+            if not isinstance(policy_level, str) or policy_level not in LEVEL_INDEX:
+                raise ValueError(
+                    "scene evidence policy required_level must be one of {}".format(
+                        list(EVIDENCE_LEVELS)
+                    )
+                )
+            inferred = policy_level
+        elif conflict_suspected:
             inferred = "raw"
         elif (
             event.risk.level in {"high", "severe"}
@@ -57,8 +72,14 @@ class EvidencePlanner:
             else inferred
         )
 
-    def plan(self, event: SemanticEvent, conflict_suspected: bool = False) -> EvidencePlan:
-        required = self.required_level(event, conflict_suspected)
+    def plan(
+        self,
+        event: SemanticEvent,
+        conflict_suspected: bool = False,
+        scene_policy: Optional[Dict[str, Any]] = None,
+    ) -> EvidencePlan:
+        policy = dict(scene_policy or {})
+        required = self.required_level(event, conflict_suspected, policy)
         required_index = LEVEL_INDEX[required]
         included_levels = list(EVIDENCE_LEVELS[: required_index + 1])
         selected: List[Evidence] = [
@@ -74,7 +95,9 @@ class EvidencePlanner:
         }
         explicit_level = event.metadata.get("minimum_evidence_level")
         reason = reason_by_level[required]
-        if explicit_level == required:
+        if policy.get("reason"):
+            reason = str(policy["reason"])
+        elif explicit_level == required:
             reason = "the scene policy requires {} evidence for cloud verification".format(
                 required
             )

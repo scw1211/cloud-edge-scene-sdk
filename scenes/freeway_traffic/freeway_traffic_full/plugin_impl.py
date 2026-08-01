@@ -26,6 +26,14 @@ from traffic_system.scene_event import TRAFFIC_DATA_SCHEMA_ID, TRAFFIC_EVENT_TYP
 
 
 RISK_PRIORITY = {"low": 0, "medium": 1, "high": 2, "severe": 3}
+ACTION_SAFETY_RISK = {
+    "traffic_advisory": "low",
+    "variable_speed_limit": "medium",
+    "ramp_metering": "medium",
+    "regional_coordination": "high",
+    "reroute": "high",
+}
+RISK_DEFAULT_SCORE = {"low": 0.2, "medium": 0.5, "high": 0.8, "severe": 1.0}
 
 
 def _json_size(value: Any) -> int:
@@ -47,6 +55,175 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _bounded_float(
+    value: Any,
+    default: float = 0.0,
+    low: float = 0.0,
+    high: float = 1.0,
+) -> float:
+    return max(low, min(high, _safe_float(value, default)))
+
+
+def _operational_safety_risk(
+    payload: Dict[str, Any],
+    candidate_actions: Sequence[Action],
+) -> Dict[str, Any]:
+    """Describe action-consequence risk without reusing traffic congestion severity."""
+    action_types = list(dict.fromkeys(action.action_type for action in candidate_actions))
+    policy_level = max(
+        (ACTION_SAFETY_RISK.get(name, "low") for name in action_types),
+        key=RISK_PRIORITY.__getitem__,
+        default="low",
+    )
+    raw = payload.get("operational_safety_risk")
+    if raw is not None and not isinstance(raw, dict):
+        raise ValueError("traffic operational_safety_risk must be an object")
+    if isinstance(raw, dict):
+        declared_level = str(raw.get("level", "low"))
+        if declared_level not in RISK_PRIORITY:
+            raise ValueError("traffic operational safety risk level is invalid")
+        level = max(
+            (policy_level, declared_level), key=RISK_PRIORITY.__getitem__
+        )
+        score = _bounded_float(raw.get("score"), RISK_DEFAULT_SCORE[level])
+        score = max(score, RISK_DEFAULT_SCORE[level])
+        source = "scene_input_with_action_policy_floor"
+        declared_source = str(raw.get("source", "scene_input"))
+    else:
+        declared_level = None
+        declared_source = None
+        level = policy_level
+        score = RISK_DEFAULT_SCORE[level]
+        source = "candidate_action_consequence_policy"
+    confirmation = "full_cloud" if level in {"high", "severe"} else "local_policy"
+    if level == "low":
+        confirmation = "local"
+    return {
+        "level": level,
+        "score": round(score, 6),
+        "source": source,
+        "declared_level": declared_level,
+        "declared_source": declared_source,
+        "policy_floor_level": policy_level,
+        "candidate_action_types": action_types,
+        "required_confirmation": confirmation,
+    }
+
+
+def _escalation_expected_gain(payload: Dict[str, Any]) -> Dict[str, Any]:
+    raw = payload.get("escalation_expected_gain")
+    if raw is None:
+        return {
+            "edge_qwen": 0.0,
+            "cloud": 0.0,
+            "source": "not_estimated",
+        }
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        gain = _bounded_float(raw, 0.0, -1.0, 1.0)
+        return {"edge_qwen": gain, "cloud": gain, "source": "scene_input"}
+    if not isinstance(raw, dict):
+        raise ValueError("traffic escalation_expected_gain must be numeric or an object")
+    return {
+        "edge_qwen": _bounded_float(raw.get("edge_qwen"), 0.0, -1.0, 1.0),
+        "cloud": _bounded_float(raw.get("cloud"), 0.0, -1.0, 1.0),
+        "source": str(raw.get("source", "scene_input")),
+    }
+
+
+def _model_uncertainty(
+    confidence: float,
+    prediction_set: Sequence[str],
+    student_confidence_threshold: float,
+) -> Dict[str, Any]:
+    normalized_set = [str(value) for value in prediction_set]
+    ambiguity = 0.0 if len(normalized_set) <= 1 else 1.0 - 1.0 / len(normalized_set)
+    score = max(1.0 - confidence, ambiguity)
+    return {
+        "score": round(_bounded_float(score), 6),
+        "perception_confidence": round(_bounded_float(confidence), 6),
+        "student_confidence": None,
+        "student_confidence_threshold": round(
+            _bounded_float(student_confidence_threshold), 6
+        ),
+        "prediction_set": normalized_set,
+        "prediction_set_size": len(normalized_set),
+        "student_rule_disagreement": None,
+        "defer_recommended": False,
+        "requires_review": bool(
+            confidence < student_confidence_threshold or len(normalized_set) > 1
+        ),
+        "source": "perception_calibration",
+    }
+
+
+def _cloud_llm_review_policy(
+    payload: Dict[str, Any],
+    model_uncertainty: Dict[str, Any],
+    expected_gain: Dict[str, Any],
+    min_expected_gain: float,
+) -> Dict[str, Any]:
+    explicit = bool(payload.get("cloud_llm_review_requested", False))
+    uncertainty_requires_review = bool(
+        model_uncertainty.get("requires_review", False)
+    )
+    source = str(expected_gain.get("source", "not_estimated"))
+    cloud_gain = _bounded_float(
+        expected_gain.get("cloud"), 0.0, -1.0, 1.0
+    )
+    gain_qualified = (
+        source != "not_estimated" and cloud_gain >= min_expected_gain
+    )
+    eligible = explicit or (uncertainty_requires_review and gain_qualified)
+    if explicit:
+        reason = "traffic_explicit_cloud_llm_review"
+    elif not uncertainty_requires_review:
+        reason = "traffic_no_model_uncertainty"
+    elif source == "not_estimated":
+        reason = "traffic_cloud_gain_not_estimated"
+    elif not gain_qualified:
+        reason = "traffic_cloud_gain_below_threshold"
+    else:
+        reason = "traffic_uncertainty_with_cloud_gain"
+    return {
+        "eligible": eligible,
+        "reason": reason,
+        "explicit_requested": explicit,
+        "model_uncertainty_requires_review": uncertainty_requires_review,
+        "expected_gain": round(cloud_gain, 6),
+        "expected_gain_source": source,
+        "minimum_expected_gain": round(min_expected_gain, 6),
+        "legacy_risk_trigger_used": False,
+    }
+
+
+def _evidence_completeness(
+    payload: Dict[str, Any],
+    evidence: Sequence[Evidence],
+    expected_members: Sequence[str],
+    aggregation_member: str,
+    minimum_level: str,
+) -> Dict[str, Any]:
+    levels = list(dict.fromkeys(item.level for item in evidence))
+    required_available = minimum_level in levels
+    members = [str(value) for value in expected_members]
+    observed = [aggregation_member] if aggregation_member in members else []
+    aggregation_complete = bool(members) and len(observed) == len(members)
+    declared = payload.get("evidence_completeness")
+    if declared is not None and not isinstance(declared, dict):
+        raise ValueError("traffic evidence_completeness must be an object")
+    return {
+        "available_levels": levels,
+        "minimum_required_level": minimum_level,
+        "minimum_level_available": required_available,
+        "expected_member_count": len(members),
+        "observed_member_count": len(observed),
+        "aggregation_complete": aggregation_complete,
+        "complete": required_available and aggregation_complete,
+        "source": "edge_evidence_inventory",
+        "declared": dict(declared) if isinstance(declared, dict) else {},
+    }
 
 
 def _traffic_action(action: Dict[str, Any], region_id: str) -> Action:
@@ -101,6 +278,8 @@ class TrafficPlugin(ScenePlugin):
         edge_llm_deadline_probe_interval: int = 0,
         edge_llm_runtime_failure_cooldown_seconds: float = 5.0,
         policy_version: str = "traffic-1.9.0",
+        edge_llm_min_expected_gain: float = 0.05,
+        cloud_llm_min_expected_gain: float = 0.05,
     ) -> None:
         self.cloud_model_path = Path(cloud_model_path) if cloud_model_path is not None else None
         self.edge_student_path = (
@@ -113,6 +292,9 @@ class TrafficPlugin(ScenePlugin):
             Path(feature_codec_path) if feature_codec_path is not None else None
         )
         self.topology_path = Path(topology_path) if topology_path is not None else None
+        self.cloud_llm_min_expected_gain = float(cloud_llm_min_expected_gain)
+        if not -1.0 <= self.cloud_llm_min_expected_gain <= 1.0:
+            raise ValueError("cloud_llm_min_expected_gain must be in [-1, 1]")
         self.policy_version = policy_version
         self._cloud_model: Optional[Dict[str, Any]] = None
         self._edge_student: Optional[Dict[str, Any]] = None
@@ -127,6 +309,7 @@ class TrafficPlugin(ScenePlugin):
             mode=edge_llm_mode,
             min_risk_level=edge_llm_min_risk_level,
             student_confidence_threshold=edge_llm_student_confidence_threshold,
+            min_expected_gain=edge_llm_min_expected_gain,
             deadline_margin_ms=edge_llm_deadline_margin_ms,
             deadline_probe_interval=edge_llm_deadline_probe_interval,
             runtime_failure_cooldown_seconds=edge_llm_runtime_failure_cooldown_seconds,
@@ -236,7 +419,7 @@ class TrafficPlugin(ScenePlugin):
         )
         if risk_level not in RISK_PRIORITY or max_node_risk_level not in RISK_PRIORITY:
             raise ValueError("traffic risk levels must be low, medium, high or severe")
-        operational_risk_level = max(
+        legacy_risk_level = max(
             (risk_level, max_node_risk_level),
             key=RISK_PRIORITY.__getitem__,
         )
@@ -250,7 +433,7 @@ class TrafficPlugin(ScenePlugin):
             for node in top_nodes
             if isinstance(node, dict)
         ]
-        operational_risk_score = max([risk_score] + node_risk_scores)
+        legacy_risk_score = max([risk_score] + node_risk_scores)
         calibration = summary.get("region_risk_calibration", {})
         if not isinstance(calibration, dict):
             calibration = {}
@@ -340,9 +523,45 @@ class TrafficPlugin(ScenePlugin):
             "sequence": "feature",
             "raw": "raw",
         }
-        minimum_evidence_level = evidence_level_by_upload.get(upload_level, "feature")
-        if minimum_evidence_level == "summary":
-            minimum_evidence_level = "feature"
+        # A compact semantic summary is the normal data plane. Feature/raw evidence
+        # is an explicit escalation, never an implicit consequence of congestion.
+        minimum_evidence_level = evidence_level_by_upload.get(upload_level, "summary")
+
+        calibrated_confidence = max(
+            0.0,
+            min(
+                1.0,
+                _safe_float(calibration.get("calibrated_confidence"), confidence),
+            ),
+        )
+        regional_state = {
+            "level": risk_level,
+            "score": round(max(0.0, min(1.0, risk_score)), 6),
+            "confidence": round(max(0.0, min(1.0, confidence)), 6),
+            "max_node_level": max_node_risk_level,
+            "max_node_score": round(max(node_risk_scores, default=0.0), 6),
+            "source": "region_summary",
+        }
+        safety_risk = _operational_safety_risk(payload, actions)
+        model_uncertainty = _model_uncertainty(
+            calibrated_confidence,
+            [str(level) for level in prediction_set],
+            self._edge_llm.student_confidence_threshold,
+        )
+        expected_gain = _escalation_expected_gain(payload)
+        cloud_llm_review_policy = _cloud_llm_review_policy(
+            payload,
+            model_uncertainty,
+            expected_gain,
+            self.cloud_llm_min_expected_gain,
+        )
+        evidence_completeness = _evidence_completeness(
+            payload,
+            evidence,
+            aggregation_members,
+            aggregation_member,
+            minimum_evidence_level,
+        )
 
         return SemanticEvent(
             event_id=event_id,
@@ -374,11 +593,11 @@ class TrafficPlugin(ScenePlugin):
                 },
             ),
             risk=Risk(
-                level=operational_risk_level,
-                score=max(0.0, min(1.0, operational_risk_score)),
+                level=legacy_risk_level,
+                score=max(0.0, min(1.0, legacy_risk_score)),
             ),
             uncertainty=Uncertainty(
-                confidence=max(0.0, min(1.0, _safe_float(calibration.get("calibrated_confidence"), confidence))),
+                confidence=calibrated_confidence,
                 calibrated=bool(calibration),
                 prediction_set=[str(level) for level in prediction_set],
                 method=str(calibration.get("method", "raw_model_confidence")),
@@ -403,9 +622,17 @@ class TrafficPlugin(ScenePlugin):
                 "ingress_dataschema": envelope.dataschema,
                 "reference_edge_decision": str(reference.get("decision", "monitor")),
                 "regional_risk_level": risk_level,
-                "operational_risk_level": operational_risk_level,
+                "operational_risk_level": legacy_risk_level,
                 "regional_risk_score": risk_score,
-                "operational_risk_score": operational_risk_score,
+                "operational_risk_score": legacy_risk_score,
+                "traffic_semantics_version": "2.0",
+                "regional_state": regional_state,
+                "operational_safety_risk": safety_risk,
+                "model_uncertainty": model_uncertainty,
+                "escalation_expected_gain": expected_gain,
+                "cloud_llm_review_policy": cloud_llm_review_policy,
+                "evidence_completeness": evidence_completeness,
+                "legacy_risk_semantics": "max(regional_state,max_node_state)",
                 "transport_include_scene_payload": False,
                 "cloud_review_requested": cloud_review_requested,
                 "cloud_review_reason": "traffic_explicit_cloud_review"
@@ -552,13 +779,25 @@ class TrafficPlugin(ScenePlugin):
                     or other.scope.window_end_ms < event.scope.window_start_ms
                 ):
                     continue
+                other_regional_state = other.metadata.get("regional_state", {})
+                other_regional_state = (
+                    dict(other_regional_state)
+                    if isinstance(other_regional_state, dict)
+                    else {}
+                )
                 neighbors.append(
                     {
                         "event_id": other.event_id,
                         "edge_id": other.edge_id,
                         "region_id": other.scope.region_id,
-                        "risk_level": other.risk.level,
-                        "risk_score": other.risk.score,
+                        "risk_level": str(
+                            other_regional_state.get("level", other.prediction.label)
+                        ),
+                        "risk_score": _safe_float(
+                            other_regional_state.get(
+                                "score", other.prediction.confidence
+                            )
+                        ),
                         "confidence": other.uncertainty.confidence,
                     }
                 )
@@ -789,6 +1028,7 @@ class TrafficPlugin(ScenePlugin):
             if self._topology is not None
             else None,
             "policy_version": self.policy_version,
+            "cloud_llm_min_expected_gain": self.cloud_llm_min_expected_gain,
             "edge_llm": self._edge_llm.health(),
         }
 
@@ -797,23 +1037,11 @@ class TrafficPlugin(ScenePlugin):
         event: SemanticEvent,
         student_decision: Any,
     ) -> Any:
-        if self.defer_gate_path is None:
-            return student_decision
         from traffic_system.decision_utils import (
             DECISION_CLASSES,
             extract_feature_vector,
             rule_teacher_decision,
         )
-        from traffic_system.defer_gate import (
-            GATE_CLASSES,
-            build_gate_features,
-            predict_defer_gate,
-        )
-
-        gate = self._load_defer_gate()
-        base_vector, feature_names = extract_feature_vector(event.scene_payload)
-        if list(feature_names) != list(gate["base_feature_names"]):
-            raise ValueError("traffic defer gate base feature schema mismatch")
         rule = rule_teacher_decision(
             event.scene_payload,
             decision_source="traffic_local_safety_policy",
@@ -822,48 +1050,129 @@ class TrafficPlugin(ScenePlugin):
         rule_name = str(rule["decision"])
         if student_name not in DECISION_CLASSES or rule_name not in DECISION_CLASSES:
             raise ValueError("traffic defer gate received an unknown decision class")
-        gate_features = build_gate_features(
-            np.asarray([base_vector], dtype=np.float64),
-            np.asarray([DECISION_CLASSES.index(rule_name)], dtype=np.int64),
-            np.asarray([DECISION_CLASSES.index(student_name)], dtype=np.int64),
-            np.asarray([student_decision.confidence], dtype=np.float64),
-        )
-        choices, confidences = predict_defer_gate(gate_features, gate)
-        choice = GATE_CLASSES[int(choices[0])]
+        student_confidence = float(student_decision.confidence)
+        student_available = self.edge_student_path is not None
+        choice = "edge_student"
+        gate_confidence: Optional[float] = None
         selected = student_decision
-        if choice in {"local_rule", "defer_cloud"}:
-            actions = [
-                self._attach_boundary_resources(
-                    _traffic_action(action, event.scope.region_id),
-                    event.scope.region_id,
-                )
-                for action in rule.get("actions", [])
-            ]
-            selected = build_decision(
-                event=event,
-                decision=rule_name,
-                actions=actions,
-                confidence=_safe_float(
-                    rule.get("confidence"), event.prediction.confidence
-                ),
-                reason=str(rule.get("reason", "traffic local safety policy")),
-                source=str(rule.get("decision_source", "traffic_local_safety_policy")),
-                policy_version=self.policy_version,
+        if self.defer_gate_path is not None:
+            from traffic_system.defer_gate import (
+                GATE_CLASSES,
+                build_gate_features,
+                predict_defer_gate,
             )
+
+            gate = self._load_defer_gate()
+            base_vector, feature_names = extract_feature_vector(event.scene_payload)
+            if list(feature_names) != list(gate["base_feature_names"]):
+                raise ValueError("traffic defer gate base feature schema mismatch")
+            gate_features = build_gate_features(
+                np.asarray([base_vector], dtype=np.float64),
+                np.asarray([DECISION_CLASSES.index(rule_name)], dtype=np.int64),
+                np.asarray([DECISION_CLASSES.index(student_name)], dtype=np.int64),
+                np.asarray([student_confidence], dtype=np.float64),
+            )
+            choices, confidences = predict_defer_gate(gate_features, gate)
+            choice = GATE_CLASSES[int(choices[0])]
+            gate_confidence = float(confidences[0])
+            if choice in {"local_rule", "defer_cloud"}:
+                actions = [
+                    self._attach_boundary_resources(
+                        _traffic_action(action, event.scope.region_id),
+                        event.scope.region_id,
+                    )
+                    for action in rule.get("actions", [])
+                ]
+                selected = build_decision(
+                    event=event,
+                    decision=rule_name,
+                    actions=actions,
+                    confidence=_safe_float(
+                        rule.get("confidence"), event.prediction.confidence
+                    ),
+                    reason=str(rule.get("reason", "traffic local safety policy")),
+                    source=str(
+                        rule.get(
+                            "decision_source", "traffic_local_safety_policy"
+                        )
+                    ),
+                    policy_version=self.policy_version,
+                )
+
+        disagreement = student_available and student_name != rule_name
+        uncertainty = event.metadata.get("model_uncertainty", {})
+        uncertainty = dict(uncertainty) if isinstance(uncertainty, dict) else {}
+        prediction_set = uncertainty.get(
+            "prediction_set", event.uncertainty.prediction_set
+        )
+        prediction_set = (
+            [str(value) for value in prediction_set]
+            if isinstance(prediction_set, list)
+            else list(event.uncertainty.prediction_set)
+        )
+        low_student_confidence = bool(
+            student_available
+            and student_confidence < self._edge_llm.student_confidence_threshold
+        )
+        defer_recommended = choice == "defer_cloud"
+        uncertainty.update(
+            {
+                "score": round(
+                    max(
+                        _bounded_float(uncertainty.get("score"), 0.0),
+                        1.0 - student_confidence if student_available else 0.0,
+                    ),
+                    6,
+                ),
+                "student_available": student_available,
+                "student_confidence": round(student_confidence, 6)
+                if student_available
+                else None,
+                "student_confidence_threshold": round(
+                    self._edge_llm.student_confidence_threshold, 6
+                ),
+                "student_low_confidence": low_student_confidence,
+                "prediction_set": prediction_set,
+                "prediction_set_size": len(prediction_set),
+                "student_rule_disagreement": disagreement,
+                "defer_recommended": defer_recommended,
+                "requires_review": bool(
+                    low_student_confidence
+                    or len(prediction_set) > 1
+                    or disagreement
+                    or defer_recommended
+                ),
+                "source": "student_rule_defer_signals",
+            }
+        )
         metadata = dict(selected.metadata)
         metadata.update(
             {
-                "traffic_selective_defer_enabled": True,
+                "traffic_selective_defer_enabled": self.defer_gate_path is not None,
                 "traffic_defer_gate_choice": choice,
-                "traffic_defer_gate_confidence": round(float(confidences[0]), 6),
-                "traffic_defer_recommended": choice == "defer_cloud",
+                "traffic_defer_gate_confidence": round(gate_confidence, 6)
+                if gate_confidence is not None
+                else None,
+                "traffic_defer_recommended": defer_recommended,
                 "traffic_routing_risk_level": str(
                     event.metadata.get(
                         "regional_risk_level", event.prediction.label
                     )
                 ),
                 "traffic_student_candidate_decision": student_name,
+                "traffic_student_candidate_confidence": round(
+                    student_confidence, 6
+                )
+                if student_available
+                else None,
                 "traffic_rule_candidate_decision": rule_name,
+                "traffic_student_rule_disagreement": disagreement,
+                "model_uncertainty": uncertainty,
+                "escalation_expected_gain": dict(
+                    event.metadata.get("escalation_expected_gain", {})
+                )
+                if isinstance(event.metadata.get("escalation_expected_gain"), dict)
+                else {},
             }
         )
         return replace(selected, metadata=metadata)
@@ -888,12 +1197,161 @@ class TrafficPlugin(ScenePlugin):
             "source": "traffic_defer_gate",
         }
 
+    def cloud_submission_metadata(
+        self,
+        event: SemanticEvent,
+        local_decision: Any,
+    ) -> Dict[str, Any]:
+        """Carry Student/defer uncertainty into cloud routing and review policy."""
+        event_uncertainty = event.metadata.get("model_uncertainty", {})
+        event_uncertainty = (
+            dict(event_uncertainty) if isinstance(event_uncertainty, dict) else {}
+        )
+        local_uncertainty = local_decision.metadata.get("model_uncertainty", {})
+        local_uncertainty = (
+            dict(local_uncertainty) if isinstance(local_uncertainty, dict) else {}
+        )
+        uncertainty = {**event_uncertainty, **local_uncertainty}
+        local_gain = local_decision.metadata.get("escalation_expected_gain")
+        event_gain = event.metadata.get("escalation_expected_gain", {})
+        expected_gain = (
+            dict(local_gain)
+            if isinstance(local_gain, dict)
+            else dict(event_gain)
+            if isinstance(event_gain, dict)
+            else _escalation_expected_gain(event.scene_payload)
+        )
+        return {
+            "model_uncertainty": uncertainty,
+            "escalation_expected_gain": expected_gain,
+            "cloud_llm_review_policy": _cloud_llm_review_policy(
+                event.scene_payload,
+                uncertainty,
+                expected_gain,
+                self.cloud_llm_min_expected_gain,
+            ),
+        }
+
+    def evidence_advice(
+        self,
+        event: SemanticEvent,
+        local_decision: Any,
+        conflict_suspected: bool = False,
+    ) -> Dict[str, Any]:
+        """Choose traffic evidence independently from the legacy congestion risk."""
+        explicit_hint = bool(event.metadata.get("evidence_upload_hint", False))
+        explicit_level = str(
+            event.metadata.get("evidence_upload_level_hint", "")
+        ).strip().lower()
+        level_by_hint = {
+            "summary": "summary",
+            "feature": "feature",
+            "regional_context": "feature",
+            "sequence": "feature",
+            "raw": "raw",
+        }
+        if explicit_hint or explicit_level:
+            return {
+                "required_level": level_by_hint.get(explicit_level, "feature"),
+                "reason": "traffic_explicit_upload_hint",
+            }
+
+        completeness = event.metadata.get("evidence_completeness", {})
+        completeness = (
+            dict(completeness) if isinstance(completeness, dict) else {}
+        )
+        declared = completeness.get("declared", {})
+        declared = dict(declared) if isinstance(declared, dict) else {}
+        declared_level = str(declared.get("required_level", "")).strip().lower()
+        if declared_level in level_by_hint:
+            return {
+                "required_level": level_by_hint[declared_level],
+                "reason": "traffic_declared_evidence_requirement",
+            }
+        if not bool(completeness.get("minimum_level_available", True)):
+            return {
+                "required_level": "feature",
+                "reason": "traffic_required_evidence_missing",
+            }
+
+        event_uncertainty = event.metadata.get("model_uncertainty", {})
+        event_uncertainty = (
+            dict(event_uncertainty) if isinstance(event_uncertainty, dict) else {}
+        )
+        decision_uncertainty = getattr(local_decision, "metadata", {}).get(
+            "model_uncertainty", {}
+        )
+        decision_uncertainty = (
+            dict(decision_uncertainty)
+            if isinstance(decision_uncertainty, dict)
+            else {}
+        )
+        uncertainty = {**event_uncertainty, **decision_uncertainty}
+        if bool(uncertainty.get("requires_review", False)):
+            return {
+                "required_level": "feature",
+                "reason": "traffic_model_uncertainty",
+            }
+        if conflict_suspected:
+            return {
+                "required_level": "feature",
+                "reason": "traffic_action_conflict_suspected",
+            }
+        if bool(event.metadata.get("cloud_review_requested", False)):
+            return {
+                "required_level": "feature",
+                "reason": "traffic_explicit_cloud_review",
+            }
+        return {
+            "required_level": "summary",
+            "reason": "traffic_complete_summary_default",
+        }
+
     def _ensure_operational_safety(
         self,
         event: SemanticEvent,
         decision: Any,
     ) -> Any:
-        if RISK_PRIORITY[event.risk.level] < RISK_PRIORITY["high"]:
+        safety_risk = event.metadata.get("operational_safety_risk", {})
+        safety_risk = dict(safety_risk) if isinstance(safety_risk, dict) else {}
+        event_safety_level = str(safety_risk.get("level", event.risk.level))
+        if event_safety_level not in RISK_PRIORITY:
+            raise ValueError("traffic operational safety risk level is invalid")
+        decision_action_types = list(
+            dict.fromkeys(action.action_type for action in decision.actions)
+        )
+        if decision.decision in ACTION_SAFETY_RISK:
+            decision_action_types.append(decision.decision)
+        decision_safety_level = max(
+            (
+                ACTION_SAFETY_RISK.get(action_type, "low")
+                for action_type in decision_action_types
+            ),
+            key=RISK_PRIORITY.__getitem__,
+            default="low",
+        )
+        safety_level = max(
+            (event_safety_level, decision_safety_level),
+            key=RISK_PRIORITY.__getitem__,
+        )
+        effective_safety_risk = {
+            **safety_risk,
+            "level": safety_level,
+            "score": max(
+                _bounded_float(safety_risk.get("score"), 0.0),
+                RISK_DEFAULT_SCORE[safety_level],
+            ),
+            "decision_action_types": decision_action_types,
+            "decision_policy_floor_level": decision_safety_level,
+        }
+        decision = replace(
+            decision,
+            metadata={
+                **decision.metadata,
+                "operational_safety_risk": effective_safety_risk,
+            },
+        )
+        if RISK_PRIORITY[safety_level] < RISK_PRIORITY["high"]:
             return decision
         network_available = bool(
             event.metadata.get("edge_runtime_network_available", True)
@@ -929,6 +1387,10 @@ class TrafficPlugin(ScenePlugin):
         if controls:
             selected_actions.append(max(controls, key=lambda action: action.priority))
         if not selected_actions:
+            regional_state = event.metadata.get("regional_state", {})
+            regional_state = (
+                dict(regional_state) if isinstance(regional_state, dict) else {}
+            )
             selected_actions.append(
                 Action(
                     action_type="traffic_advisory",
@@ -936,7 +1398,9 @@ class TrafficPlugin(ScenePlugin):
                     resource_ids=[event.scope.entity_id],
                     parameters={
                         "strategy": "issue_congestion_warning",
-                        "warning_level": event.risk.level,
+                        "warning_level": str(
+                            regional_state.get("level", event.prediction.label)
+                        ),
                     },
                     reason="Operational risk requires an immediate local warning.",
                     priority=30,
@@ -967,6 +1431,10 @@ class TrafficPlugin(ScenePlugin):
                 "safety_floor_previous_decision": decision.decision,
                 "safety_floor_previous_source": previous_source,
                 "safety_floor_network_available": network_available,
+                "operational_safety_risk_level": safety_level,
+                "operational_safety_risk_source": safety_risk.get(
+                    "source", "legacy_event_risk_fallback"
+                ),
             }
         )
         return replace(safe_decision, metadata=metadata)
@@ -1006,7 +1474,11 @@ class TrafficPlugin(ScenePlugin):
                     or key.startswith("traffic_routing_")
                     or key in {
                         "traffic_student_candidate_decision",
+                        "traffic_student_candidate_confidence",
                         "traffic_rule_candidate_decision",
+                        "traffic_student_rule_disagreement",
+                        "model_uncertainty",
+                        "escalation_expected_gain",
                     }
                 }
                 decision = self._edge_llm.decide(event, decision, self.policy_version)

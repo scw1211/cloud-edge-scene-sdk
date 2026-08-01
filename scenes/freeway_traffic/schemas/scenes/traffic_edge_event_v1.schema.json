@@ -86,6 +86,29 @@
          ],
          "type" : "object"
       },
+      "operationalSafetyRisk" : {
+         "additionalProperties" : true,
+         "properties" : {
+            "level" : {
+               "$ref" : "#/$defs/riskLevel"
+            },
+            "score" : {
+               "$ref" : "#/$defs/unitScore"
+            },
+            "source" : {
+               "type" : "string"
+            }
+         },
+         "required" : [
+            "level"
+         ],
+         "type" : "object"
+      },
+      "expectedGain" : {
+         "maximum" : 1,
+         "minimum" : -1,
+         "type" : "number"
+      },
       "unitScore" : {
          "maximum" : 1,
          "minimum" : 0,
@@ -101,6 +124,9 @@
       },
       "control_capabilities" : {
          "type" : "object"
+      },
+      "cloud_llm_review_requested" : {
+         "type" : "boolean"
       },
       "dataset" : {
          "minLength" : 1,
@@ -125,6 +151,34 @@
       "model" : {
          "minLength" : 1,
          "type" : "string"
+      },
+      "operational_safety_risk" : {
+         "$ref" : "#/$defs/operationalSafetyRisk"
+      },
+      "escalation_expected_gain" : {
+         "oneOf" : [
+            {
+               "$ref" : "#/$defs/expectedGain"
+            },
+            {
+               "additionalProperties" : true,
+               "properties" : {
+                  "cloud" : {
+                     "$ref" : "#/$defs/expectedGain"
+                  },
+                  "edge_qwen" : {
+                     "$ref" : "#/$defs/expectedGain"
+                  },
+                  "source" : {
+                     "type" : "string"
+                  }
+               },
+               "type" : "object"
+            }
+         ]
+      },
+      "evidence_completeness" : {
+         "type" : "object"
       },
       "prediction_horizon_minutes" : {
          "minimum" : 1,

@@ -15,7 +15,11 @@ from cloud_edge_framework.contracts import SemanticEvent, build_decision
 from cloud_edge_framework.event_envelope import SceneEventEnvelope
 from cloud_edge_framework.plugins.base import ScenePlugin
 from cloud_edge_framework.registry import SceneRegistry
-from cloud_edge_framework.reliability import SQLiteIdempotencyStore, SQLiteOutbox
+from cloud_edge_framework.reliability import (
+    IdempotencyConflictError,
+    SQLiteIdempotencyStore,
+    SQLiteOutbox,
+)
 from cloud_edge_framework.review_tracking import ReviewLifecycleStore
 from cloud_edge_framework.runtime import CloudRuntime, EdgeRuntime
 from cloud_edge_framework.scheduling import NetworkSnapshot
@@ -255,7 +259,7 @@ def run_matrix() -> Dict[str, Any]:
         passed = (
             result["local_decision"]["status"] == "provisional"
             and result["final_decision"]["route"] == "local_autonomy"
-            and result["final_decision"]["status"] == "queued"
+            and result["final_decision"]["status"] == "provisional"
             and result["review"]["state"] == "queued"
             and outbox.count() == 1
             and authorization["immediate_action_types"] == []
@@ -296,7 +300,7 @@ def run_matrix() -> Dict[str, Any]:
         passed = (
             result["schedule"]["route"] == "cloud_sync"
             and result["final_decision"]["route"] == "local_autonomy"
-            and result["final_decision"]["status"] == "queued"
+            and result["final_decision"]["status"] == "provisional"
             and result["review"]["state"] == "queued"
             and failing_cloud.commit_count == 0
             and outbox.count() == 1
@@ -482,13 +486,27 @@ def run_matrix() -> Dict[str, Any]:
         ]
         for item in ordered_inputs:
             replay_runtime.process(item, network=_offline_network())
+        # Direct runtime calls bypass the service idempotency cache.  An exact
+        # source event retry must still be accepted even though its measured
+        # runtime fields differ.  A real business-payload change under the same
+        # event id must be rejected.
         replay_runtime.process(ordered_inputs[1], network=_offline_network())
+        exact_duplicate_accepted = replay_outbox.count() == 3
+        changed_duplicate = json.loads(json.dumps(ordered_inputs[1]))
+        changed_duplicate["data"]["action_value"] = 0.12345
+        changed_duplicate_rejected = False
+        try:
+            replay_runtime.process(changed_duplicate, network=_offline_network())
+        except IdempotencyConflictError:
+            changed_duplicate_rejected = True
         active_before = replay_outbox.count()
         flushed = replay_runtime.flush_pending()
         second_flush = replay_runtime.flush_pending()
         snapshot = replay_tracker.snapshot()
         passed = (
             active_before == 3
+            and exact_duplicate_accepted
+            and changed_duplicate_rejected
             and flushed["completed"] == 3
             and flushed["remaining"] == 0
             and second_flush["attempted"] == 0
@@ -499,9 +517,11 @@ def run_matrix() -> Dict[str, Any]:
             _scenario(
                 "duplicate_and_out_of_order_replay",
                 "queue timestamps in order 6000, 5000, 5500 ms and submit the 5000 ms event twice",
-                "deduplicate by event_id, accept out-of-order occurrence time, and complete each unique event once",
+                "accept an exact source retry, reject changed business data under the same event_id, accept out-of-order occurrence time, and complete each unique event once",
                 {
                     "unique_outbox_events_before_replay": active_before,
+                    "exact_duplicate_accepted": exact_duplicate_accepted,
+                    "changed_duplicate_rejected": changed_duplicate_rejected,
                     "first_replay_completed": flushed["completed"],
                     "second_replay_attempted": second_flush["attempted"],
                     "review_total": snapshot["total"],

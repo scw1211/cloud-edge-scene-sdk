@@ -345,9 +345,21 @@ def run_acceptance(project_root: Path, output_path: Path) -> Dict[str, Any]:
                 lambda value: (
                     value.get("cloud_available") is True
                     and value["outbox"]["active"] == 0
+                    and (
+                        value["replay"].get("last_delivery_result")
+                        or value["replay"].get("last_result", {})
+                    ).get("completed")
+                    == 2
                 ),
             )
-            replay_result = recovered["replay"]["last_result"]
+            # ``outbox.active`` can become zero a few instructions before the
+            # worker publishes its run result.  Keep the last delivery result
+            # for evidence even when a later idle/probe cycle updates
+            # ``last_result``.
+            replay_result = (
+                recovered["replay"].get("last_delivery_result")
+                or recovered["replay"]["last_result"]
+            )
             coordination = replay_result.get("coordination") or {}
             report["checks"]["automatic_replay"] = (
                 replay_result.get("completed") == 2

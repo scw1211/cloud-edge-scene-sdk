@@ -63,6 +63,11 @@ class ReplayConfig:
     batch_size: int
     lease_seconds: float
     max_backoff_seconds: float
+    waiting_poll_seconds: float = 0.025
+    partial_poll_seconds: float = 1.0
+    aggregation_max_wait_seconds: float = 10.0
+    reconciliation_poll_seconds: float = 5.0
+    reconciliation_max_wait_seconds: float = 60.0
 
 
 @dataclass(frozen=True)
@@ -323,6 +328,21 @@ def load_service_config(
             lease_seconds=float(replay_raw.get("lease_seconds", 30.0)),
             max_backoff_seconds=float(
                 replay_raw.get("max_backoff_seconds", 60.0)
+            ),
+            waiting_poll_seconds=float(
+                replay_raw.get("waiting_poll_seconds", 0.025)
+            ),
+            partial_poll_seconds=float(
+                replay_raw.get("partial_poll_seconds", 1.0)
+            ),
+            aggregation_max_wait_seconds=float(
+                replay_raw.get("aggregation_max_wait_seconds", 10.0)
+            ),
+            reconciliation_poll_seconds=float(
+                replay_raw.get("reconciliation_poll_seconds", 5.0)
+            ),
+            reconciliation_max_wait_seconds=float(
+                replay_raw.get("reconciliation_max_wait_seconds", 60.0)
             ),
         ),
         idempotency=IdempotencyConfig(

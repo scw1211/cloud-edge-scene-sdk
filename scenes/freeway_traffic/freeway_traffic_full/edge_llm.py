@@ -42,6 +42,7 @@ class TrafficEdgeLLMController:
         deadline_margin_ms: float = 15.0,
         deadline_probe_interval: int = 0,
         runtime_failure_cooldown_seconds: float = 5.0,
+        min_expected_gain: float = 0.05,
     ) -> None:
         self.release_registry_path = (
             Path(release_registry_path) if release_registry_path is not None else None
@@ -52,6 +53,7 @@ class TrafficEdgeLLMController:
         self.mode = str(mode)
         self.min_risk_level = str(min_risk_level)
         self.student_confidence_threshold = float(student_confidence_threshold)
+        self.min_expected_gain = float(min_expected_gain)
         self.deadline_margin_ms = float(deadline_margin_ms)
         self.deadline_probe_interval = int(deadline_probe_interval)
         self.runtime_failure_cooldown_seconds = float(runtime_failure_cooldown_seconds)
@@ -61,6 +63,8 @@ class TrafficEdgeLLMController:
             raise ValueError("edge_llm_min_risk_level is invalid")
         if not 0.0 <= self.student_confidence_threshold <= 1.0:
             raise ValueError("edge_llm_student_confidence_threshold must be in [0, 1]")
+        if not -1.0 <= self.min_expected_gain <= 1.0:
+            raise ValueError("edge_llm_min_expected_gain must be in [-1, 1]")
         if self.deadline_margin_ms < 0:
             raise ValueError("edge_llm_deadline_margin_ms must not be negative")
         if self.deadline_probe_interval < 0:
@@ -102,6 +106,87 @@ class TrafficEdgeLLMController:
         self.last_error = None
         self._circuit_open_until = 0.0
 
+    @staticmethod
+    def _structured_metadata(value: Any) -> Dict[str, Any]:
+        return dict(value) if isinstance(value, dict) else {}
+
+    def _selection_signals(
+        self,
+        event: SemanticEvent,
+        student: DecisionEnvelope,
+    ) -> Tuple[str, ...]:
+        """Return explicit model-routing signals; traffic severity is intentionally absent."""
+        event_uncertainty = self._structured_metadata(
+            event.metadata.get("model_uncertainty")
+        )
+        decision_uncertainty = self._structured_metadata(
+            student.metadata.get("model_uncertainty")
+        )
+        uncertainty = {**event_uncertainty, **decision_uncertainty}
+
+        raw_student_confidence = uncertainty.get(
+            "student_confidence",
+            student.metadata.get(
+                "traffic_student_candidate_confidence", student.confidence
+            ),
+        )
+        try:
+            student_confidence = float(raw_student_confidence)
+        except (TypeError, ValueError):
+            student_confidence = float(student.confidence)
+        student_available = uncertainty.get("student_available", True) is not False
+
+        raw_prediction_set = uncertainty.get(
+            "prediction_set", event.uncertainty.prediction_set
+        )
+        prediction_set = (
+            [str(value) for value in raw_prediction_set]
+            if isinstance(raw_prediction_set, list)
+            else list(event.uncertainty.prediction_set)
+        )
+        raw_disagreement = uncertainty.get("student_rule_disagreement")
+        if raw_disagreement is None:
+            raw_disagreement = student.metadata.get(
+                "traffic_student_rule_disagreement", False
+            )
+        disagreement = bool(raw_disagreement)
+        defer_recommended = bool(
+            student.metadata.get("traffic_defer_recommended", False)
+        )
+
+        signals = []
+        if student_available and student_confidence < self.student_confidence_threshold:
+            signals.append("student_low_confidence")
+        if len(prediction_set) > 1:
+            signals.append("prediction_set_ambiguous")
+        if disagreement:
+            signals.append("student_rule_disagreement")
+        if defer_recommended:
+            signals.append("defer_gate_recommends_escalation")
+        return tuple(signals)
+
+    def _expected_gain(
+        self,
+        event: SemanticEvent,
+        student: DecisionEnvelope,
+    ) -> Tuple[float, str, bool]:
+        gain = self._structured_metadata(
+            student.metadata.get(
+                "escalation_expected_gain",
+                event.metadata.get("escalation_expected_gain"),
+            )
+        )
+        try:
+            edge_qwen_gain = float(gain.get("edge_qwen", 0.0))
+        except (TypeError, ValueError):
+            edge_qwen_gain = 0.0
+        source = str(gain.get("source", "not_estimated"))
+        qualified = (
+            source != "not_estimated"
+            and edge_qwen_gain >= self.min_expected_gain
+        )
+        return edge_qwen_gain, source, qualified
+
     def _selection(self, event: SemanticEvent, student: DecisionEnvelope) -> Tuple[bool, str]:
         if not self.enabled:
             return False, "disabled"
@@ -113,15 +198,17 @@ class TrafficEdgeLLMController:
             return False, "outside_edge_runtime"
         if self.mode == "primary":
             return True, "primary"
-        uncertain = (
-            student.confidence < self.student_confidence_threshold
-            or len(event.uncertainty.prediction_set) > 1
+        signals = self._selection_signals(event, student)
+        expected_gain, gain_source, gain_qualified = self._expected_gain(
+            event, student
         )
-        risk_selected = (
-            RISK_PRIORITY[event.risk.level] >= RISK_PRIORITY[self.min_risk_level]
-        )
-        if self.mode == "selective" and not (uncertain or risk_selected):
-            return False, "low_risk_confident_student"
+        if self.mode == "selective":
+            if not signals:
+                return False, "no_model_escalation_signal"
+            if gain_source == "not_estimated":
+                return False, "edge_qwen_expected_gain_not_estimated"
+            if not gain_qualified:
+                return False, "edge_qwen_expected_gain_below_threshold"
         expected_ttft = float(
             self.active.model.validation.get("metrics", {}).get("average_ttft_ms", 100.0)
         )
@@ -140,7 +227,11 @@ class TrafficEdgeLLMController:
             if run_probe:
                 return True, "deadline_profile_probe"
             return False, "deadline_budget_insufficient"
-        return True, "shadow" if self.mode == "shadow" else "selective"
+        if self.mode == "shadow":
+            return True, "shadow"
+        return True, "selective:{}+expected_gain={:.6f}".format(
+            "+".join(signals), expected_gain
+        )
 
     def decide(
         self,
@@ -247,7 +338,15 @@ class TrafficEdgeLLMController:
                     "edge_llm_selection_reason": reason,
                     "edge_llm_release_id": self.active.release_id,
                     "edge_llm_runtime_error": self.last_error,
-                    "edge_llm_requires_cloud": event.risk.level in {"high", "severe"},
+                    "edge_llm_requires_cloud": bool(
+                        student.metadata.get("traffic_defer_recommended", False)
+                        or self._structured_metadata(
+                            student.metadata.get(
+                                "model_uncertainty",
+                                event.metadata.get("model_uncertainty"),
+                            )
+                        ).get("requires_review", False)
+                    ),
                     "edge_llm_model_disagreement": True,
                     "edge_decision_path": "student_runtime_fallback",
                 },
@@ -266,6 +365,10 @@ class TrafficEdgeLLMController:
             "fallbacks": self.fallbacks,
             "deadline_probe_interval": self.deadline_probe_interval,
             "deadline_limited_candidates": self.deadline_limited_candidates,
+            "student_confidence_threshold": self.student_confidence_threshold,
+            "min_expected_gain": self.min_expected_gain,
+            "legacy_min_risk_level": self.min_risk_level,
+            "risk_level_trigger_enabled": False,
             "last_error": self.last_error,
             "runtime_failure_cooldown_seconds": self.runtime_failure_cooldown_seconds,
             "runtime_circuit_open": retry_after > 0.0,

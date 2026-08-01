@@ -13,12 +13,13 @@
         "edge_llm_release_registry_path": "scenes/freeway_traffic/runtime/edge_llm_release_store.json",
         "edge_llm_runtime_config_path": "scenes/freeway_traffic/deployment/full/edge_llm_runtime.json",
         "edge_llm_mode": "selective",
-        "edge_llm_min_risk_level": "medium",
         "edge_llm_student_confidence_threshold": 0.75,
+        "edge_llm_min_expected_gain": 0.05,
         "edge_llm_deadline_margin_ms": 45.0,
         "edge_llm_deadline_probe_interval": 20,
         "edge_llm_runtime_failure_cooldown_seconds": 5.0,
-        "policy_version": "traffic-1.10.0"
+        "cloud_llm_min_expected_gain": 0.05,
+        "policy_version": "traffic-1.11.0"
       }
     }
   ]

@@ -26,6 +26,10 @@ class _MemoryAggregationCloud:
                 set(spec["expected_members"]) - set(group)
             ),
             "completion_reason": "",
+            "finality": "pending",
+            "evidence_complete": False,
+            "global_confirmation": False,
+            "result_revision": 0,
         }
         coordination = None
         if set(spec["expected_members"]).issubset(group):
@@ -34,6 +38,12 @@ class _MemoryAggregationCloud:
             )
             aggregation["state"] = "completed"
             aggregation["completion_reason"] = "all_expected_members"
+            aggregation["finality"] = "final"
+            aggregation["evidence_complete"] = True
+            aggregation["global_confirmation"] = bool(
+                coordination.get("globally_consistent", False)
+            )
+            aggregation["result_revision"] = 1
         return {
             "aggregation": aggregation,
             "coordination": coordination,
@@ -69,11 +79,15 @@ def main():
     )
     first = edge_a.process(_load("edge_a_event.json"), network)
     second = edge_b.process(_load("edge_b_event.json"), network)
-    replay = edge_a.flush_pending()
-    assert first["final_decision"]["status"] == "queued"
+    first_delivery = edge_a.flush_pending()
+    second_delivery = edge_b.flush_pending()
+    assert first["final_decision"]["status"] == "provisional"
+    assert first["final_decision"]["metadata"]["aggregation"]["state"] == "waiting"
     assert second["final_decision"]["status"] == "final"
-    assert replay["completed"] == 1
-    coordination = replay["coordination"]["coordination"]
+    assert second["final_decision"]["metadata"]["aggregation"]["state"] == "completed"
+    assert first_delivery["completed"] == 1
+    assert second_delivery["attempted"] == 0
+    coordination = first_delivery["coordination"]["coordination"]
     assert coordination["initial_conflict_count"] >= 1
     assert coordination["residual_conflict_count"] == 0
     print(
@@ -81,8 +95,9 @@ def main():
             {
                 "status": "traffic_smoke_test_passed",
                 "first_edge_initial_state": "provisional",
-                "second_edge_state": "final",
-                "first_edge_replay_completed": replay["completed"],
+                "second_edge_initial_state": "final",
+                "explicit_cloud_confirmation": True,
+                "first_edge_result_backfill_completed": first_delivery["completed"],
                 "initial_conflicts": coordination["initial_conflict_count"],
                 "residual_conflicts": coordination["residual_conflict_count"],
                 "model_weights_required": False,

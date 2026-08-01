@@ -227,6 +227,7 @@ class HttpCloudClient:
         metadata = dict(decision.metadata)
         metadata["transport"] = transport
         metadata["cloud_runtime_ms"] = response.get("cloud_runtime_ms")
+        metadata["cloud_accepted_at_ms"] = response.get("cloud_accepted_at_ms")
         return replace(decision, metadata=metadata)
 
     def aggregate(self, event: SemanticEvent) -> Dict[str, Any]:

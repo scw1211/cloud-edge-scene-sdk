@@ -46,6 +46,17 @@ class CloudLLMReviewer:
     def should_review(self, event: SemanticEvent) -> bool:
         if bool(event.metadata.get("cloud_llm_review_requested", False)):
             return True
+        policy = event.metadata.get("cloud_llm_review_policy")
+        if policy is not None:
+            if not isinstance(policy, dict):
+                raise ValueError("cloud_llm_review_policy must be an object")
+            eligible = policy.get("eligible", False)
+            if not isinstance(eligible, bool):
+                raise ValueError("cloud_llm_review_policy.eligible must be boolean")
+            # A scene that declares an explicit policy opts out of the legacy
+            # max-risk trigger.  This prevents congestion/severity labels from
+            # being mistaken for expected LLM correction benefit.
+            return eligible
         return (
             RISK_PRIORITY[event.risk.level]
             >= RISK_PRIORITY[self.min_risk_level]
@@ -68,7 +79,19 @@ class CloudLLMReviewer:
                 "confidence": event.prediction.confidence,
                 "values": event.prediction.values,
             },
+            # Keep the v1 prompt key for deployed providers while explicitly
+            # declaring that it is the legacy mixed-risk field.  New scene
+            # integrations should consume the separated semantics below.
             "risk": {"level": event.risk.level, "score": event.risk.score},
+            "risk_semantics": "legacy_mixed",
+            "regional_state": event.metadata.get("regional_state"),
+            "operational_safety_risk": event.metadata.get(
+                "operational_safety_risk"
+            ),
+            "model_uncertainty": event.metadata.get("model_uncertainty"),
+            "escalation_expected_gain": event.metadata.get(
+                "escalation_expected_gain"
+            ),
             "uncertainty": {
                 "confidence": event.uncertainty.confidence,
                 "prediction_set": event.uncertainty.prediction_set,
