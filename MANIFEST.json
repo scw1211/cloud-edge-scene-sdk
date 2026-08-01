@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.13.1",
-  "built_at_utc": "2026-08-01T07:28:23.769461+00:00",
+  "built_at_utc": "2026-08-01T08:20:40.455639+00:00",
   "python_requires": ">=3.8",
   "included_files": [
     {
@@ -15,8 +15,8 @@
     },
     {
       "path": "FRAMEWORK_STUDY_GUIDE.md",
-      "bytes": 37063,
-      "sha256": "8a727ccbdbff88ef5feb0191cdbc7612e959267f7def158c757fcc4bc1961d4c"
+      "bytes": 37210,
+      "sha256": "9ddff3955259934e90c75a012ca5c765d895e29a066b885fa06a932fc249850c"
     },
     {
       "path": "HANDOFF_CHECKLIST.md",
@@ -25,8 +25,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 20045,
-      "sha256": "67f6773a779df809d667dfebe3aab898205d315deaf537207d8e6e669973d328"
+      "bytes": 20182,
+      "sha256": "9d755792d8ec75de19447730091a99d32ae7eef1e997987e66a943926eae4d82"
     },
     {
       "path": "VERSION",
@@ -257,6 +257,21 @@
       "path": "deployment/framework/scene_plugins.json",
       "bytes": 334,
       "sha256": "33381f230ca002b2139df670cc6b60629ed7074edeabea3ee5b6e5d525aa72a3"
+    },
+    {
+      "path": "docs/从零部署真实交通系统.md",
+      "bytes": 4871,
+      "sha256": "67d6ced93a5c9ad95bd73ec42d1ffe5a5a43f8c398ead85e431c2df1e55b78f2"
+    },
+    {
+      "path": "docs/系统全模块介绍与答辩讲解.md",
+      "bytes": 18570,
+      "sha256": "a0e502730405c4ea8aaf77933959b5a61f1cef61bd233897fb811002b7b8eb6c"
+    },
+    {
+      "path": "docs/系统合理性与完整逻辑审计_20260731.md",
+      "bytes": 24086,
+      "sha256": "2eda46703e280d5ad05132743b3032d1dcb4221d993024c924c059960bb0fe6f"
     },
     {
       "path": "edge_llm/README.md",
@@ -692,6 +707,16 @@
       "path": "scenes/freeway_traffic/deployment/scene_plugins.json",
       "bytes": 296,
       "sha256": "69c2a3237bb286c4cf873d07b571145f3ebea7037b83c0377e43cb31ba056a4e"
+    },
+    {
+      "path": "scenes/freeway_traffic/evidence/本机完整系统实测.json",
+      "bytes": 2142,
+      "sha256": "2a5165251423f146d2fe51fadae9b505c13b751064cd281cf38c20825cf7cbbc"
+    },
+    {
+      "path": "scenes/freeway_traffic/evidence/本机完整系统实测.md",
+      "bytes": 2504,
+      "sha256": "52bfdad734dd26b11fb87ea8e5882d282b3b83c9a13551990751d2e494ef5e3a"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_full/__init__.py",
@@ -1530,8 +1555,8 @@
     },
     {
       "path": "scripts/build_manifest.py",
-      "bytes": 2013,
-      "sha256": "031ce8372e12c8eb3e7f663f0ff78b287973c2fb4f2ade9da423938e500dcc99"
+      "bytes": 2051,
+      "sha256": "85c7d7fc5f054c4846885317e3ecae0247c1488dbde58954318ec53033ce65de"
     },
     {
       "path": "scripts/install_traffic_systemd.sh",

@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 
@@ -20,14 +21,14 @@ EXCLUDED_ASSETS = [
 
 def _files():
     completed = subprocess.run(
-        ["git", "ls-files", "-co", "--exclude-standard"],
+        ["git", "ls-files", "-co", "--exclude-standard", "-z"],
         cwd=str(ROOT),
         check=True,
         stdout=subprocess.PIPE,
-        text=True,
     )
     values = []
-    for name in completed.stdout.splitlines():
+    for raw_name in completed.stdout.split(b"\0"):
+        name = os.fsdecode(raw_name)
         if not name or name == "MANIFEST.json":
             continue
         path = ROOT / name

@@ -28,7 +28,7 @@ ExtraTrees 和 Edge-Qwen 适配器包。PEMS08 推理数组、0.8B GGUF 和 Qwen
 不进入 Git，由资产清单锁定下载地址、字节数和 SHA-256。模板决策只验证接口；
 交通正式效果必须运行真实全链路验收。
 
-第一次阅读建议先看 [`FRAMEWORK_STUDY_GUIDE.md`](FRAMEWORK_STUDY_GUIDE.md)。它按完整请求、弱网可靠性、模型生命周期和逐文件职责解释整个 SDK。
+第一次阅读建议先看 [`FRAMEWORK_STUDY_GUIDE.md`](FRAMEWORK_STUDY_GUIDE.md)。它按完整请求、弱网可靠性、模型生命周期和逐文件职责解释整个 SDK。需要准备汇报和答辩时，再看 [`docs/系统全模块介绍与答辩讲解.md`](docs/系统全模块介绍与答辩讲解.md)。
 
 ## 目录
 
