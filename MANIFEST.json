@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.13.1",
-  "built_at_utc": "2026-08-01T08:20:40.455639+00:00",
+  "built_at_utc": "2026-08-01T09:03:09.499208+00:00",
   "python_requires": ">=3.8",
   "included_files": [
     {
@@ -14,19 +14,14 @@
       "sha256": "4427bc9f3bb9924898fbe77159d6f47c554c5da34eb83f2fee6efdadfddef1d6"
     },
     {
-      "path": "FRAMEWORK_STUDY_GUIDE.md",
-      "bytes": 37210,
-      "sha256": "9ddff3955259934e90c75a012ca5c765d895e29a066b885fa06a932fc249850c"
-    },
-    {
       "path": "HANDOFF_CHECKLIST.md",
       "bytes": 4195,
       "sha256": "423bf303f93d7a795427e083fe29fdeef27d9cd494f0396ae853ca0764ffb996"
     },
     {
       "path": "README.md",
-      "bytes": 20182,
-      "sha256": "9d755792d8ec75de19447730091a99d32ae7eef1e997987e66a943926eae4d82"
+      "bytes": 19773,
+      "sha256": "d1c06dface4f2f384467e3a8903ec33a1a1301f2b24da8a69bf536fc8c18e5f1"
     },
     {
       "path": "VERSION",
@@ -262,16 +257,6 @@
       "path": "docs/从零部署真实交通系统.md",
       "bytes": 4871,
       "sha256": "67d6ced93a5c9ad95bd73ec42d1ffe5a5a43f8c398ead85e431c2df1e55b78f2"
-    },
-    {
-      "path": "docs/系统全模块介绍与答辩讲解.md",
-      "bytes": 18570,
-      "sha256": "a0e502730405c4ea8aaf77933959b5a61f1cef61bd233897fb811002b7b8eb6c"
-    },
-    {
-      "path": "docs/系统合理性与完整逻辑审计_20260731.md",
-      "bytes": 24086,
-      "sha256": "2eda46703e280d5ad05132743b3032d1dcb4221d993024c924c059960bb0fe6f"
     },
     {
       "path": "edge_llm/README.md",
