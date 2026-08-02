@@ -15,6 +15,8 @@ for import_root in (REPOSITORY_ROOT, TRAFFIC_ROOT):
 
 from cloud_edge_framework.contracts import build_decision  # noqa: E402
 from cloud_edge_framework.event_envelope import SceneEventEnvelope  # noqa: E402
+from cloud_edge_framework.registry import SceneRegistry  # noqa: E402
+from cloud_edge_framework.runtime import CloudRuntime  # noqa: E402
 from freeway_traffic_full.edge_llm import TrafficEdgeLLMController  # noqa: E402
 from freeway_traffic_full.plugin_impl import TrafficPlugin  # noqa: E402
 
@@ -397,6 +399,82 @@ class TrafficSemanticTests(unittest.TestCase):
         self.assertEqual(
             offline_fallback.metadata["operational_safety_risk"]["level"], "high"
         )
+
+
+class TrafficCloudBatchDecisionTests(unittest.TestCase):
+    def setUp(self):
+        model_root = TRAFFIC_ROOT / "assets" / "models"
+        self.plugin = TrafficPlugin(
+            cloud_model_path=(
+                model_root / "cloud_coordinator_topology_fused.joblib"
+            ),
+            feature_codec_path=(
+                model_root / "traffic_tree_feature_codec_topology_v1.npz"
+            ),
+            topology_path=(
+                model_root / "traffic_region_topology_metis4.json"
+            ),
+        )
+        self.plugin.warmup()
+        self.events = []
+        for partition_id in range(4):
+            raw = _raw_event(
+                sample_id=200,
+                region_id="region_{}".format(partition_id),
+                partition_id=partition_id,
+                num_partitions=4,
+                managed_node_ids=[partition_id * 4 + value for value in (1, 2, 3, 4)],
+            )
+            raw["id"] = "traffic-cloud-batch-{}".format(partition_id)
+            raw["edgeid"] = "edge_node_{}".format(partition_id)
+            event = self.plugin.normalize(SceneEventEnvelope.from_dict(raw))
+            self.events.append(self.plugin.prepare_cloud_event(event, "feature"))
+
+    @staticmethod
+    def _without_batch_observability(decision):
+        value = decision.to_dict()
+        value["metadata"].pop("cloud_inference_batch_size", None)
+        return value
+
+    def test_batch_decisions_match_single_event_decisions(self):
+        fused = list(self.plugin.fuse_cloud_context(self.events))
+        individual = [self.plugin.cloud_decide(event) for event in fused]
+        batched = list(self.plugin.cloud_decide_batch(fused))
+
+        self.assertEqual(len(batched), 4)
+        self.assertEqual(
+            [self._without_batch_observability(item) for item in individual],
+            [self._without_batch_observability(item) for item in batched],
+        )
+        self.assertTrue(
+            all(item.metadata["cloud_inference_batch_size"] == 4 for item in batched)
+        )
+
+    def test_cloud_runtime_runs_one_probability_batch_for_four_regions(self):
+        model = self.plugin._cloud_model["model"]
+        original_predict = model.predict
+        original_predict_proba = model.predict_proba
+        probability_shapes = []
+
+        def forbidden_predict(_matrix):
+            raise AssertionError("batch cloud inference must not traverse trees twice")
+
+        def counted_predict_proba(matrix):
+            probability_shapes.append(tuple(matrix.shape))
+            return original_predict_proba(matrix)
+
+        model.predict = forbidden_predict
+        model.predict_proba = counted_predict_proba
+        registry = SceneRegistry([self.plugin])
+        try:
+            result = CloudRuntime(registry).coordinate(self.events)
+        finally:
+            model.predict = original_predict
+            model.predict_proba = original_predict_proba
+
+        self.assertEqual(probability_shapes, [(4, 226)])
+        self.assertEqual(result["event_count"], 4)
+        self.assertEqual(len(result["decisions"]), 4)
 
 
 class EdgeQwenSelectionTests(unittest.TestCase):

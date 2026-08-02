@@ -819,112 +819,173 @@ class TrafficPlugin(ScenePlugin):
             fused_events.append(replace(event, scene_payload=payload, metadata=metadata))
         return fused_events
 
+    def _prepare_cloud_feature_input(
+        self,
+        event: SemanticEvent,
+    ) -> Dict[str, Any]:
+        if self.cloud_model_path is None:
+            raise ValueError("traffic cloud model path is not configured")
+        payload = event.scene_payload
+        codec = self._load_feature_codec()
+        feature_evidence = [
+            item
+            for item in event.evidence
+            if item.level == "feature" and item.modality == "traffic_task_features"
+        ]
+        if len(feature_evidence) != 1:
+            raise ValueError("cloud traffic inference requires one encoded feature evidence")
+        if self._cloud_model_sha256 is None:
+            self._cloud_model_sha256 = _sha256_file(self.cloud_model_path)
+        vector = codec.decode(
+            feature_evidence[0],
+            expected_model_sha256=self._cloud_model_sha256,
+        )
+        if list(codec.feature_names) != list(self._cloud_model.get("feature_names", [])):
+            raise ValueError("traffic cloud model and feature codec schemas differ")
+        from traffic_system.decision_utils import extract_feature_vector
+
+        fused_values, fused_names = extract_feature_vector(payload)
+        if list(fused_names) != list(codec.feature_names):
+            raise ValueError("fused traffic context does not match cloud feature schema")
+        neighbor_feature_count = 0
+        active_neighbor_feature_count = 0
+        active_indices = {int(index) for index in codec.active_indices.tolist()}
+        for index, name in enumerate(fused_names):
+            if not name.startswith("neighbor_"):
+                continue
+            vector[index] = fused_values[index]
+            neighbor_feature_count += 1
+            active_neighbor_feature_count += int(index in active_indices)
+        return {
+            "vector": vector,
+            "codec": codec,
+            "feature_evidence": feature_evidence[0],
+            "neighbor_feature_count": neighbor_feature_count,
+            "active_neighbor_feature_count": active_neighbor_feature_count,
+        }
+
+    def _build_cloud_legacy_decision(
+        self,
+        event: SemanticEvent,
+        decision_class: str,
+        confidence: float,
+        feature_input: Dict[str, Any],
+        batch_size: int,
+    ) -> Dict[str, Any]:
+        from traffic_system.decision_utils import build_decision_from_student_class
+
+        payload = event.scene_payload
+        codec = feature_input["codec"]
+        feature_evidence = feature_input["feature_evidence"]
+        decision = build_decision_from_student_class(
+            payload,
+            decision_class,
+            confidence,
+            decision_source="cloud_extratrees_task_feature_coordinator",
+        )
+        neighbor_states = []
+        for context in payload.get("neighbor_context", []):
+            if isinstance(context, dict) and isinstance(context.get("neighbors"), list):
+                neighbor_states.extend(
+                    item for item in context["neighbors"] if isinstance(item, dict)
+                )
+        own_confidence = max(0.0, event.uncertainty.confidence)
+        own_weight = max(0.05, event.risk.score * own_confidence)
+        diversion_limits = []
+        for neighbor in neighbor_states:
+            neighbor_confidence = _safe_float(neighbor.get("confidence"), 0.0)
+            if (
+                str(neighbor.get("risk_level")) not in {"high", "severe"}
+                or min(own_confidence, neighbor_confidence) < 0.5
+            ):
+                continue
+            neighbor_weight = max(
+                0.05,
+                _safe_float(neighbor.get("risk_score"), 0.0)
+                * neighbor_confidence,
+            )
+            diversion_limits.append(
+                0.5 * own_weight / (own_weight + neighbor_weight)
+            )
+        pre_coordinated_ratio = None
+        if diversion_limits:
+            pre_coordinated_ratio = max(0.1, min(0.3, min(diversion_limits)))
+            for action in decision.get("actions", []):
+                if isinstance(action, dict) and action.get("type") == "reroute":
+                    action["diversion_ratio"] = round(pre_coordinated_ratio, 3)
+        decision["policy_version"] = self.policy_version
+        decision["framework_metadata"] = {
+            "feature_codec": codec.metadata["codec"],
+            "feature_codec_artifact_id": codec.metadata["artifact_id"],
+            "active_feature_count": codec.metadata["active_feature_count"],
+            "source_feature_bytes": feature_evidence.codec.get("source_size_bytes"),
+            "encoded_feature_bytes": feature_evidence.size_bytes,
+            "fused_neighbor_count": event.metadata.get("fused_neighbor_count", 0),
+            "neighbor_feature_count": feature_input["neighbor_feature_count"],
+            "active_neighbor_feature_count": feature_input[
+                "active_neighbor_feature_count"
+            ],
+            "cloud_inference_batch_size": int(batch_size),
+            "topology_precoordinated_diversion_ratio": round(
+                pre_coordinated_ratio, 3
+            )
+            if pre_coordinated_ratio is not None
+            else None,
+        }
+        return decision
+
+    def _cloud_legacy_decisions(
+        self,
+        events: Sequence[SemanticEvent],
+    ) -> List[Dict[str, Any]]:
+        normalized = list(events)
+        if not normalized:
+            return []
+        if self.cloud_model_path is None or not self.cloud_model_path.is_file():
+            raise FileNotFoundError(
+                "traffic cloud model not found: {}".format(self.cloud_model_path)
+            )
+        if self._cloud_model is None:
+            from traffic_system.cloud_coordinator import load_cloud_model
+
+            self._cloud_model = load_cloud_model(self.cloud_model_path)
+        feature_inputs = [
+            self._prepare_cloud_feature_input(event) for event in normalized
+        ]
+        matrix = np.asarray(
+            [feature_input["vector"] for feature_input in feature_inputs],
+            dtype=np.float64,
+        )
+        model = self._cloud_model["model"]
+        probabilities = np.asarray(model.predict_proba(matrix), dtype=np.float64)
+        if probabilities.ndim != 2 or probabilities.shape[0] != len(normalized):
+            raise ValueError("traffic cloud model returned an invalid probability matrix")
+        class_positions = np.argmax(probabilities, axis=1)
+        model_classes = np.asarray(model.classes_)
+        decisions = []
+        for row_index, (event, feature_input) in enumerate(
+            zip(normalized, feature_inputs)
+        ):
+            class_position = int(class_positions[row_index])
+            class_id = int(model_classes[class_position])
+            decision_class = str(self._cloud_model["decision_classes"][class_id])
+            decisions.append(
+                self._build_cloud_legacy_decision(
+                    event,
+                    decision_class,
+                    float(probabilities[row_index, class_position]),
+                    feature_input,
+                    len(normalized),
+                )
+            )
+        return decisions
+
     def _legacy_decision(self, event: SemanticEvent, cloud: bool) -> Dict[str, Any]:
         payload = event.scene_payload
         if not payload:
             return {}
         if cloud and self.cloud_model_path is not None:
-            if not self.cloud_model_path.is_file():
-                raise FileNotFoundError("traffic cloud model not found: {}".format(self.cloud_model_path))
-            if self._cloud_model is None:
-                from traffic_system.cloud_coordinator import load_cloud_model
-
-                self._cloud_model = load_cloud_model(self.cloud_model_path)
-            codec = self._load_feature_codec()
-            feature_evidence = [
-                item
-                for item in event.evidence
-                if item.level == "feature" and item.modality == "traffic_task_features"
-            ]
-            if len(feature_evidence) != 1:
-                raise ValueError("cloud traffic inference requires one encoded feature evidence")
-            vector = codec.decode(
-                feature_evidence[0],
-                expected_model_sha256=self._cloud_model_sha256
-                or _sha256_file(self.cloud_model_path),
-            )
-            if list(codec.feature_names) != list(self._cloud_model.get("feature_names", [])):
-                raise ValueError("traffic cloud model and feature codec schemas differ")
-            from traffic_system.decision_utils import extract_feature_vector
-
-            fused_values, fused_names = extract_feature_vector(payload)
-            if list(fused_names) != list(codec.feature_names):
-                raise ValueError("fused traffic context does not match cloud feature schema")
-            neighbor_feature_count = 0
-            active_neighbor_feature_count = 0
-            active_indices = {int(index) for index in codec.active_indices.tolist()}
-            for index, name in enumerate(fused_names):
-                if not name.startswith("neighbor_"):
-                    continue
-                vector[index] = fused_values[index]
-                neighbor_feature_count += 1
-                active_neighbor_feature_count += int(index in active_indices)
-            model = self._cloud_model["model"]
-            matrix = np.asarray([vector], dtype=np.float64)
-            class_id = int(model.predict(matrix)[0])
-            class_columns = {
-                int(value): index for index, value in enumerate(model.classes_)
-            }
-            probabilities = model.predict_proba(matrix)[0]
-            confidence = float(probabilities[class_columns[class_id]])
-            decision_class = str(self._cloud_model["decision_classes"][class_id])
-            from traffic_system.decision_utils import build_decision_from_student_class
-
-            decision = build_decision_from_student_class(
-                payload,
-                decision_class,
-                confidence,
-                decision_source="cloud_extratrees_task_feature_coordinator",
-            )
-            neighbor_states = []
-            for context in payload.get("neighbor_context", []):
-                if isinstance(context, dict) and isinstance(context.get("neighbors"), list):
-                    neighbor_states.extend(
-                        item for item in context["neighbors"] if isinstance(item, dict)
-                    )
-            own_confidence = max(0.0, event.uncertainty.confidence)
-            own_weight = max(0.05, event.risk.score * own_confidence)
-            diversion_limits = []
-            for neighbor in neighbor_states:
-                neighbor_confidence = _safe_float(neighbor.get("confidence"), 0.0)
-                if (
-                    str(neighbor.get("risk_level")) not in {"high", "severe"}
-                    or min(own_confidence, neighbor_confidence) < 0.5
-                ):
-                    continue
-                neighbor_weight = max(
-                    0.05,
-                    _safe_float(neighbor.get("risk_score"), 0.0)
-                    * neighbor_confidence,
-                )
-                diversion_limits.append(
-                    0.5 * own_weight / (own_weight + neighbor_weight)
-                )
-            pre_coordinated_ratio = None
-            if diversion_limits:
-                pre_coordinated_ratio = max(0.1, min(0.3, min(diversion_limits)))
-                for action in decision.get("actions", []):
-                    if isinstance(action, dict) and action.get("type") == "reroute":
-                        action["diversion_ratio"] = round(pre_coordinated_ratio, 3)
-            decision["policy_version"] = self.policy_version
-            decision["framework_metadata"] = {
-                "feature_codec": codec.metadata["codec"],
-                "feature_codec_artifact_id": codec.metadata["artifact_id"],
-                "active_feature_count": codec.metadata["active_feature_count"],
-                "source_feature_bytes": feature_evidence[0].codec.get(
-                    "source_size_bytes"
-                ),
-                "encoded_feature_bytes": feature_evidence[0].size_bytes,
-                "fused_neighbor_count": event.metadata.get("fused_neighbor_count", 0),
-                "neighbor_feature_count": neighbor_feature_count,
-                "active_neighbor_feature_count": active_neighbor_feature_count,
-                "topology_precoordinated_diversion_ratio": round(
-                    pre_coordinated_ratio, 3
-                )
-                if pre_coordinated_ratio is not None
-                else None,
-            }
-            return decision
+            return self._cloud_legacy_decisions([event])[0]
         if not cloud and self.edge_student_path is not None:
             from traffic_system.decision_utils import (
                 build_decision_from_student_class,
@@ -1439,8 +1500,12 @@ class TrafficPlugin(ScenePlugin):
         )
         return replace(safe_decision, metadata=metadata)
 
-    def _decision(self, event: SemanticEvent, cloud: bool) -> Any:
-        legacy = self._legacy_decision(event, cloud)
+    def _decision_from_legacy(
+        self,
+        event: SemanticEvent,
+        legacy: Dict[str, Any],
+        cloud: bool,
+    ) -> Any:
         if legacy:
             actions = [
                 self._attach_boundary_resources(
@@ -1507,11 +1572,52 @@ class TrafficPlugin(ScenePlugin):
         edge_decision = self._edge_llm.decide(event, decision, self.policy_version)
         return self._ensure_operational_safety(event, edge_decision)
 
+    def _decision(self, event: SemanticEvent, cloud: bool) -> Any:
+        return self._decision_from_legacy(
+            event,
+            self._legacy_decision(event, cloud),
+            cloud,
+        )
+
     def edge_decide(self, event: SemanticEvent) -> Any:
         return self._decision(event, cloud=False)
 
     def cloud_decide(self, event: SemanticEvent) -> Any:
         return self._decision(event, cloud=True)
+
+    def cloud_decide_batch(
+        self,
+        events: Sequence[SemanticEvent],
+    ) -> Sequence[Any]:
+        normalized = list(events)
+        if not normalized:
+            return []
+        if self.cloud_model_path is None:
+            return [self._decision(event, cloud=True) for event in normalized]
+
+        decisions: List[Optional[Any]] = [None] * len(normalized)
+        model_indices = [
+            index
+            for index, event in enumerate(normalized)
+            if bool(event.scene_payload)
+        ]
+        if model_indices:
+            model_events = [normalized[index] for index in model_indices]
+            legacies = self._cloud_legacy_decisions(model_events)
+            for index, event, legacy in zip(model_indices, model_events, legacies):
+                decisions[index] = self._decision_from_legacy(
+                    event,
+                    legacy,
+                    cloud=True,
+                )
+        for index, event in enumerate(normalized):
+            if decisions[index] is None:
+                decisions[index] = self._decision_from_legacy(
+                    event,
+                    {},
+                    cloud=True,
+                )
+        return [decision for decision in decisions if decision is not None]
 
     def action_conflict(self, left: Action, right: Action) -> Tuple[bool, str]:
         if left.action_type != right.action_type:

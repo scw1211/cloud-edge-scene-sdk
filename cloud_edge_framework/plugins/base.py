@@ -123,6 +123,13 @@ class ScenePlugin(ABC):
     def cloud_decide(self, event: SemanticEvent) -> DecisionEnvelope:
         """Return a cloud expert decision for one normalized event."""
 
+    def cloud_decide_batch(
+        self,
+        events: Sequence[SemanticEvent],
+    ) -> Sequence[DecisionEnvelope]:
+        """Return cloud decisions in input order, with a safe per-event default."""
+        return [self.cloud_decide(event) for event in events]
+
     def apply_cloud_llm_review(
         self,
         event: SemanticEvent,

@@ -171,6 +171,11 @@ python -m cloud_edge_framework.file_bridge watch \
 - `edge_decide()`：调用边缘轻量模型，弱网和断网时仍可运行；
 - `cloud_decide()`：调用云端专家模型或场景协调器。只有定义了目标函数、约束并经过相应基准验证的实现，才能称为全局优化器。
 
+同一汇聚组需要对多个事件运行同一个云端模型时，可以覆盖可选的
+`cloud_decide_batch()`，按输入顺序一次返回多条决策。公共框架默认仍调用
+`cloud_decide()` 逐条处理，因此已有场景无需修改；批量实现不得改变事件顺序、
+决策语义或云端复核流程。
+
 `health()` 中的 `template_mode` 在正式实验前应改为 `false`，并报告真实模型名称与版本。
 
 公共模型调用统一读取 `runtime.edge.json` 或 `runtime.cloud.json`，场景插件不再分别实现 llama.cpp、Ollama 和 OpenAI-compatible HTTP 细节。先校验配置，再按需执行真实探测：

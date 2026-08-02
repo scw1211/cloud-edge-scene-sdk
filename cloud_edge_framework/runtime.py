@@ -78,9 +78,12 @@ class CloudRuntime:
         plugin = self.registry.for_envelope(envelope)
         return plugin.normalize(envelope)
 
-    def decide(self, event: SemanticEvent) -> DecisionEnvelope:
-        plugin = self.registry.get(event.scene)
-        decision = plugin.cloud_decide(event)
+    def _finalize_decision(
+        self,
+        event: SemanticEvent,
+        plugin: Any,
+        decision: DecisionEnvelope,
+    ) -> DecisionEnvelope:
         if self.reviewer is not None:
             review_stage = "eligibility"
             try:
@@ -114,6 +117,34 @@ class CloudRuntime:
             metadata=metadata,
         )
 
+    def decide(self, event: SemanticEvent) -> DecisionEnvelope:
+        plugin = self.registry.get(event.scene)
+        return self._finalize_decision(
+            event,
+            plugin,
+            plugin.cloud_decide(event),
+        )
+
+    def decide_batch(
+        self,
+        events: Sequence[SemanticEvent],
+    ) -> List[DecisionEnvelope]:
+        normalized = list(events)
+        if not normalized:
+            return []
+        plugin = self.registry.get(normalized[0].scene)
+        if any(self.registry.get(event.scene) is not plugin for event in normalized[1:]):
+            raise ValueError("cloud decision batch must contain one scene plugin")
+        baselines = list(plugin.cloud_decide_batch(normalized))
+        if len(baselines) != len(normalized):
+            raise ValueError("scene cloud_decide_batch changed decision count")
+        if any(not isinstance(decision, DecisionEnvelope) for decision in baselines):
+            raise TypeError("scene cloud_decide_batch must return DecisionEnvelope values")
+        return [
+            self._finalize_decision(event, plugin, decision)
+            for event, decision in zip(normalized, baselines)
+        ]
+
     def decide_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         started = time.perf_counter()
         event = SemanticEvent.from_dict(payload)
@@ -138,8 +169,24 @@ class CloudRuntime:
                 if fused_event.event_id != events[index].event_id:
                     raise ValueError("scene context fusion changed event identity")
                 fused_events[index] = fused_event
-        decisions = [self.decide(event) for event in fused_events]
-        coordinated = self.coordinator.coordinate(fused_events, decisions)
+        decisions: List[Optional[DecisionEnvelope]] = [None] * len(fused_events)
+        for scene in sorted({event.scene for event in fused_events}):
+            indices = [
+                index
+                for index, event in enumerate(fused_events)
+                if event.scene == scene
+            ]
+            scene_decisions = self.decide_batch(
+                [fused_events[index] for index in indices]
+            )
+            for index, decision in zip(indices, scene_decisions):
+                decisions[index] = decision
+        if any(decision is None for decision in decisions):
+            raise RuntimeError("cloud decision batch left an event undecided")
+        completed_decisions = [
+            decision for decision in decisions if decision is not None
+        ]
+        coordinated = self.coordinator.coordinate(fused_events, completed_decisions)
         groups = correlation_groups(fused_events)
         result = coordinated.to_dict()
         result.update(
