@@ -482,6 +482,99 @@ class _BatchAggregationCloud:
         raise AssertionError("aggregation batch must not become coordinate")
 
 
+class _ResultChannelCloud:
+    def __init__(self) -> None:
+        self.submission_calls = 0
+        self.result_calls = 0
+        self.events: Dict[str, SemanticEvent] = {}
+
+    @staticmethod
+    def _decision(event: SemanticEvent) -> DecisionEnvelope:
+        return build_decision(
+            event=event,
+            decision="monitor",
+            actions=[],
+            confidence=0.99,
+            reason="result-only poll observed the completed group",
+            source="fixture_cloud",
+            policy_version=_AggregationPlugin.policy_version,
+        )
+
+    def aggregate_batch(self, events, wait_seconds: float = 0.0):
+        self.submission_calls += 1
+        self.assert_zero_wait = float(wait_seconds)
+        self.events.update({event.event_id: event for event in events})
+        return {
+            "items": [
+                {
+                    "event_id": event.event_id,
+                    "group_id": "aggregation-result-channel",
+                    "aggregation": {
+                        "group_id": "aggregation-result-channel",
+                        "state": "waiting",
+                        "completion_reason": "",
+                        "received_members": [event.edge_id],
+                        "missing_members": ["edge-b"],
+                        "evidence_complete": False,
+                        "global_confirmation": False,
+                        "finality": "pending",
+                        "result_revision": 0,
+                    },
+                    "coordination": None,
+                    "cloud_accepted_at_ms": int(time.time() * 1000),
+                }
+                for event in events
+            ],
+            "transport": {
+                "request_bytes": 100,
+                "response_bytes": 80,
+                "http_round_trip_ms": 1.0,
+            },
+        }
+
+    def aggregation_results_batch(self, events, event_group_ids):
+        self.result_calls += 1
+        self.last_group_ids = dict(event_group_ids)
+        decisions = [self._decision(event).to_dict() for event in events]
+        coordination = {
+            "decisions": decisions,
+            "globally_consistent": True,
+            "initial_conflict_count": 0,
+            "residual_conflict_count": 0,
+        }
+        return {
+            "items": [
+                {
+                    "event_id": event.event_id,
+                    "group_id": event_group_ids[event.event_id],
+                    "aggregation": {
+                        "group_id": event_group_ids[event.event_id],
+                        "state": "completed",
+                        "completion_reason": "all_expected_members",
+                        "received_members": ["edge-a", "edge-b"],
+                        "missing_members": [],
+                        "evidence_complete": True,
+                        "global_confirmation": True,
+                        "finality": "final",
+                        "result_revision": 1,
+                    },
+                    "coordination": coordination,
+                    "cloud_accepted_at_ms": int(time.time() * 1000),
+                }
+                for event in events
+            ],
+            "transport": {
+                "request_bytes": 40,
+                "response_bytes": 120,
+                "http_round_trip_ms": 1.0,
+            },
+        }
+
+    def aggregate(self, event):
+        del event
+        raise AssertionError("result polling must not resubmit a summary")
+
+
 class _RuntimeSnapshot:
     def __init__(self, runtime: EdgeRuntime) -> None:
         self.runtime = runtime
@@ -561,6 +654,48 @@ def _network() -> NetworkSnapshot:
 
 
 class AsyncSummaryDeliveryTest(unittest.TestCase):
+    def test_model_batch_keeps_sample_coordination_isolated(self) -> None:
+        registry = SceneRegistry([_AggregationPlugin(True)])
+        try:
+            plugin = registry.get(_AggregationPlugin.scene)
+            groups = []
+            for sample_index in (1, 2):
+                groups.append(
+                    [
+                        plugin.normalize(
+                            SceneEventEnvelope.from_dict(
+                                _payload(
+                                    event_id="sample-{}-{}".format(
+                                        sample_index, member
+                                    ),
+                                    sample_id="sample-{}".format(sample_index),
+                                    member=member,
+                                )
+                            )
+                        )
+                        for member in ("edge-a", "edge-b")
+                    ]
+                )
+
+            results = CloudRuntime(registry).coordinate_groups(groups)
+
+            self.assertEqual(len(results), 2)
+            for index, result in enumerate(results, start=1):
+                self.assertEqual(result["event_count"], 2)
+                self.assertEqual(result["cloud_batch_group_count"], 2)
+                expected_ids = {
+                    "sample-{}-edge-a".format(index),
+                    "sample-{}-edge-b".format(index),
+                }
+                observed_ids = {
+                    event_id
+                    for decision in result["decisions"]
+                    for event_id in decision["event_ids"]
+                }
+                self.assertEqual(observed_ids, expected_ids)
+        finally:
+            registry.close()
+
     def test_worker_coalesces_only_the_immediate_wakeup_batch(self) -> None:
         worker = _CoalescingWorkerProbe(
             ReplayConfig(
@@ -618,7 +753,7 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 self.assertEqual(
                     cloud.batch_event_ids, ["summary-a", "summary-b"]
                 )
-                self.assertEqual(cloud.wait_seconds, 0.12)
+                self.assertEqual(cloud.wait_seconds, 0.0)
                 self.assertEqual(
                     {item["operation"] for item in flushed["deliveries"]},
                     {"aggregate_batch"},
@@ -642,6 +777,47 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                     self.assertEqual(
                         review["final_decision"]["status"], "final"
                     )
+            finally:
+                tracker.close()
+                registry.close()
+
+    def test_waiting_result_poll_does_not_resubmit_summary_payload(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="async-result-channel-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry([_AggregationPlugin(True)])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _ResultChannelCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    scheduler=_AlwaysAsyncScheduler(),
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                runtime.process(_payload(), network=_network())
+
+                submitted = runtime.flush_pending(
+                    waiting_poll_seconds=0.001
+                )
+                self.assertEqual(submitted["waiting"], 1)
+                self.assertEqual(cloud.submission_calls, 1)
+                self.assertEqual(cloud.result_calls, 0)
+                self.assertEqual(cloud.assert_zero_wait, 0.0)
+
+                time.sleep(0.01)
+                completed = runtime.flush_pending(
+                    waiting_poll_seconds=0.001
+                )
+                self.assertEqual(completed["completed"], 1)
+                self.assertEqual(completed["remaining"], 0)
+                self.assertEqual(cloud.submission_calls, 1)
+                self.assertEqual(cloud.result_calls, 1)
+                self.assertEqual(
+                    completed["deliveries"][0]["operation"],
+                    "aggregate_results_batch",
+                )
             finally:
                 tracker.close()
                 registry.close()
@@ -702,7 +878,7 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
         finally:
             registry.close()
 
-    def test_required_cloud_confirmation_keeps_sync_until_waiting_then_queues(
+    def test_required_cloud_confirmation_still_uses_async_summary_ingress(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory(prefix="async-summary-process-") as directory:
@@ -728,14 +904,14 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 self.assertTrue(
                     result["data_plane"]["scheduler_selected_wait"]
                 )
-                self.assertEqual(result["schedule"]["route"], "cloud_sync")
-                self.assertTrue(result["schedule"]["waits_for_cloud"])
+                self.assertEqual(result["schedule"]["route"], "cloud_async")
+                self.assertFalse(result["schedule"]["waits_for_cloud"])
                 self.assertEqual(result["local_decision"]["status"], "provisional")
                 self.assertEqual(result["final_decision"]["route"], "cloud_async")
                 self.assertEqual(result["final_decision"]["status"], "provisional")
                 self.assertEqual(result["pending_review_count"], 1)
                 self.assertEqual(outbox.count(), 1)
-                self.assertEqual(cloud.aggregate_calls, 1)
+                self.assertEqual(cloud.aggregate_calls, 0)
                 self.assertEqual(cloud.coordinate_calls, 0)
             finally:
                 tracker.close()
@@ -798,7 +974,7 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 context = stored.metadata["_edge_review_context"]
                 self.assertEqual(context["schema_version"], 3)
                 self.assertEqual(context["delivery_operation"], "aggregate")
-                self.assertEqual(context["requested_route"], "cloud_sync")
+                self.assertEqual(context["requested_route"], "cloud_async")
                 self.assertGreater(context["requested_at_ms"], 0)
                 self.assertGreater(context["preliminary_latency_ms"], 0.0)
                 self.assertIsInstance(context["routing_features"], dict)

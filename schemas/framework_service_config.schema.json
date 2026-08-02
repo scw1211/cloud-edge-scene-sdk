@@ -123,7 +123,8 @@
         "aggregation_batch_wait_seconds": {
           "type": "number",
           "minimum": 0,
-          "maximum": 2
+          "maximum": 2,
+          "description": "Deprecated compatibility field; cloud ingress never waits for aggregation peers"
         }
       },
       "additionalProperties": false

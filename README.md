@@ -319,7 +319,7 @@ python -m cloud_edge_framework.edge_service \
   --config deployment/framework/edge_service.json
 ```
 
-边缘 `/ready` 不以云端在线为前提；断网时仍可接收事件并执行本地策略。边缘主动探测云端网络，调用方不能手工声明网络良好。具有多边缘汇聚规格的每个在线样本都会先持久化到 SQLite Outbox，由后台发送器把当前可发送摘要合并为一个 HTTP 批次；其他需要复核的事件也使用同一队列。边缘接口先返回临时结果，不等待摘要到云确认。云端先持久化批内全部摘要，再按关联键汇聚；不同边缘在短等待窗口内补齐同一组时，只运行一次场景批量决策，并在同一次批响应中返回整组 final。短等待只发生在 Outbox 后台线程，不阻塞业务临时结果。普通 Outbox 在部分汇聚或本地超时后按时结束；同库中另有带截止时间的低频 reconciliation 子队列追踪迟到成员，完整新版本会回填原生命周期为权威 final，无新版本则到期清除。云端恢复后自动补传，异步协调结果会同时写入边缘和云端反馈样本库，保留边缘初判与云端修正，供后续蒸馏或策略更新使用。
+边缘 `/ready` 不以云端在线为前提；断网时仍可接收事件并执行本地策略。边缘主动探测云端网络，调用方不能手工声明网络良好。具有多边缘汇聚规格的每个在线样本都会先持久化到 SQLite Outbox；边缘接口先返回临时结果，Outbox 有摘要就上传，不为了凑批次等待后续样本。云端先持久化摘要并立即应答，再按关联键把缺少成员的`sample_id`留在等待池；完整组有多少就由后台模型批量处理多少，不等待固定批量大小。模型推理可以跨完整组组成张量批次，但上下文融合、冲突识别和动作协调严格按`sample_id`隔离。边缘通过独立的批量结果查询通道取得 final，不会反复上传相同摘要。场景汇聚业务超时后可以产生`partial_final`，但不得冒充完整云确认；同库中另有有界 reconciliation 子队列追踪迟到成员，完整新版本会回填原生命周期为权威 final，无新版本则到期清除。云端恢复后自动补传，异步协调结果会同时写入边缘和云端反馈样本库，保留边缘初判与云端修正，供后续蒸馏或策略更新使用。
 
 提交样例事件：
 
@@ -351,7 +351,8 @@ curl http://127.0.0.1:18100/health
 | 云端 | POST | `/api/v1/collaboration/cloud-decision` | 单事件云端复核 |
 | 云端 | POST | `/api/v1/collaboration/coordinate` | 多事件融合和冲突协调 |
 | 云端 | POST | `/api/v1/collaboration/aggregate` | 按场景关联键提交一个多边缘语义事件 |
-| 云端 | POST | `/api/v1/collaboration/aggregate/batch` | 一次提交多个摘要并短暂等待同组成员，返回逐事件的整组协调结果 |
+| 云端 | POST | `/api/v1/collaboration/aggregate/batch` | 持久接收多个摘要并立即应答，不等待同组成员或模型 |
+| 云端 | POST | `/api/v1/collaboration/aggregate/results/batch` | 批量读取已提交事件的云端汇聚结果，不重复上传摘要 |
 | 云端 | POST | `/api/v1/collaboration/aggregate/flush` | 触发超时部分汇聚；部分结果不具备完整云确认，迟到成员可触发新版本 |
 | 云端 | PUT/GET | `/api/v1/evidence/{sha256}` | 上传或查询经过哈希校验的大证据文件 |
 | 云端 | GET/POST | `/api/v1/collaboration/feedback` | 查询或写入纠错反馈 |

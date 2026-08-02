@@ -268,13 +268,8 @@ class HttpCloudClient:
         events: Sequence[SemanticEvent],
         wait_seconds: float = 0.0,
     ) -> Dict[str, Any]:
-        """Submit one edge's ready aggregation members in one HTTP request.
-
-        The cloud may hold the request for a short, bounded interval so a peer
-        edge can finish the same aggregation group.  This wait happens only in
-        the background Outbox worker and never blocks the provisional business
-        response.
-        """
+        """Durably submit summaries and return after cloud acceptance."""
+        del wait_seconds  # Accepted by the Python API for rolling compatibility.
         if not events:
             raise ValueError("aggregate_batch requires at least one event")
         cloud_events = []
@@ -304,7 +299,7 @@ class HttpCloudClient:
                         )
                         for event in cloud_events
                     ],
-                    "wait_ms": int(max(0.0, float(wait_seconds)) * 1000.0),
+                    "wait_ms": 0,
                 },
             )
         except CloudTransportError as exc:
@@ -349,51 +344,7 @@ class HttpCloudClient:
                 "fallback_single_event": True,
                 "transport": fallback_transport,
             }
-        items = response.get("items")
-        if not isinstance(items, list):
-            raise CloudTransportError(
-                "cloud aggregation batch response is missing items"
-            )
-        raw_groups = response.get("groups")
-        if raw_groups is not None:
-            if not isinstance(raw_groups, list):
-                raise CloudTransportError(
-                    "cloud aggregation batch response groups must be a list"
-                )
-            groups = {}
-            for group in raw_groups:
-                if not isinstance(group, dict):
-                    raise CloudTransportError(
-                        "cloud aggregation batch groups must contain objects"
-                    )
-                group_id = str(group.get("group_id", "")).strip()
-                aggregation = group.get("aggregation")
-                if (
-                    not group_id
-                    or group_id in groups
-                    or not isinstance(aggregation, dict)
-                ):
-                    raise CloudTransportError(
-                        "cloud aggregation batch contains an invalid group"
-                    )
-                groups[group_id] = group
-            expanded_items = []
-            for raw_item in items:
-                if not isinstance(raw_item, dict):
-                    raise CloudTransportError(
-                        "cloud aggregation batch items must contain objects"
-                    )
-                item = dict(raw_item)
-                group_id = str(item.get("group_id", "")).strip()
-                group = groups.get(group_id)
-                if group is None:
-                    raise CloudTransportError(
-                        "cloud aggregation batch item references an unknown group"
-                    )
-                item["aggregation"] = dict(group["aggregation"])
-                item["coordination"] = group.get("coordination")
-                expanded_items.append(item)
-            response["items"] = expanded_items
+        self._expand_aggregation_groups(response)
         transport = dict(response.pop("_transport_metrics"))
         transport["json_request_bytes"] = int(transport["request_bytes"])
         transport.update(artifact_metrics)
@@ -411,6 +362,95 @@ class HttpCloudClient:
             6,
         )
         response["transport"] = transport
+        return response
+
+    @staticmethod
+    def _expand_aggregation_groups(response: Dict[str, Any]) -> None:
+        items = response.get("items")
+        if not isinstance(items, list):
+            raise CloudTransportError(
+                "cloud aggregation batch response is missing items"
+            )
+        raw_groups = response.get("groups")
+        if raw_groups is None:
+            return
+        if not isinstance(raw_groups, list):
+            raise CloudTransportError(
+                "cloud aggregation batch response groups must be a list"
+            )
+        groups = {}
+        for group in raw_groups:
+            if not isinstance(group, dict):
+                raise CloudTransportError(
+                    "cloud aggregation batch groups must contain objects"
+                )
+            group_id = str(group.get("group_id", "")).strip()
+            aggregation = group.get("aggregation")
+            if (
+                not group_id
+                or group_id in groups
+                or not isinstance(aggregation, dict)
+            ):
+                raise CloudTransportError(
+                    "cloud aggregation batch contains an invalid group"
+                )
+            groups[group_id] = group
+        expanded_items = []
+        for raw_item in items:
+            if not isinstance(raw_item, dict):
+                raise CloudTransportError(
+                    "cloud aggregation batch items must contain objects"
+                )
+            item = dict(raw_item)
+            group_id = str(item.get("group_id", "")).strip()
+            group = groups.get(group_id)
+            if group is None:
+                raise CloudTransportError(
+                    "cloud aggregation batch item references an unknown group"
+                )
+            item["aggregation"] = dict(group["aggregation"])
+            item["coordination"] = group.get("coordination")
+            expanded_items.append(item)
+        response["items"] = expanded_items
+
+    def aggregation_results_batch(
+        self,
+        events: Sequence[SemanticEvent],
+        event_group_ids: Dict[str, str],
+    ) -> Dict[str, Any]:
+        """Fetch durable results without uploading event payloads again."""
+        if not events:
+            raise ValueError(
+                "aggregation_results_batch requires at least one event"
+            )
+        items = []
+        for event in events:
+            group_id = str(event_group_ids.get(event.event_id, "")).strip()
+            if not group_id:
+                raise ValueError(
+                    "aggregation result lookup is missing a group id for {}".format(
+                        event.event_id
+                    )
+                )
+            items.append({"event_id": event.event_id, "group_id": group_id})
+        try:
+            response = self._post(
+                "/api/v1/collaboration/aggregate/results/batch",
+                {"items": items},
+            )
+        except CloudTransportError as exc:
+            # An old cloud has no result-only endpoint. Exact event identity
+            # keeps the compatibility fallback idempotent during a rolling
+            # upgrade, although the new protocol never resubmits in steady
+            # state.
+            message = str(exc)
+            if "HTTP 404" not in message and "HTTP 405" not in message:
+                raise
+            fallback = self.aggregate_batch(events)
+            fallback["fallback_summary_resubmission"] = True
+            return fallback
+        self._expand_aggregation_groups(response)
+        response["transport"] = dict(response.pop("_transport_metrics"))
         return response
 
     def coordinate(self, events: Sequence[SemanticEvent]) -> Dict[str, Any]:

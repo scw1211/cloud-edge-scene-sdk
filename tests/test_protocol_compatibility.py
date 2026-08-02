@@ -209,7 +209,7 @@ class ProtocolCompatibilityTest(unittest.TestCase):
         )
 
         self.assertEqual(client.batch_calls, 1)
-        self.assertEqual(client.last_payload["wait_ms"], 150)
+        self.assertEqual(client.last_payload["wait_ms"], 0)
         self.assertEqual(len(result["groups"]), 1)
         for item in result["items"]:
             self.assertEqual(item["aggregation"]["state"], "completed")

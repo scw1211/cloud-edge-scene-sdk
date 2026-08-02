@@ -127,6 +127,7 @@ class MultiEdgeEventAggregator:
                 scene TEXT NOT NULL,
                 group_key TEXT NOT NULL,
                 expected_members_json TEXT NOT NULL,
+                expected_member_count INTEGER NOT NULL,
                 minimum_members INTEGER NOT NULL,
                 timeout_ms INTEGER NOT NULL,
                 state TEXT NOT NULL CHECK(state IN ('waiting','inflight','completed')),
@@ -171,6 +172,31 @@ class MultiEdgeEventAggregator:
             self._connection.execute(
                 "ALTER TABLE aggregation_groups "
                 "ADD COLUMN next_attempt_at_ms INTEGER NOT NULL DEFAULT 0"
+            )
+        if "expected_member_count" not in columns:
+            self._connection.execute(
+                "ALTER TABLE aggregation_groups "
+                "ADD COLUMN expected_member_count INTEGER NOT NULL DEFAULT 0"
+            )
+        # Avoid depending on SQLite's optional JSON1 extension during a rolling
+        # upgrade.  Existing groups are few and this migration runs once under
+        # BEGIN IMMEDIATE, so decoding the stored contract in Python is both
+        # portable and deterministic.
+        legacy_groups = self._connection.execute(
+            "SELECT group_id, expected_members_json FROM aggregation_groups "
+            "WHERE expected_member_count <= 0"
+        ).fetchall()
+        if legacy_groups:
+            self._connection.executemany(
+                "UPDATE aggregation_groups SET expected_member_count=? "
+                "WHERE group_id=?",
+                [
+                    (
+                        len(json.loads(str(row["expected_members_json"]))),
+                        str(row["group_id"]),
+                    )
+                    for row in legacy_groups
+                ],
             )
         self._connection.execute(
             """
@@ -220,15 +246,16 @@ class MultiEdgeEventAggregator:
                     """
                     INSERT INTO aggregation_groups(
                         group_id, scene, group_key, expected_members_json,
-                        minimum_members, timeout_ms, state, first_received_at_ms,
-                        deadline_at_ms, updated_at_ms
-                    ) VALUES (?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?)
+                        expected_member_count, minimum_members, timeout_ms, state,
+                        first_received_at_ms, deadline_at_ms, updated_at_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?)
                     """,
                     (
                         group_id,
                         event.scene,
                         spec.key,
                         expected_json,
+                        len(spec.expected_members),
                         spec.minimum_members,
                         spec.timeout_ms,
                         now_ms,
@@ -428,11 +455,18 @@ class MultiEdgeEventAggregator:
             rows = self._connection.execute(
                 """
                 SELECT group_id FROM aggregation_groups
-                WHERE state='waiting' AND next_attempt_at_ms <= ?
-                  AND (deadline_at_ms <= ? OR attempts > 0)
-                ORDER BY next_attempt_at_ms, deadline_at_ms LIMIT ?
+                WHERE state='waiting' AND next_attempt_at_ms <= ? AND (
+                    deadline_at_ms <= ? OR attempts > 0 OR
+                    (SELECT COUNT(*) FROM aggregation_events AS events
+                     WHERE events.group_id=aggregation_groups.group_id)
+                        >= expected_member_count
+                )
+                ORDER BY
+                    CASE WHEN deadline_at_ms <= ? THEN 0 ELSE 1 END,
+                    next_attempt_at_ms, deadline_at_ms
+                LIMIT ?
                 """,
-                (now_ms, now_ms, int(limit)),
+                (now_ms, now_ms, now_ms, int(limit)),
             ).fetchall()
             for row in rows:
                 lease = self._claim(str(row["group_id"]), now_ms)
@@ -441,54 +475,82 @@ class MultiEdgeEventAggregator:
         return leases
 
     def complete(self, group_id: str, result: Dict[str, Any]) -> None:
-        if not isinstance(result, dict):
+        self.complete_many([(str(group_id), result)])
+
+    def complete_many(
+        self,
+        results: Sequence[Any],
+    ) -> None:
+        """Atomically commit several independently coordinated sample groups."""
+        items = [(str(group_id), result) for group_id, result in results]
+        if not items:
+            return
+        if len({group_id for group_id, _ in items}) != len(items):
+            raise ValueError("aggregation result batch contains duplicate groups")
+        if any(not isinstance(result, dict) for _, result in items):
             raise ValueError("aggregation result must be an object")
         now_ms = int(time.time() * 1000)
-        with self._lock, self._connection:
-            row = self._connection.execute(
-                "SELECT state, completion_reason, claimed_member_count "
-                "FROM aggregation_groups "
-                "WHERE group_id=?",
-                (str(group_id),),
-            ).fetchone()
-            if row is None or str(row["state"]) != "inflight":
-                raise ValueError(
-                    "aggregation group is not inflight: {}".format(group_id)
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                updates = []
+                for group_id, result in items:
+                    row = self._connection.execute(
+                        "SELECT state, completion_reason, claimed_member_count "
+                        "FROM aggregation_groups WHERE group_id=?",
+                        (group_id,),
+                    ).fetchone()
+                    if row is None or str(row["state"]) != "inflight":
+                        raise ValueError(
+                            "aggregation group is not inflight: {}".format(
+                                group_id
+                            )
+                        )
+                    current_member_count = len(
+                        self._members(self._connection, group_id)
+                    )
+                    members_arrived_during_claim = (
+                        current_member_count
+                        > int(row["claimed_member_count"])
+                    )
+                    updates.append(
+                        (
+                            (
+                                "waiting"
+                                if members_arrived_during_claim
+                                else "completed"
+                            ),
+                            (
+                                ""
+                                if members_arrived_during_claim
+                                else str(row["completion_reason"])
+                            ),
+                            json.dumps(
+                                result,
+                                ensure_ascii=False,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                            ),
+                            now_ms,
+                            group_id,
+                        )
+                    )
+                self._connection.executemany(
+                    """
+                    UPDATE aggregation_groups
+                    SET state=?, result_revision=result_revision+1,
+                        completion_reason=?, claimed_member_count=0,
+                        attempts=0, next_attempt_at_ms=0,
+                        result_json=?, updated_at_ms=?, last_error=''
+                    WHERE group_id=? AND state='inflight'
+                    """,
+                    updates,
                 )
-            current_member_count = len(
-                self._members(self._connection, str(group_id))
-            )
-            members_arrived_during_claim = (
-                current_member_count > int(row["claimed_member_count"])
-            )
-            updated = self._connection.execute(
-                """
-                UPDATE aggregation_groups
-                SET state=?, result_revision=result_revision+1,
-                    completion_reason=?, claimed_member_count=0,
-                    attempts=0, next_attempt_at_ms=0,
-                    result_json=?, updated_at_ms=?, last_error=''
-                WHERE group_id=? AND state='inflight'
-                """,
-                (
-                    "waiting" if members_arrived_during_claim else "completed",
-                    (
-                        ""
-                        if members_arrived_during_claim
-                        else str(row["completion_reason"])
-                    ),
-                    json.dumps(
-                        result,
-                        ensure_ascii=False,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                    now_ms,
-                    str(group_id),
-                ),
-            )
-            if updated.rowcount != 1:
-                raise ValueError("aggregation group is not inflight: {}".format(group_id))
+            except BaseException:
+                self._connection.rollback()
+                raise
+            else:
+                self._connection.commit()
 
     def release(self, group_id: str, error: str) -> None:
         now_ms = int(time.time() * 1000)

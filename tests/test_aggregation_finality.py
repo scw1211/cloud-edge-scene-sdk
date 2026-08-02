@@ -206,7 +206,7 @@ def _create_legacy_aggregation_database(path: Path) -> None:
 
 
 class AggregationFinalityTest(unittest.TestCase):
-    def test_two_edge_batches_share_one_completed_group_without_member_polling(
+    def test_ingress_returns_immediately_then_worker_completes_ready_group(
         self,
     ) -> None:
         service = object.__new__(CloudApiService)
@@ -230,25 +230,36 @@ class AggregationFinalityTest(unittest.TestCase):
                 first_result = first.result(timeout=1.0)
                 second_result = second.result(timeout=1.0)
 
-            self.assertTrue(first_result["all_terminal"])
-            self.assertTrue(second_result["all_terminal"])
+            self.assertFalse(first_result["all_terminal"])
+            self.assertFalse(second_result["all_terminal"])
             self.assertEqual(first_result["event_count"], 2)
             self.assertEqual(second_result["event_count"], 2)
+            self.assertEqual(first_result["wait_ms"], 0)
+            self.assertEqual(second_result["wait_ms"], 0)
+            self.assertEqual(cloud_runtime.coordinate_calls, 0)
+
+            flushed = service.flush_aggregations(64)
+
+            self.assertEqual(flushed["attempted"], 1)
+            self.assertEqual(flushed["completed"], 1)
             self.assertEqual(cloud_runtime.coordinate_calls, 1)
-            for result in (first_result, second_result):
-                self.assertEqual(len(result["groups"]), 1)
-                group = result["groups"][0]
-                self.assertEqual(group["aggregation"]["state"], "completed")
-                self.assertEqual(
-                    group["aggregation"]["completion_reason"],
-                    "all_expected_members",
-                )
-                self.assertTrue(group["aggregation"]["evidence_complete"])
-                self.assertEqual(len(group["coordination"]["decisions"]), 4)
-                for item in result["items"]:
-                    self.assertEqual(item["group_id"], group["group_id"])
-                    self.assertNotIn("aggregation", item)
-                    self.assertNotIn("coordination", item)
+            group_id = first_result["items"][0]["group_id"]
+            result = service.aggregation_results_batch(
+                {
+                    "items": [
+                        {"event_id": _event(index).event_id, "group_id": group_id}
+                        for index in range(4)
+                    ]
+                }
+            )
+            group = result["groups"][0]
+            self.assertEqual(group["aggregation"]["state"], "completed")
+            self.assertEqual(
+                group["aggregation"]["completion_reason"],
+                "all_expected_members",
+            )
+            self.assertTrue(group["aggregation"]["evidence_complete"])
+            self.assertEqual(len(group["coordination"]["decisions"]), 4)
         finally:
             service.aggregator.close()
 

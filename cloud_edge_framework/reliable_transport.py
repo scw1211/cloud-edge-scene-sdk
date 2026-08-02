@@ -70,6 +70,22 @@ class ReliableHttpCloudClient(HttpCloudClient):
                     break
             if event_ids:
                 return stable_id("aggregate_batch_request", *event_ids), trace_id
+        if path.endswith("/aggregate/results/batch"):
+            items = payload.get("items", [])
+            identities = sorted(
+                "{}:{}".format(
+                    str(item.get("event_id", "")),
+                    str(item.get("group_id", "")),
+                )
+                for item in items
+                if isinstance(item, dict)
+                and item.get("event_id")
+                and item.get("group_id")
+            )
+            if identities:
+                return stable_id(
+                    "aggregate_results_batch_request", *identities
+                ), trace_id
         if path.endswith("/feedback"):
             record = payload.get("record", {})
             if isinstance(record, dict) and record.get("feedback_id"):

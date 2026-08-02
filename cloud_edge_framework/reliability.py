@@ -103,6 +103,7 @@ class OutboxLease:
     event: SemanticEvent
     attempts: int
     reconciliation: bool = False
+    aggregation_submitted: bool = False
 
 
 class SQLiteOutbox:
@@ -257,7 +258,8 @@ class SQLiteOutbox:
             )
             rows = connection.execute(
                 """
-                SELECT event_id, payload_json, attempts
+                SELECT event_id, payload_json, attempts,
+                       aggregation_wait_started_at_ms
                 FROM outbox_events
                 WHERE state='pending' AND available_at_ms <= ?
                 ORDER BY created_at_ms, event_id
@@ -281,6 +283,9 @@ class SQLiteOutbox:
                 event=SemanticEvent.from_dict(json.loads(str(row["payload_json"]))),
                 attempts=int(row["attempts"]) + 1,
                 reconciliation=False,
+                aggregation_submitted=(
+                    row["aggregation_wait_started_at_ms"] is not None
+                ),
             )
             for row in rows
         ]
@@ -344,6 +349,7 @@ class SQLiteOutbox:
                 event=SemanticEvent.from_dict(json.loads(str(row["payload_json"]))),
                 attempts=int(row["attempts"]) + 1,
                 reconciliation=True,
+                aggregation_submitted=True,
             )
             for row in rows
         ]
@@ -382,6 +388,27 @@ class SQLiteOutbox:
                 UPDATE outbox_events
                 SET state='completed', lease_until_ms=NULL, completed_at_ms=?,
                     updated_at_ms=?, last_error=''
+                WHERE event_id=?
+                """,
+                [(now_ms, now_ms, event_id) for event_id in ids],
+            )
+
+    def mark_aggregation_submitted(
+        self, event_ids: Sequence[str]
+    ) -> None:
+        """Remember durable cloud acceptance without completing the Outbox."""
+        ids = [str(value) for value in event_ids]
+        if not ids:
+            return
+        now_ms = int(time.time() * 1000)
+        with self._lock, self._connect() as connection:
+            connection.executemany(
+                """
+                UPDATE outbox_events
+                SET aggregation_wait_started_at_ms=COALESCE(
+                        aggregation_wait_started_at_ms, ?
+                    ),
+                    updated_at_ms=?
                 WHERE event_id=?
                 """,
                 [(now_ms, now_ms, event_id) for event_id in ids],

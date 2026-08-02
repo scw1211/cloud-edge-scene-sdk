@@ -69,7 +69,9 @@ class ReplayConfig:
     aggregation_max_wait_seconds: float = 10.0
     reconciliation_poll_seconds: float = 5.0
     reconciliation_max_wait_seconds: float = 60.0
-    aggregation_batch_wait_seconds: float = 0.15
+    # Deprecated compatibility field. Cloud ingress always acknowledges after
+    # durable persistence and never waits here for peer summaries.
+    aggregation_batch_wait_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -350,7 +352,7 @@ def load_service_config(
                 replay_raw.get("reconciliation_max_wait_seconds", 60.0)
             ),
             aggregation_batch_wait_seconds=float(
-                replay_raw.get("aggregation_batch_wait_seconds", 0.15)
+                replay_raw.get("aggregation_batch_wait_seconds", 0.0)
             ),
         ),
         idempotency=IdempotencyConfig(
