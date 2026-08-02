@@ -1,8 +1,10 @@
 """Compatibility contracts for rolling cloud/edge framework upgrades."""
 
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import tempfile
+import threading
 import time
 import unittest
 
@@ -300,6 +302,126 @@ class ProtocolCompatibilityTest(unittest.TestCase):
                 coordinated_first["cloud_accepted_at_ms"],
             )
             self.assertEqual(runtime.coordinate_calls, 1)
+
+
+class IdempotencyConcurrencyTest(unittest.TestCase):
+    def test_completed_response_survives_store_recreation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "idempotency.sqlite3"
+            first_store = SQLiteIdempotencyStore(
+                path,
+                ttl_seconds=60.0,
+                max_entries=100,
+            )
+            first_value, first_replayed = first_store.execute(
+                "persistent-key",
+                {"value": 1},
+                lambda: {"result": 7},
+            )
+            first_store.close()
+
+            calls = 0
+
+            def operation():
+                nonlocal calls
+                calls += 1
+                return {"result": 8}
+
+            second_store = SQLiteIdempotencyStore(
+                path,
+                ttl_seconds=60.0,
+                max_entries=100,
+            )
+            second_value, second_replayed = second_store.execute(
+                "persistent-key",
+                {"value": 1},
+                operation,
+            )
+            second_store.close()
+
+            self.assertEqual(first_value, {"result": 7})
+            self.assertFalse(first_replayed)
+            self.assertEqual(second_value, first_value)
+            self.assertTrue(second_replayed)
+            self.assertEqual(calls, 0)
+
+    def test_different_request_keys_do_not_serialize_operations(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteIdempotencyStore(
+                Path(directory) / "idempotency.sqlite3",
+                ttl_seconds=60.0,
+                max_entries=100,
+            )
+            state_lock = threading.Lock()
+            release = threading.Event()
+            both_started = threading.Event()
+            active = 0
+
+            def operation(name):
+                def run():
+                    nonlocal active
+                    with state_lock:
+                        active += 1
+                        if active == 2:
+                            both_started.set()
+                    release.wait(2.0)
+                    with state_lock:
+                        active -= 1
+                    return {"name": name}
+
+                return run
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(
+                    store.execute, "key-a", {"value": "a"}, operation("a")
+                )
+                second = executor.submit(
+                    store.execute, "key-b", {"value": "b"}, operation("b")
+                )
+                try:
+                    self.assertTrue(both_started.wait(1.0))
+                finally:
+                    release.set()
+                self.assertFalse(first.result(timeout=2.0)[1])
+                self.assertFalse(second.result(timeout=2.0)[1])
+
+    def test_same_request_key_still_executes_only_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteIdempotencyStore(
+                Path(directory) / "idempotency.sqlite3",
+                ttl_seconds=60.0,
+                max_entries=100,
+            )
+            entered = threading.Event()
+            release = threading.Event()
+            calls = 0
+
+            def operation():
+                nonlocal calls
+                calls += 1
+                entered.set()
+                release.wait(2.0)
+                return {"value": 7}
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(
+                    store.execute, "same-key", {"value": 1}, operation
+                )
+                self.assertTrue(entered.wait(1.0))
+                second = executor.submit(
+                    store.execute, "same-key", {"value": 1}, operation
+                )
+                time.sleep(0.05)
+                self.assertEqual(calls, 1)
+                release.set()
+                first_value, first_replayed = first.result(timeout=2.0)
+                second_value, second_replayed = second.result(timeout=2.0)
+
+            self.assertEqual(first_value, {"value": 7})
+            self.assertEqual(second_value, first_value)
+            self.assertFalse(first_replayed)
+            self.assertTrue(second_replayed)
+            self.assertEqual(calls, 1)
 
 
 if __name__ == "__main__":

@@ -35,6 +35,7 @@ from traffic_system.traffic_perception_runtime import JointTrafficPerceptionRunt
 
 DECIDE_PATH = "/api/v1/collaboration/decide"
 METRICS_PATH = "/api/v1/framework/metrics"
+NON_AUTHORITATIVE_REVIEW_STAGES = {"partial_final", "local_only_timeout"}
 
 
 def _json_object(path: Path) -> Dict[str, Any]:
@@ -442,6 +443,14 @@ class ManagedTrafficStack:
         handle = log_path.open("w", encoding="utf-8")
         environment = dict(os.environ)
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        source_roots = [
+            str(self.project_root),
+            str(self.project_root / "scenes" / "freeway_traffic"),
+        ]
+        inherited_pythonpath = environment.get("PYTHONPATH", "").strip()
+        if inherited_pythonpath:
+            source_roots.append(inherited_pythonpath)
+        environment["PYTHONPATH"] = os.pathsep.join(source_roots)
         process = subprocess.Popen(
             list(command),
             cwd=str(self.project_root),
@@ -689,6 +698,29 @@ def _record_from_response(
     accounting = dict(response["closed_loop_accounting"])
     pipeline_stages = dict(accounting.get("pipeline_stage_ms", {}))
     data_plane = dict(response["data_plane"])
+    evidence_plan = dict(response.get("evidence_plan", {}))
+    action_authorization = local_metadata.get("action_authorization", {})
+    if not isinstance(action_authorization, dict):
+        action_authorization = {}
+    deferred_action_types = action_authorization.get("deferred_action_types", [])
+    if not isinstance(deferred_action_types, list):
+        deferred_action_types = []
+    scheduler_selected_wait = bool(
+        data_plane.get(
+            "scheduler_selected_wait",
+            response.get("schedule", {}).get("waits_for_cloud", False),
+        )
+    )
+    # The delivery path is deliberately asynchronous for multi-edge summaries.
+    # Business completion follows action authorization.  A scheduler may make a
+    # conservative wait recommendation, but a reversible/locally-authorized
+    # action is already usable when provisional is returned.  Report the more
+    # conservative scheduler interpretation separately instead of conflating it
+    # with the action contract.
+    requires_authoritative_final = bool(deferred_action_types)
+    scheduler_conservative_requires_authoritative_final = bool(
+        scheduler_selected_wait or deferred_action_types
+    )
     observed_full_loop_ms = perception_ms + client_wall_ms
     return {
         "sample_id": sample_id,
@@ -721,6 +753,25 @@ def _record_from_response(
             )
         },
         "schedule_route": str(response["schedule"]["route"]),
+        "scheduler_selected_route": str(
+            data_plane.get("scheduler_selected_route", response["schedule"]["route"])
+        ),
+        "scheduler_selected_wait": scheduler_selected_wait,
+        "requires_authoritative_final": requires_authoritative_final,
+        "scheduler_conservative_requires_authoritative_final": (
+            scheduler_conservative_requires_authoritative_final
+        ),
+        "deferred_action_types": [str(value) for value in deferred_action_types],
+        "summary_delivery_required": bool(
+            data_plane.get("summary_delivery_required", False)
+        ),
+        "evidence_required_level": str(
+            evidence_plan.get("required_level", "unknown")
+        ),
+        "large_evidence_requested": str(
+            evidence_plan.get("required_level", "summary")
+        )
+        in {"feature", "raw"},
         "executed_route": str(final["route"]),
         "local_decision": str(local["decision"]),
         "final_decision": str(final["decision"]),
@@ -780,7 +831,7 @@ def _build_report(result: Mapping[str, Any]) -> str:
             result["partition_count"],
             quality["expected_request_count"],
         ),
-        "- 外部闭环口径：常驻 ASTGCN 输入与后处理 + 客户端到边缘服务 + 边缘决策 + 必要的云端复核与返回。",
+        "- 同时报告三种互不混用的口径：输入到本地 provisional、按业务策略完成、输入到全局 final。",
         "",
         "## 结果",
         "",
@@ -793,14 +844,72 @@ def _build_report(result: Mapping[str, Any]) -> str:
         "| provisional→final 完成率 | {:.2%} |".format(
             quality["final_completion_rate"]
         ),
-        "| 全请求 0.2 s 达标率 | {:.2%} |".format(
+        "| 存在初始冲突的样本组比例 | {:.2%} |".format(
+            quality["conflict_group_rate"]
+        ),
+        "| 初始冲突 → 协调后残余冲突 | {} → {} |".format(
+            quality["initial_conflict_count"],
+            quality["residual_conflict_count"],
+        ),
+        "| 冲突解决成功率 | {:.2%} |".format(
+            quality["conflict_resolution_success_rate"]
+        ),
+        "| 输入到本地 provisional 的 0.2 s 达标率 | {:.2%} |".format(
             quality["deadline_success_rate_all_requests"]
         ),
-        "| 外部完整闭环平均时延 | {:.3f} ms |".format(
+        "| 输入到本地 provisional 平均时延 | {:.3f} ms |".format(
             latency["observed_external_full_loop"]["average_ms"]
         ),
-        "| 外部完整闭环 P95 | {:.3f} ms |".format(
+        "| 输入到本地 provisional P95 | {:.3f} ms |".format(
             latency["observed_external_full_loop"]["p95_ms"]
+        ),
+        "| 按业务策略完成平均时延 | {:.3f} ms |".format(
+            latency["observed_business_completion"]["average_ms"]
+        ),
+        "| 按业务策略完成 P95 | {:.3f} ms |".format(
+            latency["observed_business_completion"]["p95_ms"]
+        ),
+        "| 调度器保守等待口径平均时延 | {:.3f} ms |".format(
+            latency["observed_scheduler_conservative_completion"]["average_ms"]
+        ),
+        "| 按业务策略完成的 0.2 s 达标率 | {:.2%} |".format(
+            quality["business_deadline_success_rate_all_requests"]
+        ),
+        "| 样本级按业务策略完成平均时延（四边取最大） | {:.3f} ms |".format(
+            latency["sample_business_completion"]["average_ms"]
+        ),
+        "| 样本级按业务策略完成 P95（四边取最大） | {:.3f} ms |".format(
+            latency["sample_business_completion"]["p95_ms"]
+        ),
+        "| 样本级按业务策略完成的 0.2 s 达标率 | {:.2%} |".format(
+            quality["sample_business_deadline_success_rate"]
+        ),
+        "| 输入到全局 final 平均时延 | {:.3f} ms |".format(
+            latency["observed_input_to_global_final"]["average_ms"]
+        ),
+        "| 输入到全局 final P95 | {:.3f} ms |".format(
+            latency["observed_input_to_global_final"]["p95_ms"]
+        ),
+        "| 输入到全局 final 的 0.2 s 达标率 | {:.2%} |".format(
+            quality["global_final_deadline_success_rate_all_requests"]
+        ),
+        "| 样本级全局 final 平均时延（四边取最大） | {:.3f} ms |".format(
+            latency["sample_global_final"]["average_ms"]
+        ),
+        "| 不等待云端即可完成的业务比例 | {:.2%} |".format(
+            quality["local_business_completion_rate"]
+        ),
+        "| 等待权威 final 的业务比例 | {:.2%} |".format(
+            quality["authoritative_final_required_rate"]
+        ),
+        "| 调度器建议下不等待 final 的比例 | {:.2%} |".format(
+            quality["scheduler_conservative_local_completion_rate"]
+        ),
+        "| 轻量摘要上云比例 | {:.2%} |".format(
+            quality["summary_delivery_required_rate"]
+        ),
+        "| 大证据请求比例 | {:.2%} |".format(
+            quality["large_evidence_requested_rate"]
         ),
         "| ASTGCN 感知平均时延 | {:.3f} ms |".format(
             latency["perception"]["average_ms"]
@@ -834,6 +943,9 @@ def _build_report(result: Mapping[str, Any]) -> str:
         "- 调度路由：`{}`".format(
             json.dumps(quality["schedule_routes"], ensure_ascii=False)
         ),
+        "- 原始调度意图：`{}`".format(
+            json.dumps(quality["scheduler_selected_routes"], ensure_ascii=False)
+        ),
         "- 边缘决策路径：`{}`".format(
             json.dumps(quality["edge_decision_paths"], ensure_ascii=False)
         ),
@@ -846,7 +958,13 @@ def _build_report(result: Mapping[str, Any]) -> str:
         "",
         "## 口径说明",
         "",
-        "- `observed_external_full_loop_ms` 是本报告的主时延指标；失败和超时在全请求达标率中按未达标计。",
+        "- `observed_external_full_loop_ms` 是输入到本地 provisional；它包含感知和边缘 HTTP，不包含异步云端 final。",
+        "- `observed_business_completion_ms` 按动作授权计时：本地已授权事件止于 provisional，动作明确带 `requires_cloud_confirmation` 时止于 authoritative final。",
+        "- `observed_scheduler_conservative_completion_ms` 额外把调度器的等待建议算成阻塞；它是更保守的对照口径，不改变动作授权语义。",
+        "- `observed_input_to_global_final_ms` 强制所有事件都等 final，仅用于说明全局一致性闭环，不等同于普通监测业务响应时间。",
+        "- 样本级指标把同一 sample_id 的四个边缘完成时间取最大值，再跨样本统计；这是多边缘任务完成的保守主口径。",
+        "- 在线多边缘样本的轻量摘要仍异步上云；不等待云端不等于不上传摘要。动态调度控制的是是否阻塞、是否请求大证据和是否调用大模型。",
+        "- 初始冲突组比例是协调前诊断量；题目要求的最终多节点决策冲突应同时查看协调后残余冲突，不能把两者互换。",
         "- 每个测试时刻只执行一次完整 ASTGCN，并发提交四个区域事件；本机四个逻辑边仍共享一个 `parallel=1` 的 Edge-Qwen 服务，因此 `timestamp_group_wall_ms` 是单机竞争压力，不代表两台 Jetson 的分布式时延。",
         "- `provisional_to_final` 是异步云端最终回填时延；普通监测业务可先使用 provisional，高风险不可逆动作必须等待 final。",
         "- PSS 用于按比例分摊多进程共享页；边侧进程组包含 ASTGCN、Edge-Qwen 和边缘 HTTP 服务，不含云服务。",
@@ -1185,11 +1303,13 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
             }
 
         review_records, final_wait_ms = _wait_for(
-            "all edge provisional decisions to receive final cloud review",
+            "all edge provisional decisions to receive authoritative cloud final",
             read_reviews,
             lambda value: len(value) == len(records)
             and all(
                 item.get("state") == "completed"
+                and str(item.get("completion_stage", ""))
+                not in NON_AUTHORITATIVE_REVIEW_STAGES
                 for item in value.values()
             ),
             args.final_wait_seconds,
@@ -1218,6 +1338,9 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
                     "review_completion_mode": str(
                         review.get("completion_mode", "")
                     ),
+                    "review_completion_stage": str(
+                        review.get("completion_stage", "")
+                    ),
                     "eventual_completion_ms": float(
                         review.get("eventual_completion_ms", 0.0) or 0.0
                     ),
@@ -1243,6 +1366,29 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
                         else None
                     ),
                 }
+            )
+            record["observed_input_to_global_final_ms"] = round(
+                float(record["perception_ms"])
+                + float(record["eventual_completion_ms"]),
+                6,
+            )
+            record["observed_business_completion_ms"] = round(
+                (
+                    float(record["observed_input_to_global_final_ms"])
+                    if record["requires_authoritative_final"]
+                    else float(record["observed_external_full_loop_ms"])
+                ),
+                6,
+            )
+            record["observed_scheduler_conservative_completion_ms"] = round(
+                (
+                    float(record["observed_input_to_global_final_ms"])
+                    if record[
+                        "scheduler_conservative_requires_authoritative_final"
+                    ]
+                    else float(record["observed_external_full_loop_ms"])
+                ),
+                6,
             )
         for group_id in sorted(group_ids):
             aggregation_records[group_id] = _request_json(
@@ -1299,6 +1445,80 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     cloud_sync_count = sum(
         record["executed_route"] == "cloud_sync" for record in records
     )
+    local_business_completion_count = sum(
+        not record["requires_authoritative_final"] for record in records
+    )
+    scheduler_conservative_local_completion_count = sum(
+        not record["scheduler_conservative_requires_authoritative_final"]
+        for record in records
+    )
+    authoritative_final_count = sum(
+        record.get("review_state") == "completed"
+        and record.get("review_completion_stage")
+        not in NON_AUTHORITATIVE_REVIEW_STAGES
+        for record in records
+    )
+    business_deadline_met_count = sum(
+        record.get("observed_business_completion_ms", float("inf")) <= 200.0
+        for record in records
+    )
+    global_final_deadline_met_count = sum(
+        record.get("observed_input_to_global_final_ms", float("inf")) <= 200.0
+        for record in records
+    )
+    sample_business_completion_ms = []
+    sample_scheduler_conservative_completion_ms = []
+    sample_global_final_ms = []
+    for sample_id in sample_ids:
+        sample_records = [
+            record for record in records if record["sample_id"] == sample_id
+        ]
+        if len(sample_records) != perception.partition_count:
+            continue
+        sample_business_completion_ms.append(
+            max(record["observed_business_completion_ms"] for record in sample_records)
+        )
+        sample_scheduler_conservative_completion_ms.append(
+            max(
+                record["observed_scheduler_conservative_completion_ms"]
+                for record in sample_records
+            )
+        )
+        sample_global_final_ms.append(
+            max(
+                record["observed_input_to_global_final_ms"]
+                for record in sample_records
+            )
+        )
+    sample_business_deadline_met_count = sum(
+        value <= 200.0 for value in sample_business_completion_ms
+    )
+    sample_global_final_deadline_met_count = sum(
+        value <= 200.0 for value in sample_global_final_ms
+    )
+    coordination_results = [
+        value.get("result", {})
+        for value in aggregation_records.values()
+        if isinstance(value.get("result"), dict)
+    ]
+    initial_conflict_count = sum(
+        int(value.get("initial_conflict_count", 0))
+        for value in coordination_results
+    )
+    residual_conflict_count = sum(
+        int(value.get("residual_conflict_count", 0))
+        for value in coordination_results
+    )
+    conflict_group_count = sum(
+        int(value.get("initial_conflict_count", 0)) > 0
+        for value in coordination_results
+    )
+    conflict_resolution_success_rate = (
+        (initial_conflict_count - residual_conflict_count)
+        / initial_conflict_count
+        if initial_conflict_count
+        else 1.0
+    )
     if args.require_edge_llm and selected_count == 0:
         raise RuntimeError("no measured event selected Edge-Qwen")
     edge_llm_runtime_error_count = sum(
@@ -1310,7 +1530,7 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
         )
 
     result: Dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "task": "traffic_framework_real_closed_loop_acceptance",
         "run_id": run_id,
         "created_at_epoch_ms": int(time.time() * 1000),
@@ -1367,15 +1587,9 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
             "failure_count": len(failures),
             "timeout_count": sum(bool(row.get("timeout")) for row in failures),
             "success_rate": round(success_count / expected_request_count, 6),
-            "final_completion_count": sum(
-                record.get("review_state") == "completed" for record in records
-            ),
+            "final_completion_count": authoritative_final_count,
             "final_completion_rate": round(
-                sum(
-                    record.get("review_state") == "completed"
-                    for record in records
-                )
-                / max(1, expected_request_count),
+                authoritative_final_count / max(1, expected_request_count),
                 6,
             ),
             "cloud_correction_count": sum(
@@ -1405,6 +1619,15 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
                 / max(1, len(sample_ids)),
                 6,
             ),
+            "conflict_group_count": conflict_group_count,
+            "conflict_group_rate": round(
+                conflict_group_count / max(1, len(aggregation_records)), 6
+            ),
+            "initial_conflict_count": initial_conflict_count,
+            "residual_conflict_count": residual_conflict_count,
+            "conflict_resolution_success_rate": round(
+                conflict_resolution_success_rate, 6
+            ),
             "cloud_llm_review_count": sum(
                 isinstance(record.get("cloud_llm_review"), dict)
                 for record in records
@@ -1428,6 +1651,89 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
                 )
                 <= 200.0
             ),
+            "average_business_e2e_below_200ms": bool(
+                records
+                and _mean(
+                    record["observed_business_completion_ms"] for record in records
+                )
+                <= 200.0
+            ),
+            "average_global_final_e2e_below_200ms": bool(
+                records
+                and _mean(
+                    record["observed_input_to_global_final_ms"]
+                    for record in records
+                )
+                <= 200.0
+            ),
+            "average_sample_business_e2e_below_200ms": bool(
+                sample_business_completion_ms
+                and _mean(sample_business_completion_ms) <= 200.0
+            ),
+            "average_sample_global_final_e2e_below_200ms": bool(
+                sample_global_final_ms
+                and _mean(sample_global_final_ms) <= 200.0
+            ),
+            "business_deadline_met_count": business_deadline_met_count,
+            "business_deadline_success_rate_all_requests": round(
+                business_deadline_met_count / max(1, expected_request_count), 6
+            ),
+            "global_final_deadline_met_count": global_final_deadline_met_count,
+            "global_final_deadline_success_rate_all_requests": round(
+                global_final_deadline_met_count / max(1, expected_request_count), 6
+            ),
+            "sample_business_deadline_met_count": (
+                sample_business_deadline_met_count
+            ),
+            "sample_business_deadline_success_rate": round(
+                sample_business_deadline_met_count
+                / max(1, len(sample_business_completion_ms)),
+                6,
+            ),
+            "sample_global_final_deadline_met_count": (
+                sample_global_final_deadline_met_count
+            ),
+            "sample_global_final_deadline_success_rate": round(
+                sample_global_final_deadline_met_count
+                / max(1, len(sample_global_final_ms)),
+                6,
+            ),
+            "local_business_completion_count": local_business_completion_count,
+            "local_business_completion_rate": round(
+                local_business_completion_count / max(1, success_count), 6
+            ),
+            "authoritative_final_required_count": (
+                success_count - local_business_completion_count
+            ),
+            "authoritative_final_required_rate": round(
+                (success_count - local_business_completion_count)
+                / max(1, success_count),
+                6,
+            ),
+            "scheduler_conservative_local_completion_count": (
+                scheduler_conservative_local_completion_count
+            ),
+            "scheduler_conservative_local_completion_rate": round(
+                scheduler_conservative_local_completion_count
+                / max(1, success_count),
+                6,
+            ),
+            "summary_delivery_required_count": sum(
+                record["summary_delivery_required"] for record in records
+            ),
+            "summary_delivery_required_rate": round(
+                sum(record["summary_delivery_required"] for record in records)
+                / max(1, success_count),
+                6,
+            ),
+            "large_evidence_requested_count": sum(
+                record["large_evidence_requested"] for record in records
+            ),
+            "large_evidence_requested_rate": round(
+                sum(record["large_evidence_requested"] for record in records)
+                / max(1, success_count),
+                6,
+            ),
             "edge_llm_selected_count": selected_count,
             "edge_llm_accepted_count": accepted_count,
             "edge_llm_runtime_error_count": edge_llm_runtime_error_count,
@@ -1448,6 +1754,9 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
             "cloud_sync_rate": round(cloud_sync_count / max(1, success_count), 6),
             "schedule_routes": _counter(
                 record["schedule_route"] for record in records
+            ),
+            "scheduler_selected_routes": _counter(
+                record["scheduler_selected_route"] for record in records
             ),
             "executed_routes": _counter(
                 record["executed_route"] for record in records
@@ -1488,6 +1797,23 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
             "observed_external_full_loop": summarize(
                 row["observed_external_full_loop_ms"] for row in records
             ),
+            "observed_business_completion": summarize(
+                row["observed_business_completion_ms"] for row in records
+            ),
+            "observed_scheduler_conservative_completion": summarize(
+                row["observed_scheduler_conservative_completion_ms"]
+                for row in records
+            ),
+            "observed_input_to_global_final": summarize(
+                row["observed_input_to_global_final_ms"] for row in records
+            ),
+            "sample_business_completion": summarize(
+                sample_business_completion_ms
+            ),
+            "sample_scheduler_conservative_completion": summarize(
+                sample_scheduler_conservative_completion_ms
+            ),
+            "sample_global_final": summarize(sample_global_final_ms),
             "framework_accounted_closed_loop": summarize(
                 row["framework_accounted_closed_loop_ms"] for row in records
             ),
@@ -1517,7 +1843,10 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
             "timestamp_group_wall": summarize(
                 row["timestamp_group_wall_ms"] for row in timestamp_records
             ),
-            "provisional_to_final": summarize(
+            "edge_request_to_final": summarize(
+                row["eventual_completion_ms"] for row in records
+            ),
+            "provisional_to_final_legacy_mislabeled": summarize(
                 row["eventual_completion_ms"] for row in records
             ),
             "cloud_llm_review": summarize(

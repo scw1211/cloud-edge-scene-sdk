@@ -476,6 +476,78 @@ class TrafficCloudBatchDecisionTests(unittest.TestCase):
         self.assertEqual(result["event_count"], 4)
         self.assertEqual(len(result["decisions"]), 4)
 
+    def test_summary_only_events_use_lightweight_cloud_policy(self):
+        summaries = [
+            self.plugin.prepare_cloud_event(
+                replace(
+                    event,
+                    evidence=[item for item in event.evidence if item.level == "summary"],
+                ),
+                "summary",
+            )
+            for event in self.events
+        ]
+        result = CloudRuntime(SceneRegistry([self.plugin])).coordinate(summaries)
+
+        self.assertEqual(result["event_count"], 4)
+        self.assertEqual(len(result["decisions"]), 4)
+        self.assertTrue(
+            all(
+                item["metadata"]["cloud_inference_path"]
+                == "semantic_summary_policy"
+                for item in result["decisions"]
+            )
+        )
+        self.assertTrue(
+            all(
+                item["metadata"]["cloud_summary_batch_size"] == 4
+                for item in result["decisions"]
+            )
+        )
+
+    def test_mixed_evidence_batches_only_feature_events_through_model(self):
+        mixed = list(self.events)
+        for index in (2, 3):
+            mixed[index] = self.plugin.prepare_cloud_event(
+                replace(
+                    mixed[index],
+                    evidence=[
+                        item
+                        for item in mixed[index].evidence
+                        if item.level == "summary"
+                    ],
+                ),
+                "summary",
+            )
+        model = self.plugin._cloud_model["model"]
+        original_predict_proba = model.predict_proba
+        probability_shapes = []
+
+        def counted_predict_proba(matrix):
+            probability_shapes.append(tuple(matrix.shape))
+            return original_predict_proba(matrix)
+
+        model.predict_proba = counted_predict_proba
+        try:
+            decisions = list(
+                self.plugin.cloud_decide_batch(
+                    self.plugin.fuse_cloud_context(mixed)
+                )
+            )
+        finally:
+            model.predict_proba = original_predict_proba
+
+        self.assertEqual(probability_shapes, [(2, 226)])
+        self.assertEqual(len(decisions), 4)
+        self.assertEqual(
+            sum(
+                decision.metadata.get("cloud_inference_path")
+                == "semantic_summary_policy"
+                for decision in decisions
+            ),
+            2,
+        )
+
 
 class EdgeQwenSelectionTests(unittest.TestCase):
     def setUp(self):

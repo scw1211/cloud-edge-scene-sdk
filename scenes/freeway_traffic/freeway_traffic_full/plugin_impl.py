@@ -864,6 +864,44 @@ class TrafficPlugin(ScenePlugin):
             "active_neighbor_feature_count": active_neighbor_feature_count,
         }
 
+    @staticmethod
+    def _has_cloud_feature_evidence(event: SemanticEvent) -> bool:
+        return sum(
+            item.level == "feature"
+            and item.modality == "traffic_task_features"
+            for item in event.evidence
+        ) == 1
+
+    def _cloud_summary_legacy_decision(
+        self,
+        event: SemanticEvent,
+        summary_batch_size: int,
+    ) -> Dict[str, Any]:
+        """Produce the lightweight cloud baseline from a semantic summary.
+
+        Ordinary online samples intentionally carry no encoded 226-dimensional
+        feature vector.  They must still participate in topology fusion and
+        conflict coordination instead of entering an impossible model retry
+        loop.  The deterministic scene policy consumes only the compact
+        semantic payload; feature-bearing events continue to use ExtraTrees.
+        """
+        from traffic_system.decision_utils import rule_teacher_decision
+
+        legacy = rule_teacher_decision(
+            event.scene_payload,
+            decision_source="cloud_semantic_summary_coordinator",
+        )
+        legacy["policy_version"] = self.policy_version
+        legacy["framework_metadata"] = {
+            "cloud_inference_path": "semantic_summary_policy",
+            "cloud_summary_batch_size": int(summary_batch_size),
+            "selected_evidence_level": "summary",
+            "fused_neighbor_count": event.metadata.get(
+                "fused_neighbor_count", 0
+            ),
+        }
+        return legacy
+
     def _build_cloud_legacy_decision(
         self,
         event: SemanticEvent,
@@ -1583,7 +1621,9 @@ class TrafficPlugin(ScenePlugin):
         return self._decision(event, cloud=False)
 
     def cloud_decide(self, event: SemanticEvent) -> Any:
-        return self._decision(event, cloud=True)
+        if self.cloud_model_path is None:
+            return self._decision(event, cloud=True)
+        return list(self.cloud_decide_batch([event]))[0]
 
     def cloud_decide_batch(
         self,
@@ -1600,6 +1640,7 @@ class TrafficPlugin(ScenePlugin):
             index
             for index, event in enumerate(normalized)
             if bool(event.scene_payload)
+            and self._has_cloud_feature_evidence(event)
         ]
         if model_indices:
             model_events = [normalized[index] for index in model_indices]
@@ -1610,6 +1651,21 @@ class TrafficPlugin(ScenePlugin):
                     legacy,
                     cloud=True,
                 )
+        model_index_set = set(model_indices)
+        summary_indices = [
+            index
+            for index, event in enumerate(normalized)
+            if bool(event.scene_payload) and index not in model_index_set
+        ]
+        for index in summary_indices:
+            event = normalized[index]
+            decisions[index] = self._decision_from_legacy(
+                event,
+                self._cloud_summary_legacy_decision(
+                    event, len(summary_indices)
+                ),
+                cloud=True,
+            )
         for index, event in enumerate(normalized):
             if decisions[index] is None:
                 decisions[index] = self._decision_from_legacy(

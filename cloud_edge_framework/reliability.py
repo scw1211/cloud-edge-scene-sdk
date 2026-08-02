@@ -914,26 +914,55 @@ class SQLiteIdempotencyStore:
         if self.ttl_seconds <= 0 or self.max_entries <= 0:
             raise ValueError("idempotency ttl_seconds and max_entries must be positive")
         self._lock = threading.RLock()
+        self._request_locks: Dict[str, threading.Lock] = {}
+        self._request_lock_users: Dict[str, int] = {}
+        self._last_cleanup_ms = 0
+        self._cleanup_interval_ms = max(
+            1_000,
+            min(60_000, int(self.ttl_seconds * 1000)),
+        )
+        self._connection = sqlite3.connect(
+            str(self.path),
+            timeout=10.0,
+            check_same_thread=False,
+        )
+        self._connection.row_factory = sqlite3.Row
+        self._connection.execute("PRAGMA journal_mode=WAL")
+        self._connection.execute("PRAGMA synchronous=NORMAL")
+        self._connection.execute("PRAGMA busy_timeout=10000")
         self._initialize()
 
     @contextmanager
-    def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(str(self.path), timeout=10.0)
+    def _request_lock(self, request_key: str) -> Iterator[None]:
+        """Serialize one idempotency key without serializing unrelated work."""
+        with self._lock:
+            lock = self._request_locks.get(request_key)
+            if lock is None:
+                lock = threading.Lock()
+                self._request_locks[request_key] = lock
+                self._request_lock_users[request_key] = 0
+            self._request_lock_users[request_key] += 1
+        lock.acquire()
         try:
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA journal_mode=WAL")
-            connection.execute("PRAGMA synchronous=FULL")
-            connection.execute("PRAGMA busy_timeout=10000")
-            yield connection
-            connection.commit()
-        except BaseException:
-            connection.rollback()
-            raise
+            yield
         finally:
-            connection.close()
+            lock.release()
+            with self._lock:
+                remaining = self._request_lock_users.get(request_key, 1) - 1
+                if remaining <= 0:
+                    self._request_lock_users.pop(request_key, None)
+                    if self._request_locks.get(request_key) is lock:
+                        self._request_locks.pop(request_key, None)
+                else:
+                    self._request_lock_users[request_key] = remaining
 
     def _initialize(self) -> None:
-        with self._connect() as connection:
+        # This database is a replay-response cache, not the durable source of
+        # truth for cloud submissions.  The Outbox remains FULL-sync.  A
+        # process-local persistent connection avoids reopening and renegotiating
+        # WAL for every provisional response while the lock keeps it thread-safe.
+        with self._lock, self._connection:
+            connection = self._connection
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS idempotency_responses (
@@ -962,16 +991,24 @@ class SQLiteIdempotencyStore:
         request_hash = _request_sha256(request_payload)
         now_ms = int(time.time() * 1000)
         expires_at_ms = now_ms + int(self.ttl_seconds * 1000)
-        with self._lock, self._connect() as connection:
-            connection.execute(
-                "DELETE FROM idempotency_responses WHERE expires_at_ms <= ?",
-                (now_ms,),
-            )
-            row = connection.execute(
-                "SELECT request_sha256, response_json FROM idempotency_responses "
-                "WHERE request_key=?",
-                (key,),
-            ).fetchone()
+        with self._request_lock(key):
+            # Keep SQLite transactions short.  The previous implementation held
+            # both the global Python lock and a write transaction while running
+            # the full inference operation, which serialized different edge
+            # events even though their idempotency keys were independent.
+            with self._lock, self._connection:
+                connection = self._connection
+                if now_ms - self._last_cleanup_ms >= self._cleanup_interval_ms:
+                    connection.execute(
+                        "DELETE FROM idempotency_responses WHERE expires_at_ms <= ?",
+                        (now_ms,),
+                    )
+                    self._last_cleanup_ms = now_ms
+                row = connection.execute(
+                    "SELECT request_sha256, response_json FROM idempotency_responses "
+                    "WHERE request_key=?",
+                    (key,),
+                ).fetchone()
             if row is not None:
                 if str(row["request_sha256"]) != request_hash:
                     raise IdempotencyConflictError(
@@ -983,33 +1020,45 @@ class SQLiteIdempotencyStore:
             response = operation()
             if not isinstance(response, dict):
                 raise ValueError("idempotent operation must return an object")
-            connection.execute(
-                """
-                INSERT INTO idempotency_responses(
-                    request_key, request_sha256, response_json, created_at_ms, expires_at_ms
-                ) VALUES (?, ?, ?, ?, ?)
-                """,
-                (key, request_hash, _canonical_json(response), now_ms, expires_at_ms),
-            )
-            overflow = connection.execute(
-                "SELECT MAX(0, COUNT(*) - ?) AS value FROM idempotency_responses",
-                (self.max_entries,),
-            ).fetchone()["value"]
-            if int(overflow) > 0:
+
+            with self._lock, self._connection:
+                connection = self._connection
                 connection.execute(
                     """
-                    DELETE FROM idempotency_responses WHERE request_key IN (
-                        SELECT request_key FROM idempotency_responses
-                        ORDER BY created_at_ms LIMIT ?
-                    )
+                    INSERT INTO idempotency_responses(
+                        request_key, request_sha256, response_json,
+                        created_at_ms, expires_at_ms
+                    ) VALUES (?, ?, ?, ?, ?)
                     """,
-                    (int(overflow),),
+                    (
+                        key,
+                        request_hash,
+                        _canonical_json(response),
+                        now_ms,
+                        expires_at_ms,
+                    ),
                 )
+                overflow = connection.execute(
+                    "SELECT MAX(0, COUNT(*) - ?) AS value "
+                    "FROM idempotency_responses",
+                    (self.max_entries,),
+                ).fetchone()["value"]
+                if int(overflow) > 0:
+                    connection.execute(
+                        """
+                        DELETE FROM idempotency_responses WHERE request_key IN (
+                            SELECT request_key FROM idempotency_responses
+                            ORDER BY created_at_ms LIMIT ?
+                        )
+                        """,
+                        (int(overflow),),
+                    )
             return dict(response), False
 
     def snapshot(self) -> Dict[str, Any]:
         now_ms = int(time.time() * 1000)
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection:
+            connection = self._connection
             row = connection.execute(
                 "SELECT COUNT(*) AS count FROM idempotency_responses WHERE expires_at_ms > ?",
                 (now_ms,),
@@ -1020,3 +1069,8 @@ class SQLiteIdempotencyStore:
             "ttl_seconds": self.ttl_seconds,
             "max_entries": self.max_entries,
         }
+
+    def close(self) -> None:
+        """Close the process-local cache connection after service shutdown/tests."""
+        with self._lock:
+            self._connection.close()
