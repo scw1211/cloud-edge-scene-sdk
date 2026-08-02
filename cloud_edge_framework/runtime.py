@@ -1393,6 +1393,7 @@ class EdgeRuntime:
         aggregation_max_wait_seconds: float = 10.0,
         reconciliation_poll_seconds: float = 5.0,
         reconciliation_max_wait_seconds: float = 60.0,
+        aggregation_batch_wait_seconds: float = 0.15,
     ) -> Dict[str, Any]:
         leases = None
         reconciliation_ids = set()
@@ -1489,28 +1490,127 @@ class EdgeRuntime:
         deliveries: List[Dict[str, Any]] = []
         partial_results = 0
 
+        batched_aggregation_responses = None
+        aggregation_batch_error = None
+        aggregation_batch_attempted = bool(
+            aggregation_items and hasattr(self.cloud, "aggregate_batch")
+        )
+        aggregation_batch_elapsed_ms = 0.0
+        aggregation_batch_transport: Dict[str, Any] = {}
+        if aggregation_batch_attempted:
+            batch_started = time.perf_counter()
+            try:
+                batch_response = self.cloud.aggregate_batch(
+                    [item[1] for item in aggregation_items],
+                    wait_seconds=aggregation_batch_wait_seconds,
+                )
+                aggregation_batch_elapsed_ms = (
+                    time.perf_counter() - batch_started
+                ) * 1000.0
+                raw_items = batch_response.get("items")
+                if not isinstance(raw_items, list):
+                    raise ValueError("aggregation batch response omitted items")
+                batched_aggregation_responses = {}
+                for response in raw_items:
+                    if not isinstance(response, dict):
+                        raise ValueError(
+                            "aggregation batch response items must be objects"
+                        )
+                    event_id = str(response.get("event_id", "")).strip()
+                    if not event_id or event_id in batched_aggregation_responses:
+                        raise ValueError(
+                            "aggregation batch response has invalid event identity"
+                        )
+                    batched_aggregation_responses[event_id] = dict(response)
+                expected_ids = {item[1].event_id for item in aggregation_items}
+                if set(batched_aggregation_responses) != expected_ids:
+                    raise ValueError(
+                        "aggregation batch response event identities do not match request"
+                    )
+                batch_transport = self._response_transport(batch_response)
+                aggregation_batch_transport = dict(batch_transport)
+                item_count = len(aggregation_items)
+                for index, (_, cloud_event) in enumerate(aggregation_items):
+                    item_transport = dict(batch_transport)
+                    for metric_name in ("request_bytes", "response_bytes"):
+                        total = int(batch_transport.get(metric_name, 0))
+                        quotient, remainder = divmod(total, item_count)
+                        item_transport[metric_name] = quotient + int(index < remainder)
+                    batched_aggregation_responses[cloud_event.event_id][
+                        "transport"
+                    ] = item_transport
+                deliveries.append(
+                    {
+                        "operation": "aggregate_batch",
+                        "event_count": item_count,
+                        "success": True,
+                        "http_round_trip_ms": float(
+                            batch_transport.get(
+                                "http_round_trip_ms",
+                                aggregation_batch_elapsed_ms,
+                            )
+                        ),
+                        "request_bytes": int(
+                            batch_transport.get("request_bytes", 0)
+                        ),
+                        "response_bytes": int(
+                            batch_transport.get("response_bytes", 0)
+                        ),
+                    }
+                )
+            except Exception as exc:  # noqa: BLE001
+                aggregation_batch_elapsed_ms = (
+                    time.perf_counter() - batch_started
+                ) * 1000.0
+                aggregation_batch_error = exc
+                deliveries.append(
+                    {
+                        "operation": "aggregate_batch",
+                        "event_count": len(aggregation_items),
+                        "success": False,
+                        "http_round_trip_ms": round(
+                            aggregation_batch_elapsed_ms, 6
+                        ),
+                        "request_bytes": 0,
+                        "response_bytes": 0,
+                    }
+                )
+
         for stored_event, cloud_event in aggregation_items:
             is_reconciliation = cloud_event.event_id in reconciliation_ids
             delivery_started = time.perf_counter()
             delivery_recorded = False
             try:
-                response = self.cloud.aggregate(cloud_event)
-                delivery_elapsed_ms = (
-                    time.perf_counter() - delivery_started
-                ) * 1000.0
+                if aggregation_batch_error is not None:
+                    raise aggregation_batch_error
+                if batched_aggregation_responses is not None:
+                    response = batched_aggregation_responses[cloud_event.event_id]
+                    delivery_elapsed_ms = aggregation_batch_elapsed_ms
+                else:
+                    response = self.cloud.aggregate(cloud_event)
+                    delivery_elapsed_ms = (
+                        time.perf_counter() - delivery_started
+                    ) * 1000.0
                 transport = self._response_transport(response)
-                deliveries.append(
-                    {
-                        "operation": "aggregate",
-                        "event_count": 1,
-                        "success": True,
-                        "http_round_trip_ms": float(
-                            transport.get("http_round_trip_ms", delivery_elapsed_ms)
-                        ),
-                        "request_bytes": int(transport.get("request_bytes", 0)),
-                        "response_bytes": int(transport.get("response_bytes", 0)),
-                    }
-                )
+                if not aggregation_batch_attempted:
+                    deliveries.append(
+                        {
+                            "operation": "aggregate",
+                            "event_count": 1,
+                            "success": True,
+                            "http_round_trip_ms": float(
+                                transport.get(
+                                    "http_round_trip_ms", delivery_elapsed_ms
+                                )
+                            ),
+                            "request_bytes": int(
+                                transport.get("request_bytes", 0)
+                            ),
+                            "response_bytes": int(
+                                transport.get("response_bytes", 0)
+                            ),
+                        }
+                    )
                 delivery_recorded = True
                 self.performance_store.record(
                     cloud_event.scene,
@@ -1605,7 +1705,7 @@ class EdgeRuntime:
                 coordination_results.append(response)
             except Exception as exc:  # noqa: BLE001
                 error = "{}: {}".format(type(exc).__name__, exc)
-                if not delivery_recorded:
+                if not delivery_recorded and not aggregation_batch_attempted:
                     deliveries.append(
                         {
                             "operation": "aggregate",
@@ -1627,6 +1727,24 @@ class EdgeRuntime:
                         (time.perf_counter() - delivery_started) * 1000.0,
                         0,
                         0,
+                    )
+                if aggregation_batch_attempted:
+                    self.performance_store.record(
+                        cloud_event.scene,
+                        self._pending_evidence_level(stored_event),
+                        self._pending_network_snapshot(stored_event),
+                        False,
+                        aggregation_batch_elapsed_ms,
+                        int(
+                            aggregation_batch_transport.get(
+                                "request_bytes", 0
+                            )
+                        ),
+                        int(
+                            aggregation_batch_transport.get(
+                                "response_bytes", 0
+                            )
+                        ),
                     )
                 if is_reconciliation:
                     reconciliation_retry_ids.append(cloud_event.event_id)

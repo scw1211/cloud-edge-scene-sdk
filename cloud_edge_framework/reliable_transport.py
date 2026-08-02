@@ -54,6 +54,22 @@ class ReliableHttpCloudClient(HttpCloudClient):
                     break
             if event_ids:
                 return stable_id("coordinate_request", *event_ids), trace_id
+        if path.endswith("/aggregate/batch"):
+            events = payload.get("events", [])
+            event_ids = sorted(
+                str(event.get("event_id", ""))
+                for event in events
+                if isinstance(event, dict) and event.get("event_id")
+            )
+            for event in events:
+                if not isinstance(event, dict):
+                    continue
+                metadata = event.get("metadata", {})
+                if isinstance(metadata, dict) and metadata.get("trace_id"):
+                    trace_id = str(metadata["trace_id"])
+                    break
+            if event_ids:
+                return stable_id("aggregate_batch_request", *event_ids), trace_id
         if path.endswith("/feedback"):
             record = payload.get("record", {})
             if isinstance(record, dict) and record.get("feedback_id"):

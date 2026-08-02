@@ -5,7 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 import threading
 import time
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, List, Mapping
 
 from cloud_edge_framework.aggregation import AggregationSpec, MultiEdgeEventAggregator
 from cloud_edge_framework.artifacts import EvidenceArtifactStore
@@ -33,6 +33,7 @@ SCHEMA_ENDPOINT = "/api/v1/collaboration/schema"
 METRICS_ENDPOINT = "/api/v1/framework/metrics"
 EVIDENCE_ENDPOINT_PREFIX = "/api/v1/evidence/"
 AGGREGATE_ENDPOINT = "/api/v1/collaboration/aggregate"
+AGGREGATE_BATCH_ENDPOINT = AGGREGATE_ENDPOINT + "/batch"
 AGGREGATE_FLUSH_ENDPOINT = AGGREGATE_ENDPOINT + "/flush"
 AGGREGATIONS_ENDPOINT = "/api/v1/collaboration/aggregations"
 AGGREGATIONS_ENDPOINT_PREFIX = AGGREGATIONS_ENDPOINT + "/"
@@ -144,6 +145,7 @@ class CloudApiService:
                 "metrics": METRICS_ENDPOINT,
                 "evidence": EVIDENCE_ENDPOINT_PREFIX + "{sha256}",
                 "aggregate": AGGREGATE_ENDPOINT,
+                "aggregate_batch": AGGREGATE_BATCH_ENDPOINT,
                 "flush_aggregations": AGGREGATE_FLUSH_ENDPOINT,
                 "aggregations": AGGREGATIONS_ENDPOINT,
             },
@@ -396,6 +398,130 @@ class CloudApiService:
             "cloud_accepted_at_ms": cloud_accepted_at_ms,
         }
 
+    def aggregate_batch(
+        self,
+        payload: Dict[str, Any],
+        headers: Mapping[str, str],
+    ) -> Dict[str, Any]:
+        """Persist a group of edge summaries before attempting coordination.
+
+        A short optional wait lets independently connected edges converge on
+        the same completed group without making every member poll by itself.
+        The endpoint remains durable and idempotent because member identity is
+        still enforced by ``MultiEdgeEventAggregator.submit``.
+        """
+        del headers
+        raw_events = payload.get("events")
+        if not isinstance(raw_events, list) or not raw_events:
+            raise ValueError("request.events must be a non-empty list")
+        if not all(isinstance(item, dict) for item in raw_events):
+            raise ValueError("request.events must contain only objects")
+        if len(raw_events) > 10000:
+            raise ValueError("request.events exceeds the aggregation batch limit")
+        try:
+            wait_ms = int(payload.get("wait_ms", 0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("request.wait_ms must be an integer") from exc
+        if wait_ms < 0 or wait_ms > 2000:
+            raise ValueError("request.wait_ms must be between 0 and 2000")
+
+        events = [SemanticEvent.from_dict(item) for item in raw_events]
+        event_ids = [event.event_id for event in events]
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("request.events contains duplicate event_id values")
+
+        entries = []
+        with self.manager.lease() as snapshot:
+            for event in events:
+                plugin = snapshot.registry.get(event.scene)
+                raw_spec = plugin.aggregation_spec(event)
+                if raw_spec is None:
+                    raise ValueError(
+                        "scene event {} does not request multi-edge aggregation".format(
+                            event.event_id
+                        )
+                    )
+                entries.append((event, AggregationSpec.from_dict(raw_spec)))
+
+        started = time.perf_counter()
+        accepted_at: Dict[str, int] = {}
+        event_group_ids: Dict[str, str] = {}
+        group_ids: List[str] = []
+        for event, spec in entries:
+            submission = self.aggregator.submit(event, spec)
+            group_id = str(submission["group_id"])
+            if group_id not in group_ids:
+                group_ids.append(group_id)
+            event_group_ids[event.event_id] = group_id
+            accepted_at[event.event_id] = int(
+                submission.get(
+                    "submitted_event_received_at_ms", int(time.time() * 1000)
+                )
+            )
+
+        def complete_ready_groups() -> None:
+            for group_id in group_ids:
+                lease = self.aggregator.claim(group_id)
+                if lease is not None:
+                    self._complete_aggregation_lease(lease)
+
+        complete_ready_groups()
+        wait_deadline = time.monotonic() + (wait_ms / 1000.0)
+        snapshots = {
+            group_id: self.aggregator.get(group_id) for group_id in group_ids
+        }
+        while wait_ms and any(
+            item.get("state") != "completed" for item in snapshots.values()
+        ):
+            remaining = wait_deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(0.005, remaining))
+            complete_ready_groups()
+            snapshots = {
+                group_id: self.aggregator.get(group_id) for group_id in group_ids
+            }
+
+        groups = []
+        group_terminal: Dict[str, bool] = {}
+        for group_id in group_ids:
+            aggregation = self.aggregator.get(group_id)
+            coordination = aggregation.pop("result", None)
+            groups.append(
+                {
+                    "group_id": group_id,
+                    "aggregation": aggregation,
+                    "coordination": coordination,
+                }
+            )
+            group_terminal[group_id] = aggregation.get("state") == "completed"
+
+        items = []
+        for event, _ in entries:
+            group_id = event_group_ids[event.event_id]
+            items.append(
+                {
+                    "event_id": event.event_id,
+                    "group_id": group_id,
+                    "late_submission": False,
+                    "cloud_accepted_at_ms": accepted_at[event.event_id],
+                }
+            )
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        self.metrics.record_cloud_request("aggregate_batch", elapsed_ms, False)
+        self.metrics.increment(
+            "aggregation_batch_events_total", amount=len(events)
+        )
+        return {
+            "items": items,
+            "groups": groups,
+            "event_count": len(items),
+            "group_count": len(group_ids),
+            "wait_ms": wait_ms,
+            "batch_runtime_ms": round(elapsed_ms, 6),
+            "all_terminal": all(group_terminal.values()),
+        }
+
     def flush_aggregations(self, limit: int = 64) -> Dict[str, Any]:
         leases = self.aggregator.claim_due(limit)
         completed = []
@@ -466,6 +592,8 @@ class CloudApiService:
             return self.coordinate(payload, headers)
         if path == AGGREGATE_ENDPOINT:
             return self.aggregate(payload, headers)
+        if path == AGGREGATE_BATCH_ENDPOINT:
+            return self.aggregate_batch(payload, headers)
         if path == AGGREGATE_FLUSH_ENDPOINT:
             return self.flush_aggregations(int(payload.get("limit", 64)))
         if path == FEEDBACK_ENDPOINT:

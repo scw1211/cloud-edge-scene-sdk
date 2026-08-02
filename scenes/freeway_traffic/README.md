@@ -7,8 +7,8 @@ PEMS08 时空窗口
   → 联合 ASTGCN 预测与节点/区域风险
   → 四个 METIS 区域摘要
   → 交通 Student + defer gate + Edge-Qwen 0.8B 单动作 token
-  → 公共在线调度与可靠传输
-  → 云端四边汇聚 + ExtraTrees 全局协调
+  → 公共在线调度 + Outbox 后台批量传输
+  → 云端按样本四边汇聚 + ExtraTrees 一次批量协调
   → 可选 Qwen3.5 9B 结构化复核
   → provisional→final 回填与冲突审计
 ```

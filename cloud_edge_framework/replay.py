@@ -86,6 +86,9 @@ class OutboxReplayWorker:
                     reconciliation_max_wait_seconds=(
                         self.config.reconciliation_max_wait_seconds
                     ),
+                    aggregation_batch_wait_seconds=(
+                        self.config.aggregation_batch_wait_seconds
+                    ),
                 )
             result = dict(result)
             error_count = len(result.get("errors", []))
@@ -150,10 +153,23 @@ class OutboxReplayWorker:
     def _run(self) -> None:
         wait_seconds = self.config.interval_seconds
         while not self._stop_event.is_set():
-            self._wake_event.wait(wait_seconds)
+            notified = self._wake_event.wait(wait_seconds)
             self._wake_event.clear()
             if self._stop_event.is_set():
                 break
+            if (
+                notified
+                and self._work_count() > 0
+                and self.config.batch_coalesce_seconds > 0
+            ):
+                # A fixed, very short window lets near-simultaneous summaries
+                # from one sample share a physical request. It never waits for
+                # the next sample and remains interruptible during shutdown.
+                if self._stop_event.wait(self.config.batch_coalesce_seconds):
+                    break
+                # Consume notifications for events already visible to the
+                # imminent claim. A later append still wakes the next cycle.
+                self._wake_event.clear()
             try:
                 result = self.run_once()
                 wait_seconds = self._next_wait_seconds(result)
@@ -208,6 +224,7 @@ class OutboxReplayWorker:
             "running": running,
             "interval_seconds": self.config.interval_seconds,
             "batch_size": self.config.batch_size,
+            "batch_coalesce_seconds": self.config.batch_coalesce_seconds,
             "waiting_poll_seconds": self.config.waiting_poll_seconds,
             "partial_poll_seconds": self.config.partial_poll_seconds,
             "aggregation_max_wait_seconds": (
@@ -218,6 +235,9 @@ class OutboxReplayWorker:
             ),
             "reconciliation_max_wait_seconds": (
                 self.config.reconciliation_max_wait_seconds
+            ),
+            "aggregation_batch_wait_seconds": (
+                self.config.aggregation_batch_wait_seconds
             ),
             "next_available_delay_seconds": (
                 self.outbox.next_available_delay()

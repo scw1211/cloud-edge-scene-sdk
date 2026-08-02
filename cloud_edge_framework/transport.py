@@ -263,6 +263,156 @@ class HttpCloudClient:
         response["transport"] = transport
         return response
 
+    def aggregate_batch(
+        self,
+        events: Sequence[SemanticEvent],
+        wait_seconds: float = 0.0,
+    ) -> Dict[str, Any]:
+        """Submit one edge's ready aggregation members in one HTTP request.
+
+        The cloud may hold the request for a short, bounded interval so a peer
+        edge can finish the same aggregation group.  This wait happens only in
+        the background Outbox worker and never blocks the provisional business
+        response.
+        """
+        if not events:
+            raise ValueError("aggregate_batch requires at least one event")
+        cloud_events = []
+        artifact_metrics = {
+            "artifact_count": 0,
+            "artifact_uploaded_count": 0,
+            "artifact_request_bytes": 0,
+            "artifact_response_bytes": 0,
+            "artifact_upload_ms": 0.0,
+        }
+        for event in events:
+            cloud_event, item_metrics = self._materialize_artifacts(event)
+            cloud_events.append(cloud_event)
+            for name in artifact_metrics:
+                artifact_metrics[name] += item_metrics[name]
+        try:
+            response = self._post(
+                "/api/v1/collaboration/aggregate/batch",
+                {
+                    "events": [
+                        event.to_dict(
+                            include_scene_payload=bool(
+                                event.metadata.get(
+                                    "transport_include_scene_payload", False
+                                )
+                            )
+                        )
+                        for event in cloud_events
+                    ],
+                    "wait_ms": int(max(0.0, float(wait_seconds)) * 1000.0),
+                },
+            )
+        except CloudTransportError as exc:
+            # Rolling upgrades may briefly pair a new edge with an older cloud
+            # that has only the v1 single-member endpoint. Preserve delivery
+            # rather than turning a protocol upgrade into an outage.
+            message = str(exc)
+            if "HTTP 404" not in message and "HTTP 405" not in message:
+                raise
+            fallback_items = []
+            fallback_transport = {
+                "request_bytes": int(artifact_metrics["artifact_request_bytes"]),
+                "response_bytes": int(artifact_metrics["artifact_response_bytes"]),
+                "http_round_trip_ms": float(artifact_metrics["artifact_upload_ms"]),
+                **{
+                    name: artifact_metrics[name]
+                    for name in ("artifact_count", "artifact_uploaded_count")
+                },
+            }
+            for event in cloud_events:
+                item = dict(self.aggregate(event))
+                item_transport = item.pop("transport", {})
+                item["event_id"] = event.event_id
+                fallback_items.append(item)
+                fallback_transport["request_bytes"] += int(
+                    item_transport.get("request_bytes", 0)
+                )
+                fallback_transport["response_bytes"] += int(
+                    item_transport.get("response_bytes", 0)
+                )
+                fallback_transport["http_round_trip_ms"] += float(
+                    item_transport.get("http_round_trip_ms", 0.0)
+                )
+            fallback_transport["http_round_trip_ms"] = round(
+                fallback_transport["http_round_trip_ms"], 6
+            )
+            return {
+                "items": fallback_items,
+                "event_count": len(fallback_items),
+                "group_count": 0,
+                "wait_ms": 0,
+                "fallback_single_event": True,
+                "transport": fallback_transport,
+            }
+        items = response.get("items")
+        if not isinstance(items, list):
+            raise CloudTransportError(
+                "cloud aggregation batch response is missing items"
+            )
+        raw_groups = response.get("groups")
+        if raw_groups is not None:
+            if not isinstance(raw_groups, list):
+                raise CloudTransportError(
+                    "cloud aggregation batch response groups must be a list"
+                )
+            groups = {}
+            for group in raw_groups:
+                if not isinstance(group, dict):
+                    raise CloudTransportError(
+                        "cloud aggregation batch groups must contain objects"
+                    )
+                group_id = str(group.get("group_id", "")).strip()
+                aggregation = group.get("aggregation")
+                if (
+                    not group_id
+                    or group_id in groups
+                    or not isinstance(aggregation, dict)
+                ):
+                    raise CloudTransportError(
+                        "cloud aggregation batch contains an invalid group"
+                    )
+                groups[group_id] = group
+            expanded_items = []
+            for raw_item in items:
+                if not isinstance(raw_item, dict):
+                    raise CloudTransportError(
+                        "cloud aggregation batch items must contain objects"
+                    )
+                item = dict(raw_item)
+                group_id = str(item.get("group_id", "")).strip()
+                group = groups.get(group_id)
+                if group is None:
+                    raise CloudTransportError(
+                        "cloud aggregation batch item references an unknown group"
+                    )
+                item["aggregation"] = dict(group["aggregation"])
+                item["coordination"] = group.get("coordination")
+                expanded_items.append(item)
+            response["items"] = expanded_items
+        transport = dict(response.pop("_transport_metrics"))
+        transport["json_request_bytes"] = int(transport["request_bytes"])
+        transport.update(artifact_metrics)
+        transport["request_bytes"] = (
+            int(transport["json_request_bytes"])
+            + int(artifact_metrics["artifact_request_bytes"])
+        )
+        transport["response_bytes"] = (
+            int(transport["response_bytes"])
+            + int(artifact_metrics["artifact_response_bytes"])
+        )
+        transport["http_round_trip_ms"] = round(
+            float(transport["http_round_trip_ms"])
+            + float(artifact_metrics["artifact_upload_ms"]),
+            6,
+        )
+        response["transport"] = transport
+        return response
+
     def coordinate(self, events: Sequence[SemanticEvent]) -> Dict[str, Any]:
         cloud_events = []
         artifact_metrics = {

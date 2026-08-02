@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import sqlite3
 import tempfile
 import threading
@@ -19,6 +20,7 @@ from cloud_edge_framework.contracts import (
     SemanticEvent,
     build_decision,
 )
+from cloud_edge_framework.metrics import FrameworkMetrics
 from cloud_edge_framework.reliability import IdempotencyConflictError
 
 
@@ -112,6 +114,73 @@ def _coordination(event: SemanticEvent) -> dict:
     }
 
 
+class _BatchAggregationPlugin:
+    def aggregation_spec(self, event: SemanticEvent) -> dict:
+        index = EXPECTED_MEMBERS.index(event.edge_id)
+        spec = _spec(index)
+        return {
+            "key": spec.key,
+            "member": spec.member,
+            "expected_members": list(spec.expected_members),
+            "minimum_members": spec.minimum_members,
+            "timeout_ms": 500,
+        }
+
+
+class _BatchAggregationRegistry:
+    def get(self, scene: str) -> _BatchAggregationPlugin:
+        if scene != "aggregation_test":
+            raise KeyError(scene)
+        return _BatchAggregationPlugin()
+
+
+class _BatchCloudRuntime:
+    def __init__(self) -> None:
+        self.coordinate_calls = 0
+
+    def coordinate(self, events) -> dict:
+        self.coordinate_calls += 1
+        decisions = []
+        for event in events:
+            decisions.append(
+                build_decision(
+                    event=event,
+                    decision="monitor",
+                    actions=[],
+                    confidence=0.9,
+                    reason="test batch cloud decision",
+                    source="test_cloud",
+                    policy_version="test-1",
+                ).to_dict()
+            )
+        return {
+            "decisions": decisions,
+            "event_count": len(events),
+            "initial_conflict_count": 0,
+            "residual_conflict_count": 0,
+            "resolution_success_rate": 1.0,
+            "globally_consistent": True,
+        }
+
+
+class _BatchManagerSnapshot:
+    def __init__(self, runtime: _BatchCloudRuntime) -> None:
+        self.registry = _BatchAggregationRegistry()
+        self.runtime = runtime
+
+    def require_cloud(self) -> _BatchCloudRuntime:
+        return self.runtime
+
+
+class _BatchManager:
+    def __init__(self, runtime: _BatchCloudRuntime) -> None:
+        self.snapshot = _BatchManagerSnapshot(runtime)
+
+    @contextmanager
+    def lease(self):
+        yield self.snapshot
+
+
 def _create_legacy_aggregation_database(path: Path) -> None:
     with sqlite3.connect(str(path)) as connection:
         connection.execute(
@@ -137,6 +206,52 @@ def _create_legacy_aggregation_database(path: Path) -> None:
 
 
 class AggregationFinalityTest(unittest.TestCase):
+    def test_two_edge_batches_share_one_completed_group_without_member_polling(
+        self,
+    ) -> None:
+        service = object.__new__(CloudApiService)
+        service.aggregator = MultiEdgeEventAggregator()
+        cloud_runtime = _BatchCloudRuntime()
+        service.manager = _BatchManager(cloud_runtime)
+        service.metrics = FrameworkMetrics("test-cloud")
+        first_payload = {
+            "events": [_event(index).to_dict() for index in (0, 1)],
+            "wait_ms": 150,
+        }
+        second_payload = {
+            "events": [_event(index).to_dict() for index in (2, 3)],
+            "wait_ms": 150,
+        }
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(service.aggregate_batch, first_payload, {})
+                time.sleep(0.02)
+                second = executor.submit(service.aggregate_batch, second_payload, {})
+                first_result = first.result(timeout=1.0)
+                second_result = second.result(timeout=1.0)
+
+            self.assertTrue(first_result["all_terminal"])
+            self.assertTrue(second_result["all_terminal"])
+            self.assertEqual(first_result["event_count"], 2)
+            self.assertEqual(second_result["event_count"], 2)
+            self.assertEqual(cloud_runtime.coordinate_calls, 1)
+            for result in (first_result, second_result):
+                self.assertEqual(len(result["groups"]), 1)
+                group = result["groups"][0]
+                self.assertEqual(group["aggregation"]["state"], "completed")
+                self.assertEqual(
+                    group["aggregation"]["completion_reason"],
+                    "all_expected_members",
+                )
+                self.assertTrue(group["aggregation"]["evidence_complete"])
+                self.assertEqual(len(group["coordination"]["decisions"]), 4)
+                for item in result["items"]:
+                    self.assertEqual(item["group_id"], group["group_id"])
+                    self.assertNotIn("aggregation", item)
+                    self.assertNotIn("coordination", item)
+        finally:
+            service.aggregator.close()
+
     def test_exact_member_event_retry_is_idempotent(self) -> None:
         aggregator = MultiEdgeEventAggregator()
         try:

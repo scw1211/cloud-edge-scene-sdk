@@ -9,7 +9,9 @@ import unittest
 from cloud_edge_framework.cloud_service import CloudApiService
 from cloud_edge_framework.contracts import DecisionEnvelope
 from cloud_edge_framework.reliability import SQLiteIdempotencyStore
+from cloud_edge_framework.reliable_transport import ReliableHttpCloudClient
 from cloud_edge_framework.runtime import EdgeRuntime
+from cloud_edge_framework.transport import CloudTransportError, HttpCloudClient
 
 
 def _decision() -> DecisionEnvelope:
@@ -89,7 +91,132 @@ class _MetricsStub:
         del args
 
 
+class _TransportEvent:
+    def __init__(self, event_id: str) -> None:
+        self.event_id = event_id
+        self.metadata = {"trace_id": "trace-" + event_id}
+
+    def to_dict(self, include_scene_payload: bool = False):
+        del include_scene_payload
+        return {
+            "event_id": self.event_id,
+            "metadata": dict(self.metadata),
+        }
+
+
+class _LegacyAggregateClient(HttpCloudClient):
+    def __init__(self) -> None:
+        self.batch_calls = 0
+        self.single_calls = 0
+
+    def _materialize_artifacts(self, event):
+        return event, {
+            "artifact_count": 0,
+            "artifact_uploaded_count": 0,
+            "artifact_request_bytes": 0,
+            "artifact_response_bytes": 0,
+            "artifact_upload_ms": 0.0,
+        }
+
+    def _post(self, path, payload):
+        del payload
+        self.batch_calls += 1
+        raise CloudTransportError(
+            "cloud returned HTTP 404: missing {}".format(path)
+        )
+
+    def aggregate(self, event):
+        self.single_calls += 1
+        return {
+            "aggregation": {"state": "waiting"},
+            "coordination": None,
+            "transport": {
+                "request_bytes": 10,
+                "response_bytes": 20,
+                "http_round_trip_ms": 1.5,
+            },
+        }
+
+
+class _CompactBatchClient(_LegacyAggregateClient):
+    def _post(self, path, payload):
+        self.batch_calls += 1
+        self.last_path = path
+        self.last_payload = payload
+        return {
+            "items": [
+                {"event_id": event["event_id"], "group_id": "group-1"}
+                for event in payload["events"]
+            ],
+            "groups": [
+                {
+                    "group_id": "group-1",
+                    "aggregation": {"state": "completed"},
+                    "coordination": {"decisions": []},
+                }
+            ],
+            "_transport_metrics": {
+                "request_bytes": 30,
+                "response_bytes": 40,
+                "http_round_trip_ms": 2.0,
+            },
+        }
+
+
 class ProtocolCompatibilityTest(unittest.TestCase):
+    def test_batch_request_identity_is_order_independent(self) -> None:
+        first = {
+            "events": [
+                {"event_id": "event-b", "metadata": {}},
+                {"event_id": "event-a", "metadata": {"trace_id": "trace-a"}},
+            ]
+        }
+        second = {"events": list(reversed(first["events"]))}
+
+        first_key, first_trace = ReliableHttpCloudClient._request_identity(
+            "/api/v1/collaboration/aggregate/batch", first
+        )
+        second_key, second_trace = ReliableHttpCloudClient._request_identity(
+            "/api/v1/collaboration/aggregate/batch", second
+        )
+
+        self.assertEqual(first_key, second_key)
+        self.assertIn(first_trace, {"", "trace-a"})
+        self.assertIn(second_trace, {"", "trace-a"})
+
+    def test_new_edge_falls_back_to_legacy_single_aggregate_endpoint(self) -> None:
+        client = _LegacyAggregateClient()
+        result = client.aggregate_batch(
+            [_TransportEvent("event-a"), _TransportEvent("event-b")],
+            wait_seconds=0.15,
+        )
+
+        self.assertTrue(result["fallback_single_event"])
+        self.assertEqual(client.batch_calls, 1)
+        self.assertEqual(client.single_calls, 2)
+        self.assertEqual(
+            [item["event_id"] for item in result["items"]],
+            ["event-a", "event-b"],
+        )
+        self.assertEqual(result["transport"]["request_bytes"], 20)
+        self.assertEqual(result["transport"]["response_bytes"], 40)
+
+    def test_compact_group_response_is_expanded_only_inside_edge_client(self) -> None:
+        client = _CompactBatchClient()
+        result = client.aggregate_batch(
+            [_TransportEvent("event-a"), _TransportEvent("event-b")],
+            wait_seconds=0.15,
+        )
+
+        self.assertEqual(client.batch_calls, 1)
+        self.assertEqual(client.last_payload["wait_ms"], 150)
+        self.assertEqual(len(result["groups"]), 1)
+        for item in result["items"]:
+            self.assertEqual(item["aggregation"]["state"], "completed")
+            self.assertEqual(item["coordination"], {"decisions": []})
+        self.assertEqual(result["transport"]["request_bytes"], 30)
+        self.assertEqual(result["transport"]["response_bytes"], 40)
+
     def test_old_complete_aggregation_response_is_still_authoritative(self) -> None:
         response = {
             "aggregation": {

@@ -46,9 +46,11 @@
     "batch_size": 32,
     "lease_seconds": 5.0,
     "max_backoff_seconds": 2.0,
+    "batch_coalesce_seconds": 0.025,
     "waiting_poll_seconds": 0.025,
     "partial_poll_seconds": 1.0,
     "aggregation_max_wait_seconds": 10.0,
+    "aggregation_batch_wait_seconds": 0.15,
     "reconciliation_poll_seconds": 5.0,
     "reconciliation_max_wait_seconds": 60.0
   },

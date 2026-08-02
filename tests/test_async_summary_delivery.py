@@ -197,6 +197,26 @@ class _ForbiddenSlowCloud:
         raise AssertionError("process() must not call the slow cloud path")
 
 
+class _CoalescingWorkerProbe(OutboxReplayWorker):
+    def __init__(self, config: ReplayConfig) -> None:
+        super().__init__(
+            manager=None,
+            outbox=None,
+            network_monitor=None,
+            config=config,
+            metrics=None,
+        )
+        self.run_started_at = None
+
+    def _work_count(self) -> int:
+        return 1
+
+    def run_once(self) -> Dict[str, Any]:
+        self.run_started_at = time.monotonic()
+        self._stop_event.set()
+        return {"status": "completed", "attempted": 1, "completed": 1}
+
+
 class _ToggleAggregationCloud:
     def __init__(self, complete: bool = False, partial: bool = False) -> None:
         self.complete = bool(complete)
@@ -389,6 +409,79 @@ class _LateMemberAggregationCloud:
         raise AssertionError("aggregation reconciliation must remain aggregate")
 
 
+class _BatchAggregationCloud:
+    def __init__(self) -> None:
+        self.aggregate_calls = 0
+        self.aggregate_batch_calls = 0
+        self.batch_event_ids = []
+        self.wait_seconds = None
+
+    @staticmethod
+    def _decision(event: SemanticEvent) -> DecisionEnvelope:
+        return build_decision(
+            event=event,
+            decision="monitor",
+            actions=[],
+            confidence=0.99,
+            reason="one batch completed all expected summaries",
+            source="fixture_cloud",
+            policy_version=_AggregationPlugin.policy_version,
+        )
+
+    def aggregate(self, event: SemanticEvent) -> Dict[str, Any]:
+        del event
+        self.aggregate_calls += 1
+        raise AssertionError("batch-capable clients must not use per-event aggregate")
+
+    def aggregate_batch(
+        self,
+        events,
+        wait_seconds: float = 0.0,
+    ) -> Dict[str, Any]:
+        self.aggregate_batch_calls += 1
+        self.batch_event_ids = [event.event_id for event in events]
+        self.wait_seconds = float(wait_seconds)
+        decisions = [self._decision(event).to_dict() for event in events]
+        coordination = {
+            "decisions": decisions,
+            "globally_consistent": True,
+            "initial_conflict_count": 0,
+            "residual_conflict_count": 0,
+        }
+        accepted_at_ms = int(time.time() * 1000)
+        aggregation = {
+            "group_id": "aggregation-batch",
+            "state": "completed",
+            "completion_reason": "all_expected_members",
+            "received_members": ["edge-a", "edge-b"],
+            "missing_members": [],
+            "evidence_complete": True,
+            "global_confirmation": True,
+            "finality": "final",
+            "result_revision": 1,
+        }
+        return {
+            "items": [
+                {
+                    "event_id": event.event_id,
+                    "aggregation": dict(aggregation),
+                    "coordination": coordination,
+                    "cloud_accepted_at_ms": accepted_at_ms,
+                }
+                for event in events
+            ],
+            "transport": {
+                "request_bytes": 240,
+                "response_bytes": 320,
+                "http_round_trip_ms": 5.0,
+            },
+        }
+
+    def coordinate(self, events):
+        del events
+        raise AssertionError("aggregation batch must not become coordinate")
+
+
 class _RuntimeSnapshot:
     def __init__(self, runtime: EdgeRuntime) -> None:
         self.runtime = runtime
@@ -468,6 +561,91 @@ def _network() -> NetworkSnapshot:
 
 
 class AsyncSummaryDeliveryTest(unittest.TestCase):
+    def test_worker_coalesces_only_the_immediate_wakeup_batch(self) -> None:
+        worker = _CoalescingWorkerProbe(
+            ReplayConfig(
+                interval_seconds=1.0,
+                batch_size=8,
+                lease_seconds=1.0,
+                max_backoff_seconds=1.0,
+                batch_coalesce_seconds=0.03,
+            )
+        )
+        started = time.monotonic()
+        worker.start()
+        worker.notify()
+        worker._thread.join(timeout=1.0)
+
+        self.assertIsNotNone(worker.run_started_at)
+        self.assertFalse(worker._thread.is_alive())
+        self.assertGreaterEqual(worker.run_started_at - started, 0.02)
+
+    def test_ready_members_use_one_batch_request_and_complete_together(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="async-summary-batch-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry([_AggregationPlugin(True)])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _BatchAggregationCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    scheduler=_AlwaysAsyncScheduler(),
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                runtime.process(
+                    _payload("summary-a", "sample-1", "edge-a", 1.0),
+                    network=_network(),
+                )
+                runtime.process(
+                    _payload("summary-b", "sample-1", "edge-b", 2.0),
+                    network=_network(),
+                )
+
+                flushed = runtime.flush_pending(
+                    batch_size=8,
+                    aggregation_batch_wait_seconds=0.12,
+                )
+
+                self.assertEqual(flushed["attempted"], 2)
+                self.assertEqual(flushed["completed"], 2)
+                self.assertEqual(flushed["remaining"], 0)
+                self.assertEqual(flushed["errors"], [])
+                self.assertEqual(cloud.aggregate_batch_calls, 1)
+                self.assertEqual(cloud.aggregate_calls, 0)
+                self.assertEqual(
+                    cloud.batch_event_ids, ["summary-a", "summary-b"]
+                )
+                self.assertEqual(cloud.wait_seconds, 0.12)
+                self.assertEqual(
+                    {item["operation"] for item in flushed["deliveries"]},
+                    {"aggregate_batch"},
+                )
+                self.assertEqual(len(flushed["deliveries"]), 1)
+                self.assertEqual(flushed["deliveries"][0]["event_count"], 2)
+                self.assertEqual(
+                    sum(item["request_bytes"] for item in flushed["deliveries"]),
+                    240,
+                )
+                self.assertEqual(
+                    sum(item["response_bytes"] for item in flushed["deliveries"]),
+                    320,
+                )
+                for event_id in ("summary-a", "summary-b"):
+                    review = tracker.get(event_id)
+                    self.assertEqual(review["state"], "completed")
+                    self.assertEqual(
+                        review["completion_stage"], "lightweight_final"
+                    )
+                    self.assertEqual(
+                        review["final_decision"]["status"], "final"
+                    )
+            finally:
+                tracker.close()
+                registry.close()
+
     def test_cloud_llm_prompt_keeps_v1_risk_key_and_adds_split_semantics(self) -> None:
         plugin = _AggregationPlugin(False)
         event = plugin.normalize(SceneEventEnvelope.from_dict(_payload()))
