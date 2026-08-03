@@ -21,6 +21,12 @@ results/
 !scenes/freeway_traffic/assets/models/
 !scenes/freeway_traffic/assets/models/**
 !scenes/freeway_traffic/assets/edge_llm/adapter_package/adapter_model.safetensors
+!scenes/freeway_traffic/assets/edge_llm/adapter_package_current_state_v2/adapter_model.safetensors
 
 # 两个大文件由 install_full_assets.py 下载，不进入 Git。
 scenes/freeway_traffic/assets/downloads/
+
+# 交通训练集、缓存、检查点和合并模型只在训练机保留；发布所需的小型
+# Student、增益路由器和 LoRA 审计包位于 assets/ 下。
+scenes/freeway_traffic/datasets/
+scenes/freeway_traffic/experiments/

@@ -4,7 +4,7 @@ import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -280,10 +280,24 @@ class TrafficPlugin(ScenePlugin):
         policy_version: str = "traffic-1.9.0",
         edge_llm_min_expected_gain: float = 0.05,
         cloud_llm_min_expected_gain: float = 0.05,
+        current_state_edge_student_path: Optional[Path] = None,
+        current_state_cloud_model_path: Optional[Path] = None,
+        current_state_feature_codec_path: Optional[Path] = None,
+        edge_llm_gain_profile_path: Optional[Path] = None,
     ) -> None:
         self.cloud_model_path = Path(cloud_model_path) if cloud_model_path is not None else None
+        self.current_state_cloud_model_path = (
+            Path(current_state_cloud_model_path)
+            if current_state_cloud_model_path is not None
+            else None
+        )
         self.edge_student_path = (
             Path(edge_student_path) if edge_student_path is not None else None
+        )
+        self.current_state_edge_student_path = (
+            Path(current_state_edge_student_path)
+            if current_state_edge_student_path is not None
+            else None
         )
         self.defer_gate_path = (
             Path(defer_gate_path) if defer_gate_path is not None else None
@@ -291,16 +305,25 @@ class TrafficPlugin(ScenePlugin):
         self.feature_codec_path = (
             Path(feature_codec_path) if feature_codec_path is not None else None
         )
+        self.current_state_feature_codec_path = (
+            Path(current_state_feature_codec_path)
+            if current_state_feature_codec_path is not None
+            else None
+        )
         self.topology_path = Path(topology_path) if topology_path is not None else None
         self.cloud_llm_min_expected_gain = float(cloud_llm_min_expected_gain)
         if not -1.0 <= self.cloud_llm_min_expected_gain <= 1.0:
             raise ValueError("cloud_llm_min_expected_gain must be in [-1, 1]")
         self.policy_version = policy_version
         self._cloud_model: Optional[Dict[str, Any]] = None
+        self._current_state_cloud_model: Optional[Dict[str, Any]] = None
         self._edge_student: Optional[Dict[str, Any]] = None
+        self._current_state_edge_student: Optional[Dict[str, Any]] = None
         self._defer_gate: Optional[Dict[str, Any]] = None
         self._feature_codec: Optional[Any] = None
+        self._current_state_feature_codec: Optional[Any] = None
         self._cloud_model_sha256: Optional[str] = None
+        self._current_state_cloud_model_sha256: Optional[str] = None
         self._topology: Optional[Dict[str, Any]] = None
         self._payload_schema: Optional[Dict[str, Any]] = None
         self._edge_llm = TrafficEdgeLLMController(
@@ -313,6 +336,7 @@ class TrafficPlugin(ScenePlugin):
             deadline_margin_ms=edge_llm_deadline_margin_ms,
             deadline_probe_interval=edge_llm_deadline_probe_interval,
             runtime_failure_cooldown_seconds=edge_llm_runtime_failure_cooldown_seconds,
+            gain_profile_path=edge_llm_gain_profile_path,
         )
 
     def payload_schema(self) -> Dict[str, Any]:
@@ -336,6 +360,17 @@ class TrafficPlugin(ScenePlugin):
             self._feature_codec = TreeRoutingFeatureCodec(self.feature_codec_path)
         return self._feature_codec
 
+    def _load_current_state_feature_codec(self) -> Any:
+        if self.current_state_feature_codec_path is None:
+            raise ValueError("traffic current-state feature codec path is not configured")
+        if self._current_state_feature_codec is None:
+            from traffic_system.tree_feature_codec import TreeRoutingFeatureCodec
+
+            self._current_state_feature_codec = TreeRoutingFeatureCodec(
+                self.current_state_feature_codec_path
+            )
+        return self._current_state_feature_codec
+
     def _load_edge_student(self) -> Dict[str, Any]:
         if self.edge_student_path is None:
             raise ValueError("traffic edge student path is not configured")
@@ -344,6 +379,84 @@ class TrafficPlugin(ScenePlugin):
 
             self._edge_student = load_student_model(self.edge_student_path)
         return self._edge_student
+
+    def _load_current_state_edge_student(self) -> Dict[str, Any]:
+        if self.current_state_edge_student_path is None:
+            raise ValueError("traffic current-state edge student path is not configured")
+        if self._current_state_edge_student is None:
+            from traffic_system.edge_student import load_student_model
+
+            self._current_state_edge_student = load_student_model(
+                self.current_state_edge_student_path
+            )
+        return self._current_state_edge_student
+
+    @staticmethod
+    def _uses_current_state_contract(payload: Mapping[str, Any]) -> bool:
+        return str(payload.get("perception_mode", "")).lower() == "current_state" or str(
+            payload.get("output_type", "")
+        ).lower() == "current_state_risk"
+
+    def _feature_codec_for_payload(self, payload: Mapping[str, Any]) -> Any:
+        if self._uses_current_state_contract(payload):
+            if self.current_state_feature_codec_path is None:
+                raise ValueError(
+                    "traffic current-state payload requires current_state_feature_codec_path"
+                )
+            return self._load_current_state_feature_codec()
+        return self._load_feature_codec()
+
+    def _cloud_contract_for_payload(
+        self,
+        payload: Mapping[str, Any],
+    ) -> Optional[Tuple[Dict[str, Any], Path, str, str]]:
+        from traffic_system.cloud_coordinator import load_cloud_model
+
+        if self._uses_current_state_contract(payload):
+            if self.current_state_cloud_model_path is None:
+                return None
+            if self._current_state_cloud_model is None:
+                self._current_state_cloud_model = load_cloud_model(
+                    self.current_state_cloud_model_path
+                )
+            if self._current_state_cloud_model_sha256 is None:
+                self._current_state_cloud_model_sha256 = _sha256_file(
+                    self.current_state_cloud_model_path
+                )
+            return (
+                self._current_state_cloud_model,
+                self.current_state_cloud_model_path,
+                self._current_state_cloud_model_sha256,
+                "current_state_future_v1",
+            )
+        if self.cloud_model_path is None:
+            return None
+        if self._cloud_model is None:
+            self._cloud_model = load_cloud_model(self.cloud_model_path)
+        if self._cloud_model_sha256 is None:
+            self._cloud_model_sha256 = _sha256_file(self.cloud_model_path)
+        return (
+            self._cloud_model,
+            self.cloud_model_path,
+            self._cloud_model_sha256,
+            "forecast_joint_v1",
+        )
+
+    def _edge_student_for_payload(
+        self, payload: Mapping[str, Any]
+    ) -> Tuple[Dict[str, Any], Path, str]:
+        if (
+            self._uses_current_state_contract(payload)
+            and self.current_state_edge_student_path is not None
+        ):
+            return (
+                self._load_current_state_edge_student(),
+                self.current_state_edge_student_path,
+                "current_state_future_v1",
+            )
+        if self.edge_student_path is None:
+            raise ValueError("traffic edge student path is not configured")
+        return self._load_edge_student(), self.edge_student_path, "forecast_joint_v1"
 
     def _load_defer_gate(self) -> Dict[str, Any]:
         if self.defer_gate_path is None:
@@ -489,11 +602,16 @@ class TrafficPlugin(ScenePlugin):
                 content_type="application/json",
             )
         ]
-        if self.feature_codec_path is not None:
+        selected_feature_codec_path = (
+            self.current_state_feature_codec_path
+            if self._uses_current_state_contract(payload)
+            else self.feature_codec_path
+        )
+        if selected_feature_codec_path is not None:
             from traffic_system.decision_utils import extract_feature_vector
 
             values, feature_names = extract_feature_vector(payload)
-            codec = self._load_feature_codec()
+            codec = self._feature_codec_for_payload(payload)
             if list(feature_names) != list(codec.feature_names):
                 raise ValueError("traffic feature vector does not match codec schema")
             evidence.append(codec.encode(event_id, values))
@@ -611,8 +729,10 @@ class TrafficPlugin(ScenePlugin):
             candidate_actions=actions,
             model={
                 "name": str(payload.get("model", "joint_astgcn")),
-                "version": str(payload.get("checkpoint", "unversioned")),
-                "output_type": "forecast_and_risk",
+                "version": str(
+                    payload.get("model_version", payload.get("checkpoint", "unversioned"))
+                ),
+                "output_type": str(payload.get("output_type", "forecast_and_risk")),
             },
             scene_payload=dict(payload),
             metadata={
@@ -724,7 +844,11 @@ class TrafficPlugin(ScenePlugin):
             "num_partitions": payload.get("num_partitions"),
             "upload_required": bool(payload.get("upload_required", False)),
             "upload_level": payload.get("upload_level"),
+            "perception_mode": payload.get("perception_mode", "astgcn"),
+            "output_type": payload.get("output_type", event.model.get("output_type")),
+            "model_version": payload.get("model_version", event.model.get("version")),
             "prediction_horizon_minutes": payload.get("prediction_horizon_minutes", 60),
+            "prediction_steps": payload.get("prediction_steps"),
             "num_managed_nodes": len(payload.get("managed_node_ids", []))
             or payload.get("num_managed_nodes", 1),
             "region_summary": payload.get("region_summary", {}),
@@ -822,11 +946,11 @@ class TrafficPlugin(ScenePlugin):
     def _prepare_cloud_feature_input(
         self,
         event: SemanticEvent,
+        cloud_model: Mapping[str, Any],
+        cloud_model_sha256: str,
+        codec: Any,
     ) -> Dict[str, Any]:
-        if self.cloud_model_path is None:
-            raise ValueError("traffic cloud model path is not configured")
         payload = event.scene_payload
-        codec = self._load_feature_codec()
         feature_evidence = [
             item
             for item in event.evidence
@@ -834,13 +958,11 @@ class TrafficPlugin(ScenePlugin):
         ]
         if len(feature_evidence) != 1:
             raise ValueError("cloud traffic inference requires one encoded feature evidence")
-        if self._cloud_model_sha256 is None:
-            self._cloud_model_sha256 = _sha256_file(self.cloud_model_path)
         vector = codec.decode(
             feature_evidence[0],
-            expected_model_sha256=self._cloud_model_sha256,
+            expected_model_sha256=cloud_model_sha256,
         )
-        if list(codec.feature_names) != list(self._cloud_model.get("feature_names", [])):
+        if list(codec.feature_names) != list(cloud_model.get("feature_names", [])):
             raise ValueError("traffic cloud model and feature codec schemas differ")
         from traffic_system.decision_utils import extract_feature_vector
 
@@ -909,6 +1031,7 @@ class TrafficPlugin(ScenePlugin):
         confidence: float,
         feature_input: Dict[str, Any],
         batch_size: int,
+        cloud_model_contract: str,
     ) -> Dict[str, Any]:
         from traffic_system.decision_utils import build_decision_from_student_class
 
@@ -964,6 +1087,7 @@ class TrafficPlugin(ScenePlugin):
                 "active_neighbor_feature_count"
             ],
             "cloud_inference_batch_size": int(batch_size),
+            "cloud_model_contract": cloud_model_contract,
             "topology_precoordinated_diversion_ratio": round(
                 pre_coordinated_ratio, 3
             )
@@ -979,22 +1103,38 @@ class TrafficPlugin(ScenePlugin):
         normalized = list(events)
         if not normalized:
             return []
-        if self.cloud_model_path is None or not self.cloud_model_path.is_file():
+        contracts = [
+            self._cloud_contract_for_payload(event.scene_payload)
+            for event in normalized
+        ]
+        if any(contract is None for contract in contracts):
+            raise ValueError("traffic feature event has no matching cloud model contract")
+        assert contracts[0] is not None
+        contract_names = {contract[3] for contract in contracts if contract is not None}
+        if len(contract_names) != 1:
+            raise ValueError("traffic cloud batch mixes incompatible perception contracts")
+        cloud_model, cloud_model_path, cloud_model_sha256, cloud_model_contract = (
+            contracts[0]
+        )
+        if not cloud_model_path.is_file():
             raise FileNotFoundError(
-                "traffic cloud model not found: {}".format(self.cloud_model_path)
+                "traffic cloud model not found: {}".format(cloud_model_path)
             )
-        if self._cloud_model is None:
-            from traffic_system.cloud_coordinator import load_cloud_model
-
-            self._cloud_model = load_cloud_model(self.cloud_model_path)
+        codec = self._feature_codec_for_payload(normalized[0].scene_payload)
         feature_inputs = [
-            self._prepare_cloud_feature_input(event) for event in normalized
+            self._prepare_cloud_feature_input(
+                event,
+                cloud_model,
+                cloud_model_sha256,
+                codec,
+            )
+            for event in normalized
         ]
         matrix = np.asarray(
             [feature_input["vector"] for feature_input in feature_inputs],
             dtype=np.float64,
         )
-        model = self._cloud_model["model"]
+        model = cloud_model["model"]
         probabilities = np.asarray(model.predict_proba(matrix), dtype=np.float64)
         if probabilities.ndim != 2 or probabilities.shape[0] != len(normalized):
             raise ValueError("traffic cloud model returned an invalid probability matrix")
@@ -1006,7 +1146,7 @@ class TrafficPlugin(ScenePlugin):
         ):
             class_position = int(class_positions[row_index])
             class_id = int(model_classes[class_position])
-            decision_class = str(self._cloud_model["decision_classes"][class_id])
+            decision_class = str(cloud_model["decision_classes"][class_id])
             decisions.append(
                 self._build_cloud_legacy_decision(
                     event,
@@ -1014,6 +1154,7 @@ class TrafficPlugin(ScenePlugin):
                     float(probabilities[row_index, class_position]),
                     feature_input,
                     len(normalized),
+                    cloud_model_contract,
                 )
             )
         return decisions
@@ -1022,16 +1163,21 @@ class TrafficPlugin(ScenePlugin):
         payload = event.scene_payload
         if not payload:
             return {}
-        if cloud and self.cloud_model_path is not None:
+        if cloud and self._cloud_contract_for_payload(payload) is not None:
             return self._cloud_legacy_decisions([event])[0]
-        if not cloud and self.edge_student_path is not None:
+        if not cloud and (
+            self.edge_student_path is not None
+            or self.current_state_edge_student_path is not None
+        ):
             from traffic_system.decision_utils import (
                 build_decision_from_student_class,
                 extract_feature_vector,
             )
             from traffic_system.edge_student import predict_student
 
-            student = self._load_edge_student()
+            student, selected_student_path, student_contract = (
+                self._edge_student_for_payload(payload)
+            )
             _, feature_names = extract_feature_vector(payload)
             if list(feature_names) != list(student.get("feature_names", [])):
                 raise ValueError("traffic edge student feature schema mismatch")
@@ -1044,8 +1190,9 @@ class TrafficPlugin(ScenePlugin):
             )
             decision["policy_version"] = self.policy_version
             decision["framework_metadata"] = {
-                "edge_student_model": self.edge_student_path.name,
+                "edge_student_model": selected_student_path.name,
                 "edge_student_type": student.get("model_type", "numpy_mlp"),
+                "edge_student_contract": student_contract,
                 "edge_student_feature_count": len(feature_names),
                 "edge_student_probabilities": {
                     name: round(float(probability), 6)
@@ -1071,12 +1218,29 @@ class TrafficPlugin(ScenePlugin):
                 self._load_feature_codec().feature_names
             ):
                 raise ValueError("traffic edge student and feature codec schemas differ")
+        if self.current_state_edge_student_path is not None:
+            if not self.current_state_edge_student_path.is_file():
+                raise FileNotFoundError(
+                    "traffic current-state edge student not found: {}".format(
+                        self.current_state_edge_student_path
+                    )
+                )
+            current_student = self._load_current_state_edge_student()
+            if list(current_student.get("feature_names", [])) != list(
+                self._load_current_state_feature_codec().feature_names
+            ):
+                raise ValueError(
+                    "traffic current-state student and feature codec schemas differ"
+                )
         if self.defer_gate_path is not None:
             if not self.defer_gate_path.is_file():
                 raise FileNotFoundError(
                     "traffic defer gate not found: {}".format(self.defer_gate_path)
                 )
-            if self.edge_student_path is None:
+            if (
+                self.edge_student_path is None
+                and self.current_state_edge_student_path is None
+            ):
                 raise ValueError("traffic defer gate requires an edge student")
             gate = self._load_defer_gate()
             if list(gate.get("base_feature_names", [])) != list(
@@ -1084,42 +1248,94 @@ class TrafficPlugin(ScenePlugin):
             ):
                 raise ValueError("traffic defer gate and edge student schemas differ")
         self._edge_llm.warmup()
-        if self.cloud_model_path is None:
+        cloud_contracts = []
+        if self.cloud_model_path is not None:
+            cloud_contracts.append(
+                (
+                    "forecast_joint_v1",
+                    self.cloud_model_path,
+                    self._load_feature_codec(),
+                    False,
+                )
+            )
+        if self.current_state_cloud_model_path is not None:
+            cloud_contracts.append(
+                (
+                    "current_state_future_v1",
+                    self.current_state_cloud_model_path,
+                    self._load_current_state_feature_codec(),
+                    True,
+                )
+            )
+        if not cloud_contracts:
             return
-        if not self.cloud_model_path.is_file():
-            raise FileNotFoundError("traffic cloud model not found: {}".format(self.cloud_model_path))
-        if self.feature_codec_path is None:
-            raise ValueError("traffic cloud model requires feature_codec_path")
-        if self._cloud_model is None:
-            from traffic_system.cloud_coordinator import load_cloud_model
-
-            self._cloud_model = load_cloud_model(self.cloud_model_path)
-        codec = self._load_feature_codec()
         if self.topology_path is None:
             raise ValueError("traffic cloud model requires topology_path")
         self._load_topology()
-        self._cloud_model_sha256 = _sha256_file(self.cloud_model_path)
-        if codec.metadata.get("source_model_sha256") != self._cloud_model_sha256:
-            raise ValueError("traffic feature codec was exported from another cloud model")
-        if list(codec.feature_names) != list(self._cloud_model.get("feature_names", [])):
-            raise ValueError("traffic feature codec schema does not match cloud model")
+        for contract_name, model_path, codec, current_state in cloud_contracts:
+            if not model_path.is_file():
+                raise FileNotFoundError(
+                    "traffic cloud model not found: {}".format(model_path)
+                )
+            contract = self._cloud_contract_for_payload(
+                {
+                    "perception_mode": "current_state" if current_state else "astgcn",
+                    "output_type": "current_state_risk"
+                    if current_state
+                    else "forecast_and_risk",
+                }
+            )
+            if contract is None:
+                raise ValueError(
+                    "traffic cloud model contract is not configured: {}".format(
+                        contract_name
+                    )
+                )
+            model_payload, _, model_sha256, loaded_contract_name = contract
+            if loaded_contract_name != contract_name:
+                raise ValueError("traffic cloud model contract selection mismatch")
+            if codec.metadata.get("source_model_sha256") != model_sha256:
+                raise ValueError(
+                    "traffic feature codec was exported from another cloud model"
+                )
+            if list(codec.feature_names) != list(
+                model_payload.get("feature_names", [])
+            ):
+                raise ValueError(
+                    "traffic feature codec schema does not match cloud model"
+                )
 
     def health(self) -> Dict[str, Any]:
         return {
             "status": "ok",
             "cloud_model_configured": self.cloud_model_path is not None,
             "cloud_model_loaded": self._cloud_model is not None,
+            "current_state_cloud_model_configured": self.current_state_cloud_model_path
+            is not None,
+            "current_state_cloud_model_loaded": self._current_state_cloud_model
+            is not None,
             "edge_student_configured": self.edge_student_path is not None,
             "edge_student_loaded": self._edge_student is not None,
             "edge_student_type": self._edge_student.get("model_type")
             if self._edge_student is not None
             else None,
+            "current_state_edge_student_configured": self.current_state_edge_student_path
+            is not None,
+            "current_state_edge_student_loaded": self._current_state_edge_student
+            is not None,
             "defer_gate_configured": self.defer_gate_path is not None,
             "defer_gate_loaded": self._defer_gate is not None,
             "feature_codec_configured": self.feature_codec_path is not None,
             "feature_codec_loaded": self._feature_codec is not None,
             "feature_codec": self._feature_codec.describe()
             if self._feature_codec is not None
+            else None,
+            "current_state_feature_codec_configured": self.current_state_feature_codec_path
+            is not None,
+            "current_state_feature_codec_loaded": self._current_state_feature_codec
+            is not None,
+            "current_state_feature_codec": self._current_state_feature_codec.describe()
+            if self._current_state_feature_codec is not None
             else None,
             "topology_configured": self.topology_path is not None,
             "topology_loaded": self._topology is not None,
@@ -1150,11 +1366,18 @@ class TrafficPlugin(ScenePlugin):
         if student_name not in DECISION_CLASSES or rule_name not in DECISION_CLASSES:
             raise ValueError("traffic defer gate received an unknown decision class")
         student_confidence = float(student_decision.confidence)
-        student_available = self.edge_student_path is not None
+        student_available = bool(
+            self.edge_student_path is not None
+            or self.current_state_edge_student_path is not None
+        )
         choice = "edge_student"
         gate_confidence: Optional[float] = None
         selected = student_decision
-        if self.defer_gate_path is not None:
+        use_legacy_defer_gate = bool(
+            self.defer_gate_path is not None
+            and not self._uses_current_state_contract(event.scene_payload)
+        )
+        if use_legacy_defer_gate:
             from traffic_system.defer_gate import (
                 GATE_CLASSES,
                 build_gate_features,
@@ -1247,7 +1470,10 @@ class TrafficPlugin(ScenePlugin):
         metadata = dict(selected.metadata)
         metadata.update(
             {
-                "traffic_selective_defer_enabled": self.defer_gate_path is not None,
+                "traffic_selective_defer_enabled": use_legacy_defer_gate,
+                "traffic_defer_gate_skipped_for_current_state": bool(
+                    self.defer_gate_path is not None and not use_legacy_defer_gate
+                ),
                 "traffic_defer_gate_choice": choice,
                 "traffic_defer_gate_confidence": round(gate_confidence, 6)
                 if gate_confidence is not None
@@ -1621,7 +1847,10 @@ class TrafficPlugin(ScenePlugin):
         return self._decision(event, cloud=False)
 
     def cloud_decide(self, event: SemanticEvent) -> Any:
-        if self.cloud_model_path is None:
+        if (
+            self.cloud_model_path is None
+            and self.current_state_cloud_model_path is None
+        ):
             return self._decision(event, cloud=True)
         return list(self.cloud_decide_batch([event]))[0]
 
@@ -1632,7 +1861,10 @@ class TrafficPlugin(ScenePlugin):
         normalized = list(events)
         if not normalized:
             return []
-        if self.cloud_model_path is None:
+        if (
+            self.cloud_model_path is None
+            and self.current_state_cloud_model_path is None
+        ):
             return [self._decision(event, cloud=True) for event in normalized]
 
         decisions: List[Optional[Any]] = [None] * len(normalized)
@@ -1641,6 +1873,7 @@ class TrafficPlugin(ScenePlugin):
             for index, event in enumerate(normalized)
             if bool(event.scene_payload)
             and self._has_cloud_feature_evidence(event)
+            and self._cloud_contract_for_payload(event.scene_payload) is not None
         ]
         if model_indices:
             model_events = [normalized[index] for index in model_indices]

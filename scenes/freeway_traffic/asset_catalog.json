@@ -1,13 +1,13 @@
 {
   "schema_version": "traffic-full-assets/v1",
-  "bundle_version": "0.13.0",
+  "bundle_version": "0.13.1-current-state-v2",
   "downloaded_assets": {
     "edge_qwen_gguf": {
       "role": "edge",
-      "file": "assets/downloads/qwen35_0_8b_freeway_action_token_v9_text_only_q6_k.gguf",
-      "url": "https://github.com/scw1211/cloud-edge-scene-sdk/releases/download/traffic-assets-v0.13.0/qwen35_0_8b_freeway_action_token_v9_text_only_q6_k.gguf",
+      "file": "assets/downloads/qwen35_0_8b_current_state_future_v2_q6_k.gguf",
+      "url": "https://github.com/scw1211/cloud-edge-scene-sdk/releases/download/traffic-assets-v0.13.1/qwen35_0_8b_current_state_future_v2_q6_k.gguf",
       "bytes": 629735968,
-      "sha256": "57b74ab01a85f7e83c6ee8a0b10a7cd5da2e439108175372220c5ebd76aaeef9"
+      "sha256": "ee7180eb41ea6d606b723e459d7a67198603b5a55e80849a5855e382686d291e"
     },
     "pems08_inference_array": {
       "role": "edge",
@@ -28,6 +28,21 @@
       "bytes": 2266986,
       "sha256": "bcad5b7f87dd2833e2c95afd2679bbf5b9176c66bcc0d4e35ec7a01a2fadceb2"
     },
+    "current_state_perception": {
+      "file": "assets/models/current_state_perception_v1.json",
+      "bytes": 1292,
+      "sha256": "8d06ac53712d653dcc6ec74bfee0fe182759c4bb340730111e4518a45e7ebcd2"
+    },
+    "current_state_edge_student": {
+      "file": "assets/models/edge_student_freeway_current_state_future_v1.json",
+      "bytes": 366468,
+      "sha256": "168702becc758214db6b8055240fe807619a5ffa60eea6341317bf160821975a"
+    },
+    "current_state_edge_qwen_gain_router": {
+      "file": "assets/models/edge_qwen_gain_router_current_state_v1.json",
+      "bytes": 1656,
+      "sha256": "9de5979e82ef6d16b392c547b86d6d1c44d8539f930050bd4dd4fce0815d39b0"
+    },
     "defer_gate": {
       "file": "assets/models/edge_defer_gate.npz",
       "bytes": 676016,
@@ -38,10 +53,20 @@
       "bytes": 3266531,
       "sha256": "fdf2a6e384ff4f0ace09d988dd298e9dbb564122c26a1af8f4e0394851574676"
     },
+    "current_state_tree_feature_codec": {
+      "file": "assets/models/traffic_tree_feature_codec_current_state_v1.npz",
+      "bytes": 4254279,
+      "sha256": "0a1ac54c7e9c0bdf496f8dc1937ed88b05c686880f20ecb2ae85a046be0ffd33"
+    },
     "cloud_extratrees": {
       "file": "assets/models/cloud_coordinator_topology_fused.joblib",
       "bytes": 26277606,
       "sha256": "5ee22aa91a2d5137d29f2b9a152e67917b6a14b0fffaeb80e7d371686622c017"
+    },
+    "current_state_cloud_extratrees": {
+      "file": "assets/models/cloud_coordinator_current_state_future_v1.joblib",
+      "bytes": 40293878,
+      "sha256": "2c1ecb25b22d315a2c14aa188e3563c355f0f2d207985d1a9d139a0c9d20c8ee"
     },
     "topology": {
       "file": "assets/models/traffic_region_topology_metis4.json",

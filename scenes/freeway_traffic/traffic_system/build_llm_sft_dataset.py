@@ -297,8 +297,20 @@ def build_user_prompt(
             forecast = node.get("forecast", {})
             if not isinstance(forecast, dict):
                 forecast = {}
-            speed_values.append(safe_float(forecast.get("speed_min"), 65.0))
-            occupancy_values.append(safe_float(forecast.get("occupancy_mean"), 0.0))
+            current = node.get("current_observation", {})
+            if not isinstance(current, dict):
+                current = {}
+            speed_values.append(
+                safe_float(
+                    forecast.get("speed_min", current.get("speed_min")), 65.0
+                )
+            )
+            occupancy_values.append(
+                safe_float(
+                    forecast.get("occupancy_mean", current.get("occupancy_mean")),
+                    0.0,
+                )
+            )
         capabilities = event.get("control_capabilities", {})
         if not isinstance(capabilities, dict):
             capabilities = {}

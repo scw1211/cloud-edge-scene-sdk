@@ -260,6 +260,9 @@ def training_arguments_kwargs(args: argparse.Namespace) -> Dict[str, Any]:
         "report_to": "none",
         "remove_unused_columns": False,
         "save_total_limit": 2,
+        "load_best_model_at_end": True,
+        "metric_for_best_model": "eval_loss",
+        "greater_is_better": False,
     }
     if args.bf16:
         kwargs["bf16"] = True

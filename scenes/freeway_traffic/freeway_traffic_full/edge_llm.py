@@ -1,6 +1,7 @@
 """用途：把已发布的交通 Edge-Qwen 接入插件，并保留确定性的 Student 安全路径。"""
 
 from dataclasses import replace
+import json
 from pathlib import Path
 import threading
 import time
@@ -20,6 +21,11 @@ RISK_PRIORITY = {"low": 0, "medium": 1, "high": 2, "severe": 3}
 EDGE_LLM_MODES = {"disabled", "shadow", "selective", "primary"}
 TRAFFIC_ADAPTER_SCENE = "freeway_traffic_management"
 TRAFFIC_CONTEXT_ENCODER = "freeway-bitpacked-decimal@v1"
+TRAFFIC_CONTEXT_ENCODER_V2 = "freeway-routing-context-decimal@v2"
+TRAFFIC_CONTEXT_ENCODERS = {
+    TRAFFIC_CONTEXT_ENCODER,
+    TRAFFIC_CONTEXT_ENCODER_V2,
+}
 
 
 def _with_metadata(
@@ -43,6 +49,7 @@ class TrafficEdgeLLMController:
         deadline_probe_interval: int = 0,
         runtime_failure_cooldown_seconds: float = 5.0,
         min_expected_gain: float = 0.05,
+        gain_profile_path: Optional[Path] = None,
     ) -> None:
         self.release_registry_path = (
             Path(release_registry_path) if release_registry_path is not None else None
@@ -54,6 +61,11 @@ class TrafficEdgeLLMController:
         self.min_risk_level = str(min_risk_level)
         self.student_confidence_threshold = float(student_confidence_threshold)
         self.min_expected_gain = float(min_expected_gain)
+        self.gain_profile_path = (
+            Path(gain_profile_path) if gain_profile_path is not None else None
+        )
+        self.gain_profile: Optional[Dict[str, Any]] = None
+        self.gain_profile_inactive_reason: Optional[str] = None
         self.deadline_margin_ms = float(deadline_margin_ms)
         self.deadline_probe_interval = int(deadline_probe_interval)
         self.runtime_failure_cooldown_seconds = float(runtime_failure_cooldown_seconds)
@@ -77,6 +89,7 @@ class TrafficEdgeLLMController:
         if (self.release_registry_path is None) != (self.runtime_config_path is None):
             raise ValueError("Edge LLM release registry and runtime config must be configured together")
         self.active: Optional[ActiveEdgeLLM] = None
+        self.context_encoder: Optional[str] = None
         self.last_error: Optional[str] = None
         self._circuit_open_until = 0.0
         self.invocations = 0
@@ -98,11 +111,33 @@ class TrafficEdgeLLMController:
             expected_scene=TRAFFIC_ADAPTER_SCENE,
         )
         contract = active.model.describe()["input_contract"]
-        if contract.get("context_encoder") != TRAFFIC_CONTEXT_ENCODER:
+        context_encoder = str(contract.get("context_encoder", ""))
+        if context_encoder not in TRAFFIC_CONTEXT_ENCODERS:
             raise ValueError("traffic Edge LLM uses an unsupported context encoder")
         if int(contract.get("max_input_tokens", 0)) > 16:
             raise ValueError("traffic Edge LLM input contract exceeds the 16-token budget")
         self.active = active
+        self.context_encoder = context_encoder
+        self.gain_profile = None
+        self.gain_profile_inactive_reason = None
+        if (
+            self.gain_profile_path is not None
+            and context_encoder == TRAFFIC_CONTEXT_ENCODER_V2
+        ):
+            profile = json.loads(
+                self.gain_profile_path.read_text(encoding="utf-8")
+            )
+            if int(profile.get("schema_version", 0)) != 1:
+                raise ValueError("traffic Edge-Qwen gain profile schema is unsupported")
+            if str(profile.get("baseline", "")) != "current_state_student":
+                raise ValueError("traffic Edge-Qwen gain profile baseline is invalid")
+            if not isinstance(profile.get("accepted_strata"), dict):
+                raise ValueError("traffic Edge-Qwen gain profile has no accepted strata")
+            self.gain_profile = profile
+        elif self.gain_profile_path is not None:
+            self.gain_profile_inactive_reason = (
+                "active_release_does_not_use_routing_context_v2"
+            )
         self.last_error = None
         self._circuit_open_until = 0.0
 
@@ -165,6 +200,63 @@ class TrafficEdgeLLMController:
             signals.append("defer_gate_recommends_escalation")
         return tuple(signals)
 
+    def _prompt_routing_context(
+        self,
+        event: SemanticEvent,
+        student: DecisionEnvelope,
+    ) -> Dict[str, Any]:
+        uncertainty = {
+            **self._structured_metadata(event.metadata.get("model_uncertainty")),
+            **self._structured_metadata(student.metadata.get("model_uncertainty")),
+        }
+        raw_confidence = uncertainty.get(
+            "student_confidence",
+            student.metadata.get(
+                "traffic_student_candidate_confidence", student.confidence
+            ),
+        )
+        try:
+            student_confidence = float(raw_confidence)
+        except (TypeError, ValueError):
+            student_confidence = float(student.confidence)
+        raw_prediction_set = uncertainty.get(
+            "prediction_set", event.uncertainty.prediction_set
+        )
+        prediction_set_size = (
+            len(raw_prediction_set)
+            if isinstance(raw_prediction_set, list)
+            else len(event.uncertainty.prediction_set)
+        )
+        student_decision = str(
+            student.metadata.get(
+                "traffic_student_candidate_decision", student.decision
+            )
+        )
+        rule_decision = str(
+            student.metadata.get(
+                "traffic_rule_candidate_decision",
+                event.metadata.get("reference_edge_decision", student_decision),
+            )
+        )
+        network_available = bool(event.metadata["edge_runtime_network_available"])
+        network_status = str(
+            event.metadata.get(
+                "edge_runtime_network_status",
+                "normal" if network_available else "offline",
+            )
+        ).lower()
+        if not network_available:
+            network_status = "offline"
+        elif network_status not in {"normal", "weak"}:
+            network_status = "normal"
+        return {
+            "student_decision": student_decision,
+            "rule_decision": rule_decision,
+            "student_confidence": student_confidence,
+            "prediction_set_size": max(1, prediction_set_size),
+            "network_status": network_status,
+        }
+
     def _expected_gain(
         self,
         event: SemanticEvent,
@@ -181,6 +273,38 @@ class TrafficEdgeLLMController:
         except (TypeError, ValueError):
             edge_qwen_gain = 0.0
         source = str(gain.get("source", "not_estimated"))
+        current_state_contract = bool(
+            str(event.scene_payload.get("perception_mode", "")).lower()
+            == "current_state"
+            or str(event.scene_payload.get("output_type", "")).lower()
+            == "current_state_risk"
+        )
+        if (
+            source == "not_estimated"
+            and self.gain_profile is not None
+            and current_state_contract
+        ):
+            context = self._prompt_routing_context(event, student)
+            confidence_bucket = min(
+                3,
+                max(0, int(float(context["student_confidence"]) * 4.0)),
+            )
+            key = "|".join(
+                [
+                    str(context["network_status"]),
+                    str(context["student_decision"]),
+                    str(context["rule_decision"]),
+                    str(confidence_bucket),
+                    "1" if int(context["prediction_set_size"]) > 1 else "0",
+                ]
+            )
+            entry = self.gain_profile["accepted_strata"].get(key)
+            if isinstance(entry, dict):
+                edge_qwen_gain = float(entry.get("validation_gain", 0.0))
+                source = "validated_current_state_gain_profile"
+            else:
+                edge_qwen_gain = 0.0
+                source = "current_state_gain_profile_not_selected"
         qualified = (
             source != "not_estimated"
             and edge_qwen_gain >= self.min_expected_gain
@@ -252,7 +376,14 @@ class TrafficEdgeLLMController:
             )
         assert self.active is not None
         self.invocations += 1
-        prompt = build_action_prompt(event.scene_payload, "bitpacked_decimal")
+        if self.context_encoder == TRAFFIC_CONTEXT_ENCODER_V2:
+            prompt = build_action_prompt(
+                event.scene_payload,
+                "routing_context_v2",
+                routing_context=self._prompt_routing_context(event, student),
+            )
+        else:
+            prompt = build_action_prompt(event.scene_payload, "bitpacked_decimal")
         network_available = bool(event.metadata["edge_runtime_network_available"])
         try:
             result = self.active.model.decide(
@@ -281,6 +412,7 @@ class TrafficEdgeLLMController:
                 "edge_llm_requires_cloud": bool(decoded["requires_cloud"]),
                 "edge_llm_model_disagreement": disagreement,
                 "edge_llm_prompt_chars": len(prompt),
+                "edge_llm_context_encoder": self.context_encoder,
             }
             if self.mode == "shadow":
                 return _with_metadata(
@@ -360,6 +492,7 @@ class TrafficEdgeLLMController:
             "mode": self.mode,
             "loaded": self.active is not None,
             "active": active,
+            "context_encoder": self.context_encoder,
             "invocations": self.invocations,
             "accepted": self.accepted,
             "fallbacks": self.fallbacks,
@@ -367,6 +500,16 @@ class TrafficEdgeLLMController:
             "deadline_limited_candidates": self.deadline_limited_candidates,
             "student_confidence_threshold": self.student_confidence_threshold,
             "min_expected_gain": self.min_expected_gain,
+            "gain_profile_path": str(self.gain_profile_path)
+            if self.gain_profile_path is not None
+            else None,
+            "gain_profile_loaded": self.gain_profile is not None,
+            "gain_profile_inactive_reason": self.gain_profile_inactive_reason,
+            "gain_profile_accepted_strata": len(
+                self.gain_profile.get("accepted_strata", {})
+            )
+            if self.gain_profile is not None
+            else 0,
             "legacy_min_risk_level": self.min_risk_level,
             "risk_level_trigger_enabled": False,
             "last_error": self.last_error,

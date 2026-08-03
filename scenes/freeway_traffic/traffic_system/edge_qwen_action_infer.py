@@ -7,7 +7,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Mapping, Optional
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +27,7 @@ from traffic_system.ultracompact_codec import (  # noqa: E402
     encode_bitpacked_decimal_prompt,
     encode_contextual_decimal_prompt,
     encode_positional_decimal_prompt,
+    encode_routing_context_v2_prompt,
 )
 
 
@@ -39,8 +40,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--confidence", type=float, default=0.85)
     parser.add_argument(
         "--input_encoding",
-        choices=["legacy", "positional_decimal", "bitpacked_decimal", "contextual_decimal"],
+        choices=[
+            "legacy",
+            "positional_decimal",
+            "bitpacked_decimal",
+            "contextual_decimal",
+            "routing_context_v2",
+        ],
         default="bitpacked_decimal",
+    )
+    parser.add_argument("--student_decision", default="congestion_warning")
+    parser.add_argument("--rule_decision", default="congestion_warning")
+    parser.add_argument("--student_confidence", type=float, default=0.5)
+    parser.add_argument("--prediction_set_size", type=int, default=1)
+    parser.add_argument(
+        "--network_status", choices=("normal", "weak", "offline"), default="normal"
     )
     parser.add_argument(
         "--prompt_format",
@@ -102,7 +116,11 @@ def request_action_token(
     }
 
 
-def build_action_prompt(event: Dict[str, Any], input_encoding: str = "bitpacked_decimal") -> str:
+def build_action_prompt(
+    event: Dict[str, Any],
+    input_encoding: str = "bitpacked_decimal",
+    routing_context: Optional[Mapping[str, Any]] = None,
+) -> str:
     compact_prompt = build_user_prompt(
         event=event,
         row={},
@@ -115,6 +133,10 @@ def build_action_prompt(event: Dict[str, Any], input_encoding: str = "bitpacked_
         return encode_bitpacked_decimal_prompt(compact_prompt)
     if input_encoding == "contextual_decimal":
         return encode_contextual_decimal_prompt(compact_prompt)
+    if input_encoding == "routing_context_v2":
+        if routing_context is None:
+            raise ValueError("routing_context_v2 requires routing_context")
+        return encode_routing_context_v2_prompt(compact_prompt, routing_context)
     if input_encoding != "legacy":
         raise ValueError("Unsupported input encoding: {}".format(input_encoding))
     return compact_prompt
@@ -123,7 +145,18 @@ def build_action_prompt(event: Dict[str, Any], input_encoding: str = "bitpacked_
 def main() -> None:
     args = parse_args()
     event = load_json(resolve_path(args.edge_event))
-    compact_prompt = build_action_prompt(event, args.input_encoding)
+    routing_context = None
+    if args.input_encoding == "routing_context_v2":
+        routing_context = {
+            "student_decision": args.student_decision,
+            "rule_decision": args.rule_decision,
+            "student_confidence": args.student_confidence,
+            "prediction_set_size": args.prediction_set_size,
+            "network_status": args.network_status,
+        }
+    compact_prompt = build_action_prompt(
+        event, args.input_encoding, routing_context=routing_context
+    )
     inference = request_action_token(
         args.host, compact_prompt, args.timeout, prompt_format=args.prompt_format
     )

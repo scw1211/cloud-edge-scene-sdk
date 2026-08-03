@@ -53,7 +53,12 @@ def traffic_event_from_output(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "specversion": "1.0",
         "id": event_id,
-        "source": "urn:edge:{}:astgcn".format(edge_id),
+        "source": "urn:edge:{}:{}".format(
+            edge_id,
+            "current-state"
+            if payload.get("perception_mode") == "current_state"
+            else "astgcn",
+        ),
         "type": TRAFFIC_EVENT_TYPE,
         "scene": str(payload.get("scene", "freeway_traffic_management")),
         "edgeid": edge_id,

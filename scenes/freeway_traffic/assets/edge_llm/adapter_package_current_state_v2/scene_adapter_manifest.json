@@ -1,0 +1,207 @@
+{
+  "action_mapping": {
+    "path": "action_mapping.json",
+    "sha256": "8c842896d91ef92e19c070c300f914bd858cc615406199c7abad3a81d07b28ba"
+  },
+  "adapter_artifact": {
+    "bytes": 25584224,
+    "format": "safetensors",
+    "path": "adapter_model.safetensors",
+    "sha256": "7db73c1cdcb9cb97a1213e813a4893d8b316099ea0969dd7b2812d11f2e7c295"
+  },
+  "adapter_id": "freeway-traffic-current-state-qwen35-v2",
+  "base": {
+    "base_id": "qwen35-0.8b-text@2fc06364",
+    "fingerprint": "4c9fedaef396fb9cf6c8a97c57ee53397b1bd3f9c2a321ab4233e253a233c876"
+  },
+  "deployment": {
+    "artifact_bytes": 629735968,
+    "artifact_sha256": "ee7180eb41ea6d606b723e459d7a67198603b5a55e80849a5855e382686d291e",
+    "format": "gguf",
+    "max_input_tokens": 16,
+    "max_output_tokens": 1,
+    "quantization": "Q6_K",
+    "runtime": "llama.cpp",
+    "thinking": false
+  },
+  "evaluation": {
+    "evidence": {
+      "gguf": {
+        "path": "evidence/gguf.json",
+        "sha256": "5a73bb5998d2002bc08fcbe728bff8585795500d219f47f29bc89021f246927c"
+      },
+      "qwen": {
+        "path": "evidence/qwen.json",
+        "sha256": "8560fdf9e6df603247105ef997423a9f29bb6614f5b85877f40b7986e5f8165c"
+      },
+      "routing": {
+        "path": "evidence/routing.json",
+        "sha256": "9584dfba1db015e31c6f162d6f7aa634f0a19b85977521ceab074cb36ad556a4"
+      }
+    },
+    "gate_results": [
+      {
+        "actual": 0.6613,
+        "metric": "decision_accuracy",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.6
+      },
+      {
+        "actual": 0.6668,
+        "metric": "weighted_f1",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.6
+      },
+      {
+        "actual": 1.0,
+        "metric": "valid_output_rate",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 0.609167,
+        "metric": "selective_cascade_accuracy",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.58
+      },
+      {
+        "actual": 0.11125,
+        "metric": "selective_gain_over_student",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.05
+      },
+      {
+        "actual": 0.9775,
+        "metric": "gguf_exact_match_rate",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.95
+      },
+      {
+        "actual": 16.0,
+        "metric": "gguf_max_input_tokens",
+        "operator": "<=",
+        "passed": true,
+        "value": 16.0
+      }
+    ],
+    "gates": [
+      {
+        "metric": "decision_accuracy",
+        "operator": ">=",
+        "value": 0.6
+      },
+      {
+        "metric": "weighted_f1",
+        "operator": ">=",
+        "value": 0.6
+      },
+      {
+        "metric": "valid_output_rate",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "selective_cascade_accuracy",
+        "operator": ">=",
+        "value": 0.58
+      },
+      {
+        "metric": "selective_gain_over_student",
+        "operator": ">=",
+        "value": 0.05
+      },
+      {
+        "metric": "gguf_exact_match_rate",
+        "operator": ">=",
+        "value": 0.95
+      },
+      {
+        "metric": "gguf_max_input_tokens",
+        "operator": "<=",
+        "value": 16
+      }
+    ],
+    "metric_sources": {
+      "decision_accuracy": {
+        "evidence": "qwen",
+        "path": "decision_accuracy"
+      },
+      "gguf_exact_match_rate": {
+        "evidence": "gguf",
+        "path": "reference.exact_match_rate"
+      },
+      "gguf_max_input_tokens": {
+        "evidence": "gguf",
+        "path": "max_prompt_tokens"
+      },
+      "selective_cascade_accuracy": {
+        "evidence": "routing",
+        "path": "metrics.student_plus_gain_routed_qwen.estimate"
+      },
+      "selective_gain_over_student": {
+        "evidence": "routing",
+        "path": "paired_deltas.selective_minus_student.estimate"
+      },
+      "valid_output_rate": {
+        "evidence": "qwen",
+        "path": "json_valid_rate"
+      },
+      "weighted_f1": {
+        "evidence": "qwen",
+        "path": "token_classification.weighted_f1"
+      }
+    },
+    "metrics": {
+      "decision_accuracy": 0.6613,
+      "gguf_exact_match_rate": 0.9775,
+      "gguf_max_input_tokens": 16.0,
+      "selective_cascade_accuracy": 0.609167,
+      "selective_gain_over_student": 0.11125,
+      "valid_output_rate": 1.0,
+      "weighted_f1": 0.6668
+    }
+  },
+  "input_contract": {
+    "context_encoder": "freeway-routing-context-decimal@v2",
+    "data_schema": "https://cloud-edge.local/schemas/scenes/traffic-edge-event-v1.json",
+    "direct_media_to_llm": false,
+    "event_type": "com.cloudedge.traffic.edge-event.v1",
+    "llm_input_type": "compact_text_code",
+    "max_input_tokens": 16
+  },
+  "lora": {
+    "alpha": 32,
+    "dropout": 0.05,
+    "modules_to_save": [],
+    "peft_type": "LORA",
+    "rank": 16,
+    "target_modules": [
+      "down_proj",
+      "gate_proj",
+      "k_proj",
+      "o_proj",
+      "q_proj",
+      "up_proj",
+      "v_proj"
+    ],
+    "task_type": "CAUSAL_LM"
+  },
+  "scene": "freeway_traffic_management",
+  "schema_version": "edge-llm-adapter/v1",
+  "training": {
+    "methods": [
+      "sft"
+    ],
+    "teacher_model": "future-observation deterministic traffic policy",
+    "test_dataset_id": "current-state-future-v2-test-2400-events",
+    "test_set_used_for_training": false,
+    "train_dataset_id": "current-state-future-v2-train-3600-events"
+  },
+  "version": "2.0.1"
+}

@@ -784,10 +784,19 @@ class EdgeRuntime:
             "trace", event.event_id
         )
         event_metadata = dict(event.metadata)
+        measured_network_class = network_class(snapshot)
+        edge_network_status = {
+            "outage": "offline",
+            "degraded": "weak",
+            "good": "normal",
+            "normal": "normal",
+        }[measured_network_class]
         event_metadata.update(
             {
                 "trace_id": trace_id,
                 "edge_runtime_network_available": snapshot.available,
+                "edge_runtime_network_status": edge_network_status,
+                "edge_runtime_network_class": measured_network_class,
                 "edge_runtime_network_rtt_ms": snapshot.rtt_ms,
                 "edge_runtime_network_loss_rate": snapshot.loss_rate,
                 _SOURCE_ENVELOPE_SHA256_KEY: source_envelope_sha256,

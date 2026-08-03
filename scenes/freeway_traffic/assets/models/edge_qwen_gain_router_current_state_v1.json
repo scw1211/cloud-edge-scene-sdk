@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "task": "edge_qwen_gain_router_current_state_v1",
+  "baseline": "current_state_student",
+  "features": [
+    "network_status",
+    "student_decision",
+    "rule_decision",
+    "student_confidence_bucket",
+    "prediction_set_ambiguity"
+  ],
+  "minimum_validation_gain": 0.03,
+  "maximum_validation_route_rate": 0.2,
+  "validation_rows": 1200,
+  "accepted_strata": {
+    "normal|congestion_warning|no_action|1|0": {
+      "validation_gain": 0.07142857,
+      "support": 14,
+      "corrections": 2,
+      "regressions": 1
+    },
+    "offline|no_action|no_action|2|0": {
+      "validation_gain": 0.07407407,
+      "support": 27,
+      "corrections": 2,
+      "regressions": 0
+    },
+    "offline|regional_coordination|no_action|3|0": {
+      "validation_gain": 0.92857143,
+      "support": 14,
+      "corrections": 13,
+      "regressions": 0
+    },
+    "offline|reroute|ramp_metering|3|0": {
+      "validation_gain": 1.0,
+      "support": 42,
+      "corrections": 42,
+      "regressions": 0
+    },
+    "offline|reroute|regional_coordination|3|0": {
+      "validation_gain": 0.98611111,
+      "support": 72,
+      "corrections": 71,
+      "regressions": 0
+    },
+    "offline|reroute|variable_speed_limit|3|0": {
+      "validation_gain": 1.0,
+      "support": 26,
+      "corrections": 26,
+      "regressions": 0
+    },
+    "weak|congestion_warning|no_action|1|0": {
+      "validation_gain": 0.07142857,
+      "support": 14,
+      "corrections": 2,
+      "regressions": 1
+    },
+    "weak|no_action|no_action|1|0": {
+      "validation_gain": 0.17647059,
+      "support": 17,
+      "corrections": 3,
+      "regressions": 0
+    }
+  }
+}

@@ -1,0 +1,217 @@
+{
+  "task": "current_state_future_grounded_edge_qwen_routing_eval_v2",
+  "test_rows": 2400,
+  "sample_groups": 200,
+  "validation_rows": 1200,
+  "router_contract": {
+    "features": [
+      "network_status",
+      "student_decision",
+      "rule_decision",
+      "student_confidence_bucket",
+      "prediction_set_ambiguity"
+    ],
+    "minimum_stratum_support": 12,
+    "minimum_validation_gain": 0.03,
+    "maximum_validation_route_rate": 0.2,
+    "accepted_strata": 8,
+    "test_route_count": 353,
+    "test_route_rate": 0.147083,
+    "corrections": 267,
+    "regressions": 0,
+    "net_corrections": 267
+  },
+  "metrics": {
+    "rule": {
+      "estimate": 0.230417,
+      "ci95": [
+        0.202917,
+        0.259583
+      ],
+      "groups": 200,
+      "bootstrap_samples": 2000
+    },
+    "student": {
+      "estimate": 0.497917,
+      "ci95": [
+        0.4725,
+        0.524167
+      ],
+      "groups": 200,
+      "bootstrap_samples": 2000
+    },
+    "edge_qwen": {
+      "estimate": 0.66125,
+      "ci95": [
+        0.626656,
+        0.698333
+      ],
+      "groups": 200,
+      "bootstrap_samples": 2000
+    },
+    "student_plus_gain_routed_qwen": {
+      "estimate": 0.609167,
+      "ci95": [
+        0.575406,
+        0.642094
+      ],
+      "groups": 200,
+      "bootstrap_samples": 2000
+    }
+  },
+  "paired_deltas": {
+    "edge_qwen_minus_rule": {
+      "estimate": 0.430833,
+      "ci95": [
+        0.384167,
+        0.47875
+      ],
+      "groups": 200,
+      "bootstrap_samples": 2000
+    },
+    "selective_minus_rule": {
+      "estimate": 0.37875,
+      "ci95": [
+        0.33125,
+        0.422083
+      ],
+      "groups": 200,
+      "bootstrap_samples": 2000
+    },
+    "selective_minus_student": {
+      "estimate": 0.11125,
+      "ci95": [
+        0.095417,
+        0.127083
+      ],
+      "groups": 200,
+      "bootstrap_samples": 2000
+    },
+    "edge_qwen_minus_student": {
+      "estimate": 0.163333,
+      "ci95": [
+        0.14,
+        0.18625
+      ],
+      "groups": 200,
+      "bootstrap_samples": 2000
+    }
+  },
+  "edge_qwen_latency_ms": {
+    "mean": 73.874,
+    "p95": 83.075,
+    "environment": "evaluation_host_only_not_jetson"
+  },
+  "cloud_review": {
+    "quality_measured": false,
+    "reason": "no cloud 9B outputs were supplied; only eligible rows are counted",
+    "eligible_count": 1680,
+    "eligible_rate": 0.7
+  },
+  "accepted_validation_strata": [
+    {
+      "key": [
+        "normal",
+        "congestion_warning",
+        "no_action",
+        1,
+        false
+      ],
+      "support": 14,
+      "validation_gain": 0.07142857142857142,
+      "corrections": 2,
+      "regressions": 1
+    },
+    {
+      "key": [
+        "offline",
+        "no_action",
+        "no_action",
+        2,
+        false
+      ],
+      "support": 27,
+      "validation_gain": 0.07407407407407407,
+      "corrections": 2,
+      "regressions": 0
+    },
+    {
+      "key": [
+        "offline",
+        "regional_coordination",
+        "no_action",
+        3,
+        false
+      ],
+      "support": 14,
+      "validation_gain": 0.9285714285714286,
+      "corrections": 13,
+      "regressions": 0
+    },
+    {
+      "key": [
+        "offline",
+        "reroute",
+        "ramp_metering",
+        3,
+        false
+      ],
+      "support": 42,
+      "validation_gain": 1.0,
+      "corrections": 42,
+      "regressions": 0
+    },
+    {
+      "key": [
+        "offline",
+        "reroute",
+        "regional_coordination",
+        3,
+        false
+      ],
+      "support": 72,
+      "validation_gain": 0.9861111111111112,
+      "corrections": 71,
+      "regressions": 0
+    },
+    {
+      "key": [
+        "offline",
+        "reroute",
+        "variable_speed_limit",
+        3,
+        false
+      ],
+      "support": 26,
+      "validation_gain": 1.0,
+      "corrections": 26,
+      "regressions": 0
+    },
+    {
+      "key": [
+        "weak",
+        "congestion_warning",
+        "no_action",
+        1,
+        false
+      ],
+      "support": 14,
+      "validation_gain": 0.07142857142857142,
+      "corrections": 2,
+      "regressions": 1
+    },
+    {
+      "key": [
+        "weak",
+        "no_action",
+        "no_action",
+        1,
+        false
+      ],
+      "support": 17,
+      "validation_gain": 0.17647058823529413,
+      "corrections": 3,
+      "regressions": 0
+    }
+  ]
+}

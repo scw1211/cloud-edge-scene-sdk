@@ -1,4 +1,4 @@
-"""用途：在一台 Jetson 上运行真实 ASTGCN，并定时向本机边缘服务发送指定分区。"""
+"""用途：在一台边缘节点上感知交通状态，并向本机边缘服务发送指定分区。"""
 
 import argparse
 import copy
@@ -47,12 +47,18 @@ def _post(url, event, timeout_seconds):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="发送真实 ASTGCN 分区事件")
+    parser = argparse.ArgumentParser(description="发送真实交通分区事件")
     parser.add_argument("--edge-url", default="http://127.0.0.1:18101")
     parser.add_argument("--partitions", required=True, help="如 0,1 或 2,3")
     parser.add_argument("--sample-id", type=int, default=0)
     parser.add_argument("--split", choices=("train", "val", "test"), default="test")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument(
+        "--perception-mode",
+        choices=("current-state", "astgcn"),
+        default=os.environ.get("TRAFFIC_PERCEPTION_MODE", "current-state"),
+        help="current-state直接按观测窗口判断；astgcn保留原预测链路",
+    )
     parser.add_argument("--torch-threads", type=int, default=4)
     parser.add_argument(
         "--experiment-id",
@@ -78,33 +84,57 @@ def main():
     )
     args = parser.parse_args()
 
-    import torch
     from traffic_system.scene_event import traffic_event_from_output
-    from traffic_system.traffic_perception_runtime import JointTrafficPerceptionRuntime
 
     os.chdir(str(SCENE_ROOT.parents[1]))
-    torch.set_num_threads(args.torch_threads)
-    runtime = JointTrafficPerceptionRuntime(
-        config_path=SCENE_ROOT / "configurations" / "PEMS08_astgcn.conf",
-        data_path=(
-            SCENE_ROOT
-            / "assets"
-            / "downloads"
-            / "PEMS08_r1_d0_w0_astcgn_multitask.npz"
-        ),
-        checkpoint_path=(
-            SCENE_ROOT
-            / "assets"
-            / "models"
-            / "joint_risk_astgcn_metis4_flowprio2_frozen.pt"
-        ),
-        risk_calibrator_path=(
-            SCENE_ROOT / "assets" / "models" / "region_risk_conformal.json"
-        ),
-        split=args.split,
-        device_name=args.device,
-        top_k=10,
+    data_path = (
+        SCENE_ROOT
+        / "assets"
+        / "downloads"
+        / "PEMS08_r1_d0_w0_astcgn_multitask.npz"
     )
+    if args.perception_mode == "current-state":
+        from traffic_system.current_state_perception_runtime import (
+            CurrentStateTrafficPerceptionRuntime,
+        )
+
+        runtime = CurrentStateTrafficPerceptionRuntime(
+            data_path=data_path,
+            rule_config_path=(
+                SCENE_ROOT / "assets" / "models" / "current_state_perception_v1.json"
+            ),
+            topology_path=(
+                SCENE_ROOT
+                / "assets"
+                / "models"
+                / "traffic_region_topology_metis4.json"
+            ),
+            split=args.split,
+            top_k=10,
+        )
+    else:
+        import torch
+        from traffic_system.traffic_perception_runtime import (
+            JointTrafficPerceptionRuntime,
+        )
+
+        torch.set_num_threads(args.torch_threads)
+        runtime = JointTrafficPerceptionRuntime(
+            config_path=SCENE_ROOT / "configurations" / "PEMS08_astgcn.conf",
+            data_path=data_path,
+            checkpoint_path=(
+                SCENE_ROOT
+                / "assets"
+                / "models"
+                / "joint_risk_astgcn_metis4_flowprio2_frozen.pt"
+            ),
+            risk_calibrator_path=(
+                SCENE_ROOT / "assets" / "models" / "region_risk_conformal.json"
+            ),
+            split=args.split,
+            device_name=args.device,
+            top_k=10,
+        )
     runtime.warmup(args.sample_id)
     perception = runtime.infer_sample(args.sample_id)
     selected = set(_partition_ids(args.partitions))
@@ -173,6 +203,7 @@ def main():
         "sample_id": args.sample_id,
         "sample_split": "{}_{}".format(args.split, args.experiment_id),
         "edge_url": args.edge_url,
+        "perception_mode": args.perception_mode,
         "device": str(runtime.device),
         "model_load_ms": runtime.load_latency_ms,
         "model_forward_ms": perception.model_forward_ms,

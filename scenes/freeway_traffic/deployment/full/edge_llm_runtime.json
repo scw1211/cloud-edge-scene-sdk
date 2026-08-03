@@ -12,7 +12,7 @@
     "thinking": false,
     "top_p": 1.0
   },
-  "model": "qwen35_0_8b_freeway_action_token_v9_text_only_q6_k.gguf",
+  "model": "qwen35_0_8b_current_state_future_v2_q6_k.gguf",
   "provider": "llama_cpp",
   "schema_version": "edge-llm-runtime/v1",
   "timeout_seconds": 0.5
