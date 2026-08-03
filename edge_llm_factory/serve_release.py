@@ -114,6 +114,7 @@ class ActiveReleaseLlamaServer:
             "--ctx-checkpoints",
             "0",
             "--no-cache-prompt",
+            "--no-cache-idle-slots",
             "--poll",
             "100",
             "--poll-batch",

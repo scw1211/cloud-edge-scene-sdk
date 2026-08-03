@@ -24,7 +24,7 @@ if [[ "${ROLE}" == "edge" ]]; then
     exit 2
   fi
   PYTHON_PATH="${VENV_DIR:-${SDK_ROOT}/.venv-edge}/bin/python"
-  EXEC_START="${PYTHON_PATH} ${SDK_ROOT}/scenes/freeway_traffic/deploy_node.py run --role edge --cloud-url ${CLOUD_URL} --llama-binary ${LLAMA_SERVER_PATH} --parallel 2 --device cuda"
+  EXEC_START="${PYTHON_PATH} ${SDK_ROOT}/scenes/freeway_traffic/deploy_node.py run --role edge --cloud-url ${CLOUD_URL} --llama-binary ${LLAMA_SERVER_PATH} --parallel 1 --device cuda"
 else
   PYTHON_PATH="${VENV_DIR:-${SDK_ROOT}/.venv-cloud}/bin/python"
   EXEC_START="${PYTHON_PATH} ${SDK_ROOT}/scenes/freeway_traffic/deploy_node.py run --role cloud"

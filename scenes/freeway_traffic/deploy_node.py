@@ -330,7 +330,7 @@ def main():
     run_parser.add_argument("--llama-port", type=int, default=18190)
     run_parser.add_argument("--context-tokens", type=int, default=128)
     run_parser.add_argument("--threads", type=int, default=4)
-    run_parser.add_argument("--parallel", type=int, default=2)
+    run_parser.add_argument("--parallel", type=int, default=1)
     run_parser.add_argument("--gpu-layers", type=int, default=99)
     run_parser.add_argument("--startup-timeout-seconds", type=float, default=90.0)
     run_parser.add_argument("--with-cloud-qwen9b", action="store_true")

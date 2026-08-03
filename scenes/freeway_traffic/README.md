@@ -168,7 +168,7 @@ python -m edge_llm_factory serve-release \
   --port 18190 \
   --context-tokens 128 \
   --threads 4 \
-  --parallel 2 \
+  --parallel 1 \
   --gpu-layers 99
 ```
 
