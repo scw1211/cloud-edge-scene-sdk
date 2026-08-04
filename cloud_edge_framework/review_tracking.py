@@ -111,6 +111,7 @@ class ReviewLifecycleStore:
         _configure_sqlite_connection(
             self._connection,
             enable_wal=self.path is not None,
+            synchronous="NORMAL",
         )
         self._initialize()
 

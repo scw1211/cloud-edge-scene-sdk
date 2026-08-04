@@ -25,8 +25,18 @@ _SQLITE_BUSY_TIMEOUT_MS = 10_000
 def _configure_sqlite_connection(
     connection: sqlite3.Connection,
     enable_wal: bool,
+    synchronous: str = "FULL",
 ) -> None:
-    """Apply connection pragmas, retrying WAL negotiation across processes."""
+    """Apply connection pragmas, retrying WAL negotiation across processes.
+
+    ``synchronous`` defaults to FULL for the durable Outbox, which is the
+    source of truth for accepted cloud submissions.  Auxiliary stores that can
+    be rebuilt from the Outbox may pass NORMAL to avoid an fsync per commit on
+    the request hot path; under WAL that remains crash-safe and only risks the
+    most recent commits on operating-system power loss.
+    """
+    if synchronous not in {"FULL", "NORMAL"}:
+        raise ValueError("synchronous must be FULL or NORMAL")
     connection.execute(
         "PRAGMA busy_timeout={}".format(_SQLITE_BUSY_TIMEOUT_MS)
     )
@@ -49,7 +59,7 @@ def _configure_sqlite_connection(
             if time.monotonic() >= deadline:
                 raise
         time.sleep(0.01)
-    connection.execute("PRAGMA synchronous=FULL")
+    connection.execute("PRAGMA synchronous={}".format(synchronous))
 
 
 class IdempotencyConflictError(ValueError):
@@ -113,21 +123,46 @@ class SQLiteOutbox:
         self.path = Path(path).resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        # Reopening SQLite for every operation re-runs connect plus the WAL and
+        # busy-timeout pragma negotiation on the request hot path.  On the Orin
+        # that costs about 7 ms per append, and roughly 12 ms once the replay
+        # worker contends for the same file.  A process-local persistent
+        # connection guarded by the existing RLock removes that per-operation
+        # setup without weakening durability: synchronous stays FULL, so an
+        # accepted cloud submission still survives a crash.
+        self._connection = sqlite3.connect(
+            str(self.path),
+            timeout=10.0,
+            check_same_thread=False,
+        )
+        self._connection.row_factory = sqlite3.Row
+        _configure_sqlite_connection(self._connection, enable_wal=True)
+        self._depth = 0
         self._initialize()
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(str(self.path), timeout=10.0)
-        try:
-            connection.row_factory = sqlite3.Row
-            _configure_sqlite_connection(connection, enable_wal=True)
-            yield connection
-            connection.commit()
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+        # Re-entrant by design: `snapshot()` calls `next_available_delay()`
+        # while already holding the connection.  Only the outermost scope may
+        # commit, otherwise the inner exit would end the outer transaction.
+        with self._lock:
+            outermost = self._depth == 0
+            self._depth += 1
+            try:
+                yield self._connection
+            except BaseException:
+                if outermost:
+                    self._connection.rollback()
+                raise
+            else:
+                if outermost:
+                    self._connection.commit()
+            finally:
+                self._depth -= 1
+
+    def close(self) -> None:
+        with self._lock:
+            self._connection.close()
 
     def _initialize(self) -> None:
         with self._connect() as connection:

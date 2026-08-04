@@ -249,11 +249,12 @@ class EdgeApiService:
                 )
 
         result, replayed = self.idempotency.execute(request_key, payload, operation)
-        if self.outbox.count() > 0:
-            # The request path only persists the cloud submission intent.  The
-            # worker owns all HTTP delivery so provisional latency is not tied
-            # to cloud acknowledgement latency.
-            self.replay_worker.notify()
+        # Waking the worker unconditionally is cheaper than asking the Outbox
+        # how much work exists: `count()` is a second SQLite round trip on the
+        # request path, while a spurious wake only costs the background thread
+        # one empty claim.  The worker owns all HTTP delivery, so provisional
+        # latency is never tied to cloud acknowledgement latency.
+        self.replay_worker.notify()
         result["idempotency_key"] = request_key
         result["idempotency_replay"] = replayed
         result["edge_service_wall_ms"] = round(
@@ -370,6 +371,9 @@ class EdgeApiService:
         if self.calibration_monitor is not None:
             self.calibration_monitor.close()
         self.review_tracker.close()
+        # Released last: the replay worker and runtime above may still touch the
+        # durable Outbox while they wind down.
+        self.outbox.close()
 
 
 def parse_args() -> argparse.Namespace:
