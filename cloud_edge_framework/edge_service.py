@@ -1,13 +1,15 @@
 """用途：运行负责场景接入、本地决策、调度、自治和可靠重放的独立边缘服务。"""
 
 import argparse
+import base64
+import os
 from pathlib import Path
 import time
 from typing import Any, Dict, Mapping
 
 from cloud_edge_framework.contracts import SCHEMA_VERSION, stable_id
 from cloud_edge_framework.feedback import DecisionFeedbackStore
-from cloud_edge_framework.http_api import ApiNotFoundError, create_http_server
+from cloud_edge_framework.http_api import ApiNotFoundError, RawResponse, create_http_server
 from cloud_edge_framework.metrics import FrameworkMetrics
 from cloud_edge_framework.monitoring import CalibrationDriftMonitor, MonitoringPolicy
 from cloud_edge_framework.networking import CloudNetworkMonitor
@@ -41,6 +43,19 @@ MONITORING_OUTCOME_ENDPOINT = MONITORING_ENDPOINT + "/outcome"
 MONITORING_REFERENCE_ENDPOINT = MONITORING_ENDPOINT + "/reference"
 ROUTING_DATASET_ENDPOINT = "/api/v1/collaboration/routing-dataset"
 
+EVIDENCE_FILE_ENDPOINT_PREFIX = "/api/v1/collaboration/evidence-file/"
+
+def _evidence_allowed_roots(project_root: Path) -> tuple:
+    return [
+        Path("/home")
+    ]
+
+
+def _is_within(target: Path, root: Path) -> bool:
+    try:
+        return os.path.commonpath([str(target), str(root)]) == str(root)
+    except ValueError:
+        return False
 
 class EdgeApiService:
     role = "edge"
@@ -213,6 +228,7 @@ class EdgeApiService:
                 "monitoring_outcome": MONITORING_OUTCOME_ENDPOINT,
                 "monitoring_reference": MONITORING_REFERENCE_ENDPOINT,
                 "routing_dataset": ROUTING_DATASET_ENDPOINT,
+                "evidence_file": EVIDENCE_FILE_ENDPOINT_PREFIX + "<base64url path>",
             },
         }
 
@@ -263,9 +279,33 @@ class EdgeApiService:
         if replayed:
             self.metrics.increment("idempotency_replays_total", operation="edge_decide")
         return result
-
+    
+    def serve_evidence_file(self, encoded_path: str) -> RawResponse:
+        """云端按 base64url 编码的路径请求，边缘只读回白名单内文件的原始字节。"""
+        try:
+            padded = encoded_path + "=" * (-len(encoded_path) % 4)
+            raw_path = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+        except (ValueError, TypeError, UnicodeDecodeError) as exc:
+            raise ValueError("invalid evidence file path encoding") from exc
+        if raw_path.startswith("file://"):
+            raw_path = raw_path[len("file://"):]
+        target = Path(raw_path)
+        if target.is_absolute():
+            target = target.resolve()
+        else:
+            target = (self.project_root / target).resolve()
+        if not any(
+            _is_within(target, root) for root in _evidence_allowed_roots(self.project_root)
+        ):
+            raise ValueError("evidence file is outside the allowed roots")
+        if not target.is_file():
+            raise ValueError("evidence file not found: {}".format(target))
+        return RawResponse(target.read_bytes(), content_type="application/octet-stream")
+    
     def handle_get(self, path: str, headers: Mapping[str, str]) -> Dict[str, Any]:
         del headers
+        if path.startswith(EVIDENCE_FILE_ENDPOINT_PREFIX):
+            return self.serve_evidence_file(path[len(EVIDENCE_FILE_ENDPOINT_PREFIX):])
         if path == "/health":
             return self.health()
         if path == "/ready":

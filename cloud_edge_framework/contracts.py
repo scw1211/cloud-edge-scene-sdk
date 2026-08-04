@@ -92,21 +92,21 @@ def random_id(prefix: str) -> str:
 
 @dataclass(frozen=True)
 class EventScope:
-    entity_id: str
-    subsystem: str
+    # entity_id: str
+    # subsystem: str
     state_variable: str
-    region_id: str
-    shared_resources: List[str] = field(default_factory=list)
+    # region_id: str
+    # shared_resources: List[str] = field(default_factory=list)
     correlation_keys: List[str] = field(default_factory=list)
     window_start_ms: int = 0
     window_end_ms: int = 0
 
     def __post_init__(self) -> None:
-        _text(self.entity_id, "scope.entity_id")
-        _text(self.subsystem, "scope.subsystem")
+        # _text(self.entity_id, "scope.entity_id")
+        # _text(self.subsystem, "scope.subsystem")
         _text(self.state_variable, "scope.state_variable")
-        _text(self.region_id, "scope.region_id")
-        _text_list(self.shared_resources, "scope.shared_resources")
+        # _text(self.region_id, "scope.region_id")
+        # _text_list(self.shared_resources, "scope.shared_resources")
         _text_list(self.correlation_keys, "scope.correlation_keys")
         start = _integer(self.window_start_ms, "scope.window_start_ms", 0)
         end = _integer(self.window_end_ms, "scope.window_end_ms", 0)
@@ -121,11 +121,11 @@ class EventScope:
         if end < start:
             raise ContractError("scope.window_end_ms must be >= scope.window_start_ms")
         return cls(
-            entity_id=_text(data.get("entity_id"), "scope.entity_id"),
-            subsystem=_text(data.get("subsystem"), "scope.subsystem"),
+            # entity_id=_text(data.get("entity_id"), "scope.entity_id"),
+            # subsystem=_text(data.get("subsystem"), "scope.subsystem"),
             state_variable=_text(data.get("state_variable"), "scope.state_variable"),
-            region_id=_text(data.get("region_id", "global"), "scope.region_id"),
-            shared_resources=_text_list(data.get("shared_resources", []), "scope.shared_resources"),
+            # region_id=_text(data.get("region_id", "global"), "scope.region_id"),
+            # shared_resources=_text_list(data.get("shared_resources", []), "scope.shared_resources"),
             correlation_keys=_text_list(data.get("correlation_keys", []), "scope.correlation_keys"),
             window_start_ms=start,
             window_end_ms=end,
@@ -309,16 +309,16 @@ class Evidence:
 @dataclass(frozen=True)
 class Action:
     action_type: str
-    target_ids: List[str]
-    resource_ids: List[str]
+    # target_ids: List[str]
+    # resource_ids: List[str]
     parameters: Dict[str, Any] = field(default_factory=dict)
     reason: str = ""
     priority: int = 50
 
     def __post_init__(self) -> None:
         _text(self.action_type, "action.action_type")
-        _text_list(self.target_ids, "action.target_ids")
-        _text_list(self.resource_ids, "action.resource_ids")
+        # _text_list(self.target_ids, "action.target_ids")
+        # _text_list(self.resource_ids, "action.resource_ids")
         if not isinstance(self.parameters, dict):
             raise ContractError("action.parameters must be an object")
         _text(self.reason, "action.reason", allow_empty=True)
@@ -334,8 +334,8 @@ class Action:
             raise ContractError("{}.priority must be <= 100".format(field_name))
         return cls(
             action_type=_text(data.get("action_type"), "{}.action_type".format(field_name)),
-            target_ids=_text_list(data.get("target_ids", []), "{}.target_ids".format(field_name)),
-            resource_ids=_text_list(data.get("resource_ids", []), "{}.resource_ids".format(field_name)),
+            # target_ids=_text_list(data.get("target_ids", []), "{}.target_ids".format(field_name)),
+            # resource_ids=_text_list(data.get("resource_ids", []), "{}.resource_ids".format(field_name)),
             parameters=_object(data.get("parameters", {}), "{}.parameters".format(field_name)),
             reason=_text(data.get("reason", ""), "{}.reason".format(field_name), allow_empty=True),
             priority=priority,

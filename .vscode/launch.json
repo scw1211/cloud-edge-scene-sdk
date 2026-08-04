@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Edge Service",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "cloud_edge_framework.cloud_service",
+            "args": [
+                "--project_root",
+                ".",
+                "--config",
+                "deployment/framework/cloud_service.json"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

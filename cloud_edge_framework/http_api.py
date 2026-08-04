@@ -1,5 +1,5 @@
 """用途：为严格分角色的边缘与云端服务提供统一 JSON HTTP 外壳。"""
-
+from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -14,6 +14,12 @@ from cloud_edge_framework.reliability import IdempotencyConflictError
 class ApiNotFoundError(LookupError):
     pass
 
+@dataclass(frozen=True)
+class RawResponse:
+    """在统一 JSON HTTP 外壳中返回非 JSON 的二进制响应。"""
+
+    body: bytes
+    content_type: str = "application/octet-stream"
 
 def _headers(handler: BaseHTTPRequestHandler) -> Dict[str, str]:
     return {str(name).lower(): str(value) for name, value in handler.headers.items()}
