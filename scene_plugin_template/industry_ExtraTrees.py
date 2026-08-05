@@ -20,6 +20,8 @@ PRODUCTS = [
 
 DEFAULT_BANDS = Path(__file__).parent  / "review_bands.json"
 DEFAULT_MODEL = Path(__file__).parent  / "extratrees.joblib"
+prediction_model = joblib.load(DEFAULT_MODEL)
+review_bands = json.loads(Path(DEFAULT_BANDS).read_text(encoding="utf-8"))["bands"]
 
 class CloudReviewModel:
     def __init__(self, 
@@ -29,7 +31,7 @@ class CloudReviewModel:
                  nine_b_enabled: bool = False
                 ) -> None:
         
-        self.model = joblib.load(model_path)
+        self.model = prediction_model
         # self.evaluation = json.loads(Path(evaluation_path).read_text(encoding="utf-8"))
         self.confidence_threshold = float(confidence_threshold)
         self.nine_b_enabled = bool(nine_b_enabled)
@@ -107,7 +109,7 @@ def predict_single(product, rgb_f32, infrared_f32, rgb_score, infrared_score,
                     confidence_threshold=0.8,
                    nine_b_enabled=False):
     """Build features and run inference for one sample; return dict with both."""
-    bands = json.loads(Path(bands).read_text(encoding="utf-8"))["bands"]
+    bands = review_bands
     features = build_single_features(product, rgb_f32, infrared_f32,
                                      float(rgb_score), float(infrared_score), bands)
     reviewer = CloudReviewModel(Path(model_path),
@@ -119,8 +121,8 @@ def predict_single(product, rgb_f32, infrared_f32, rgb_score, infrared_score,
 # 以下测试
 # start_time = time.perf_counter()
 # result = predict_single("capsule", 
-#                "/home/defaultval/cloud_edgeproj/cloud-edge-scene-sdk-v0131/scene_plugin_template/fetched_heatmaps/rgb_map_0.f32", 
-#                "/home/defaultval/cloud_edgeproj/cloud-edge-scene-sdk-v0131/scene_plugin_template/fetched_heatmaps/infra_map_0.f32", 
+#                "/home/defaultval/cloud_edgeproj/cloud-edge-scene-sdk-v0131/scene_plugin_template/fetched_heatmaps/RGB_map_1.f32", 
+#                "/home/defaultval/cloud_edgeproj/cloud-edge-scene-sdk-v0131/scene_plugin_template/fetched_heatmaps/Infrared_map_1.f32", 
 #                0.5, 
 #                0.5)
 # print(f"Elapsed time: {time.perf_counter()- start_time} seconds")
