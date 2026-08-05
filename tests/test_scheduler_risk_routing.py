@@ -91,6 +91,32 @@ class SchedulerRiskRoutingTest(unittest.TestCase):
                 self.assertEqual(result.route, "cloud_sync")
                 self.assertTrue(result.waits_for_cloud)
 
+    def test_scene_authoritative_uncertainty_can_resolve_generic_confidence(self) -> None:
+        result = self.scheduler.schedule(
+            _event(confidence=0.5),
+            self.network,
+            decision_uncertain=False,
+        )
+        self.assertEqual(result.route, "edge_only")
+        self.assertFalse(result.uncertain)
+
+    def test_resolved_uncertainty_never_overrides_safety_boundaries(self) -> None:
+        cases = {
+            "high_risk": (_event(risk_level="high"), {}),
+            "cross_region_conflict": (_event(), {"conflict_suspected": True}),
+            "policy_forced": (_event(), {"cloud_review_requested": True}),
+        }
+        for name, (event, controls) in cases.items():
+            with self.subTest(name=name):
+                result = self.scheduler.schedule(
+                    event,
+                    self.network,
+                    decision_uncertain=False,
+                    **controls,
+                )
+                self.assertEqual(result.route, "cloud_sync")
+                self.assertTrue(result.waits_for_cloud)
+
     def test_generic_possible_high_remains_synchronous(self) -> None:
         result = self.scheduler.schedule(
             _event(prediction_set=["high"]),
@@ -98,6 +124,15 @@ class SchedulerRiskRoutingTest(unittest.TestCase):
         )
         self.assertEqual(result.route, "cloud_sync")
         self.assertTrue(result.critical)
+
+    def test_prediction_set_ambiguity_survives_scene_resolution(self) -> None:
+        result = self.scheduler.schedule(
+            _event(prediction_set=["low", "medium"]),
+            self.network,
+            decision_uncertain=False,
+        )
+        self.assertEqual(result.route, "cloud_sync")
+        self.assertTrue(result.uncertain)
 
     def test_explicit_low_operational_risk_can_separate_descriptive_risk(self) -> None:
         result = self.scheduler.schedule(

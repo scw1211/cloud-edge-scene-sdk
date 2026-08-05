@@ -37,6 +37,40 @@ def _with_metadata(
     return replace(decision, metadata=metadata)
 
 
+def _action_semantics(value: Any) -> str:
+    payload = value.to_dict() if isinstance(value, Action) else dict(value)
+    return json.dumps(
+        {
+            "action_type": payload.get("action_type"),
+            "target_ids": sorted(
+                str(item) for item in payload.get("target_ids", [])
+            ),
+            "resource_ids": sorted(
+                str(item) for item in payload.get("resource_ids", [])
+            ),
+            "parameters": payload.get("parameters", {}),
+            "reason": payload.get("reason"),
+            "priority": payload.get("priority"),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _decision_disagrees(
+    decoded: Dict[str, Any],
+    student: DecisionEnvelope,
+) -> bool:
+    decoded_actions = decoded.get("actions", [])
+    decoded_actions = decoded_actions if isinstance(decoded_actions, list) else []
+    return bool(
+        str(decoded.get("decision", "")) != student.decision
+        or sorted(_action_semantics(value) for value in decoded_actions)
+        != sorted(_action_semantics(value) for value in student.actions)
+    )
+
+
 class TrafficEdgeLLMController:
     def __init__(
         self,
@@ -445,7 +479,7 @@ class TrafficEdgeLLMController:
             self._circuit_open_until = 0.0
             self.last_error = None
             decoded = dict(result["decision"])
-            disagreement = decoded["decision"] != student.decision
+            disagreement = _decision_disagrees(decoded, student)
             common = {
                 "edge_llm_configured": True,
                 "edge_llm_selected": True,

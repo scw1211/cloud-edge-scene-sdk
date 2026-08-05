@@ -1092,9 +1092,27 @@ class EdgeRuntime:
             if isinstance(local_model_uncertainty, dict)
             else {}
         )
-        decision_uncertain = bool(
-            local_model_uncertainty.get("requires_review", False)
-        )
+        # ``requires_review`` is deliberately broad: scene plugins also use it
+        # to request richer evidence and an eventual asynchronous correction.
+        # Only an explicit synchronous uncertainty signal may block the
+        # business response here.
+        if "requires_synchronous_review" in local_model_uncertainty:
+            decision_uncertain: Optional[bool] = bool(
+                local_model_uncertainty["requires_synchronous_review"]
+            )
+        elif "requires_sync_review" in local_model_uncertainty:
+            decision_uncertain = bool(
+                local_model_uncertainty["requires_sync_review"]
+            )
+        elif "requires_review" in local_model_uncertainty:
+            # Compatibility for plugins that implemented the original
+            # one-level uncertainty contract. New scene plugins should emit
+            # the explicit synchronous field, including ``False``.
+            decision_uncertain = (
+                True if bool(local_model_uncertainty["requires_review"]) else None
+            )
+        else:
+            decision_uncertain = None
         cloud_review_requested = bool(
             event.metadata.get("cloud_review_requested", False)
         )

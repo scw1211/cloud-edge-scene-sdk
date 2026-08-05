@@ -95,7 +95,7 @@ class CollaborationScheduler:
         selective_defer: bool = False,
         defer_recommended: bool = False,
         routing_risk_level: Optional[str] = None,
-        decision_uncertain: bool = False,
+        decision_uncertain: Optional[bool] = None,
     ) -> ScheduleDecision:
         upload_bytes = max(0, int(upload_bytes))
         transfer_ms = (
@@ -131,17 +131,21 @@ class CollaborationScheduler:
             # set, when present, remains an independent ambiguity signal.
             uncertain = len(prediction_set) > 1 or defer_recommended
         else:
-            uncertain = (
+            generic_uncertain = (
                 event.uncertainty.confidence < self.confidence_threshold
                 or event.prediction.confidence < self.confidence_threshold
                 or len(prediction_set) > 1
                 or defer_recommended
             )
-        # Scene-local models can expose uncertainty after normalization (for
-        # example Student confidence or Student/rule disagreement).  It is a
-        # first-class scheduling signal and must not be lost merely because the
-        # upstream perception confidence was high.
-        uncertain = bool(uncertain or decision_uncertain)
+            uncertain = generic_uncertain
+        # A scene may provide an authoritative post-adjudication uncertainty
+        # signal.  ``False`` is meaningful: it prevents a generic confidence
+        # threshold from undoing a scene-specific Student/Qwen cascade.  A
+        # multi-label prediction set or an explicit defer remains uncertain.
+        if decision_uncertain is not None:
+            uncertain = bool(
+                decision_uncertain or len(prediction_set) > 1 or defer_recommended
+            )
         possible_high = any(
             RISK_PRIORITY.get(level, 0) >= RISK_PRIORITY["high"]
             for level in prediction_set

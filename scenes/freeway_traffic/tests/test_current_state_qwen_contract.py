@@ -228,6 +228,196 @@ class CurrentStateQwenContractTests(unittest.TestCase):
         self.assertEqual(path.name, "forecast.json")
         self.assertEqual(contract, "forecast_joint_v1")
 
+    def test_current_state_separates_async_and_synchronous_uncertainty(self) -> None:
+        event = self._current_state_event()
+        plugin = TrafficPlugin(
+            current_state_edge_student_path=Path("current.json"),
+            current_state_sync_confidence_threshold=0.50,
+        )
+
+        cases = (
+            ("congestion_warning", 0.90, True, False),
+            ("congestion_warning", 0.60, True, False),
+            ("congestion_warning", 0.49, True, True),
+            ("no_action", 0.49, True, False),
+        )
+        for decision_name, confidence, broad_review, synchronous in cases:
+            with self.subTest(decision=decision_name, confidence=confidence):
+                student = build_decision(
+                    event=event,
+                    decision=decision_name,
+                    actions=[self._advisory()]
+                    if decision_name == "congestion_warning"
+                    else [],
+                    confidence=confidence,
+                    reason="test Student decision",
+                    source="test_student",
+                    policy_version="test",
+                )
+                selected = plugin._apply_defer_gate(event, student)
+                uncertainty = selected.metadata["model_uncertainty"]
+                self.assertEqual(
+                    uncertainty["requires_review"], broad_review
+                )
+                self.assertEqual(
+                    uncertainty["requires_synchronous_review"], synchronous
+                )
+
+        ambiguous_event = replace(
+            event,
+            metadata={
+                **event.metadata,
+                "model_uncertainty": {
+                    **event.metadata["model_uncertainty"],
+                    "prediction_set": ["low", "medium"],
+                },
+            },
+        )
+        student = build_decision(
+            event=ambiguous_event,
+            decision="no_action",
+            actions=[],
+            confidence=0.90,
+            reason="test ambiguous prediction set",
+            source="test_student",
+            policy_version="test",
+        )
+        uncertainty = plugin._apply_defer_gate(
+            ambiguous_event, student
+        ).metadata["model_uncertainty"]
+        self.assertTrue(uncertainty["requires_synchronous_review"])
+        self.assertIn(
+            "prediction_set_ambiguous",
+            uncertainty["synchronous_review_reasons"],
+        )
+
+    def test_agreeing_qwen_resolves_only_student_synchronous_uncertainty(self) -> None:
+        event = self._current_state_event()
+        plugin = TrafficPlugin(current_state_edge_student_path=Path("current.json"))
+        student = build_decision(
+            event=event,
+            decision="congestion_warning",
+            actions=[self._advisory()],
+            confidence=0.49,
+            reason="test Student warning",
+            source="test_student",
+            policy_version="test",
+        )
+        selected = plugin._apply_defer_gate(event, student)
+        metadata = {
+            **selected.metadata,
+            "edge_decision_path": "edge_qwen",
+            "edge_llm_model_disagreement": False,
+            "edge_llm_requires_cloud": False,
+        }
+        corroborated = plugin._resolve_current_state_synchronous_uncertainty(
+            event,
+            replace(selected, metadata=metadata),
+        )
+        uncertainty = corroborated.metadata["model_uncertainty"]
+        self.assertTrue(uncertainty["requires_review"])
+        self.assertFalse(uncertainty["requires_synchronous_review"])
+        self.assertEqual(
+            uncertainty["synchronous_review_resolution"],
+            "edge_qwen_corroborated_student",
+        )
+
+        disagreement = plugin._resolve_current_state_synchronous_uncertainty(
+            event,
+            replace(
+                selected,
+                metadata={
+                    **metadata,
+                    "edge_llm_model_disagreement": True,
+                },
+            ),
+        )
+        self.assertTrue(
+            disagreement.metadata["model_uncertainty"][
+                "requires_synchronous_review"
+            ]
+        )
+
+        missing_flags = plugin._resolve_current_state_synchronous_uncertainty(
+            event,
+            replace(
+                selected,
+                metadata={
+                    **selected.metadata,
+                    "edge_decision_path": "edge_qwen",
+                },
+            ),
+        )
+        self.assertTrue(
+            missing_flags.metadata["model_uncertainty"][
+                "requires_synchronous_review"
+            ]
+        )
+
+        requires_cloud = plugin._resolve_current_state_synchronous_uncertainty(
+            event,
+            replace(
+                selected,
+                metadata={
+                    **metadata,
+                    "edge_llm_requires_cloud": True,
+                },
+            ),
+        )
+        self.assertTrue(
+            requires_cloud.metadata["model_uncertainty"][
+                "requires_synchronous_review"
+            ]
+        )
+
+        unknown_reason = plugin._resolve_current_state_synchronous_uncertainty(
+            event,
+            replace(
+                selected,
+                metadata={
+                    **metadata,
+                    "model_uncertainty": {
+                        **selected.metadata["model_uncertainty"],
+                        "synchronous_review_reasons": ["unknown_signal"],
+                    },
+                },
+            ),
+        )
+        self.assertTrue(
+            unknown_reason.metadata["model_uncertainty"][
+                "requires_synchronous_review"
+            ]
+        )
+
+        ambiguous_uncertainty = {
+            **selected.metadata["model_uncertainty"],
+            "synchronous_review_reasons": [
+                "student_no_majority_and_rule_disagreement",
+                "prediction_set_ambiguous",
+            ],
+        }
+        ambiguous = plugin._resolve_current_state_synchronous_uncertainty(
+            event,
+            replace(
+                selected,
+                metadata={
+                    **metadata,
+                    "model_uncertainty": ambiguous_uncertainty,
+                },
+            ),
+        )
+        self.assertTrue(
+            ambiguous.metadata["model_uncertainty"][
+                "requires_synchronous_review"
+            ]
+        )
+        self.assertEqual(
+            ambiguous.metadata["model_uncertainty"][
+                "synchronous_review_reasons"
+            ],
+            ["prediction_set_ambiguous"],
+        )
+
     def test_gain_profile_routes_only_validation_accepted_stratum(self) -> None:
         raw = {
             "specversion": "1.0",
@@ -363,8 +553,77 @@ class CurrentStateQwenContractTests(unittest.TestCase):
         )
         self.assertEqual(decision.metadata["edge_decision_path"], "edge_qwen")
         self.assertFalse(decision.metadata["edge_llm_safety_fallback"])
+        self.assertFalse(decision.metadata["edge_llm_model_disagreement"])
         self.assertTrue(
             decision.metadata["edge_llm_student_advisory_whitelisted"]
+        )
+
+    def test_same_decision_with_different_action_semantics_is_disagreement(self) -> None:
+        event = self._current_state_event()
+        student = build_decision(
+            event=event,
+            decision="congestion_warning",
+            actions=[self._advisory()],
+            confidence=0.371,
+            reason="test Student warning",
+            source="test_student",
+            policy_version="test",
+        )
+        controller = self._decoder_controller()
+        base_decide = controller.active.model.decide
+
+        class ChangedActionModel:
+            validation = {"metrics": {"decision_accuracy": 0.6613}}
+
+            @staticmethod
+            def decide(prompt, decoder_event, network_available):
+                result = base_decide(prompt, decoder_event, network_available)
+                decoded = dict(result["decision"])
+                actions = [dict(value) for value in decoded["actions"]]
+                actions[0] = {
+                    **actions[0],
+                    "parameters": {
+                        **actions[0].get("parameters", {}),
+                        "warning_level": "high",
+                    },
+                }
+                return {
+                    **result,
+                    "decision": {**decoded, "actions": actions},
+                }
+
+        controller.active.model = ChangedActionModel()
+        decision = controller.decide(event, student, "test")
+
+        self.assertEqual(decision.decision, "congestion_warning")
+        self.assertTrue(decision.metadata["edge_llm_model_disagreement"])
+
+        reason_controller = self._decoder_controller()
+        reason_base_decide = reason_controller.active.model.decide
+
+        class ChangedReasonModel:
+            validation = {"metrics": {"decision_accuracy": 0.6613}}
+
+            @staticmethod
+            def decide(prompt, decoder_event, network_available):
+                result = reason_base_decide(
+                    prompt, decoder_event, network_available
+                )
+                decoded = dict(result["decision"])
+                actions = [dict(value) for value in decoded["actions"]]
+                actions[0] = {
+                    **actions[0],
+                    "reason": "different operational justification",
+                }
+                return {
+                    **result,
+                    "decision": {**decoded, "actions": actions},
+                }
+
+        reason_controller.active.model = ChangedReasonModel()
+        reason_decision = reason_controller.decide(event, student, "test")
+        self.assertTrue(
+            reason_decision.metadata["edge_llm_model_disagreement"]
         )
 
     def test_future_warning_without_student_advisory_still_falls_back(self) -> None:

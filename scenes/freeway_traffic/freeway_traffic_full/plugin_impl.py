@@ -165,9 +165,17 @@ def _cloud_llm_review_policy(
     min_expected_gain: float,
 ) -> Dict[str, Any]:
     explicit = bool(payload.get("cloud_llm_review_requested", False))
-    uncertainty_requires_review = bool(
-        model_uncertainty.get("requires_review", False)
-    )
+    uncertainty_requires_review = bool(model_uncertainty.get("requires_review", False))
+    if "requires_synchronous_review" in model_uncertainty:
+        uncertainty_requires_synchronous_review = bool(
+            model_uncertainty["requires_synchronous_review"]
+        )
+    elif "requires_sync_review" in model_uncertainty:
+        uncertainty_requires_synchronous_review = bool(
+            model_uncertainty["requires_sync_review"]
+        )
+    else:
+        uncertainty_requires_synchronous_review = uncertainty_requires_review
     source = str(expected_gain.get("source", "not_estimated"))
     cloud_gain = _bounded_float(
         expected_gain.get("cloud"), 0.0, -1.0, 1.0
@@ -175,10 +183,12 @@ def _cloud_llm_review_policy(
     gain_qualified = (
         source != "not_estimated" and cloud_gain >= min_expected_gain
     )
-    eligible = explicit or (uncertainty_requires_review and gain_qualified)
+    eligible = explicit or (
+        uncertainty_requires_synchronous_review and gain_qualified
+    )
     if explicit:
         reason = "traffic_explicit_cloud_llm_review"
-    elif not uncertainty_requires_review:
+    elif not uncertainty_requires_synchronous_review:
         reason = "traffic_no_model_uncertainty"
     elif source == "not_estimated":
         reason = "traffic_cloud_gain_not_estimated"
@@ -191,6 +201,9 @@ def _cloud_llm_review_policy(
         "reason": reason,
         "explicit_requested": explicit,
         "model_uncertainty_requires_review": uncertainty_requires_review,
+        "model_uncertainty_requires_synchronous_review": (
+            uncertainty_requires_synchronous_review
+        ),
         "expected_gain": round(cloud_gain, 6),
         "expected_gain_source": source,
         "minimum_expected_gain": round(min_expected_gain, 6),
@@ -284,6 +297,7 @@ class TrafficPlugin(ScenePlugin):
         current_state_cloud_model_path: Optional[Path] = None,
         current_state_feature_codec_path: Optional[Path] = None,
         edge_llm_gain_profile_path: Optional[Path] = None,
+        current_state_sync_confidence_threshold: float = 0.50,
     ) -> None:
         self.cloud_model_path = Path(cloud_model_path) if cloud_model_path is not None else None
         self.current_state_cloud_model_path = (
@@ -314,6 +328,13 @@ class TrafficPlugin(ScenePlugin):
         self.cloud_llm_min_expected_gain = float(cloud_llm_min_expected_gain)
         if not -1.0 <= self.cloud_llm_min_expected_gain <= 1.0:
             raise ValueError("cloud_llm_min_expected_gain must be in [-1, 1]")
+        self.current_state_sync_confidence_threshold = float(
+            current_state_sync_confidence_threshold
+        )
+        if not 0.0 <= self.current_state_sync_confidence_threshold <= 1.0:
+            raise ValueError(
+                "current_state_sync_confidence_threshold must be in [0, 1]"
+            )
         self.policy_version = policy_version
         self._cloud_model: Optional[Dict[str, Any]] = None
         self._current_state_cloud_model: Optional[Dict[str, Any]] = None
@@ -1344,6 +1365,9 @@ class TrafficPlugin(ScenePlugin):
             else None,
             "policy_version": self.policy_version,
             "cloud_llm_min_expected_gain": self.cloud_llm_min_expected_gain,
+            "current_state_sync_confidence_threshold": (
+                self.current_state_sync_confidence_threshold
+            ),
             "edge_llm": self._edge_llm.health(),
         }
 
@@ -1373,9 +1397,11 @@ class TrafficPlugin(ScenePlugin):
         choice = "edge_student"
         gate_confidence: Optional[float] = None
         selected = student_decision
+        uses_current_state_contract = self._uses_current_state_contract(
+            event.scene_payload
+        )
         use_legacy_defer_gate = bool(
-            self.defer_gate_path is not None
-            and not self._uses_current_state_contract(event.scene_payload)
+            self.defer_gate_path is not None and not uses_current_state_contract
         )
         if use_legacy_defer_gate:
             from traffic_system.defer_gate import (
@@ -1437,36 +1463,62 @@ class TrafficPlugin(ScenePlugin):
             and student_confidence < self._edge_llm.student_confidence_threshold
         )
         defer_recommended = choice == "defer_cloud"
-        uncertainty.update(
-            {
-                "score": round(
-                    max(
-                        _bounded_float(uncertainty.get("score"), 0.0),
-                        1.0 - student_confidence if student_available else 0.0,
+        uncertainty_update = {
+            "score": round(
+                max(
+                    _bounded_float(uncertainty.get("score"), 0.0),
+                    1.0 - student_confidence if student_available else 0.0,
+                ),
+                6,
+            ),
+            "student_available": student_available,
+            "student_confidence": round(student_confidence, 6)
+            if student_available
+            else None,
+            "student_confidence_threshold": round(
+                self._edge_llm.student_confidence_threshold, 6
+            ),
+            "student_low_confidence": low_student_confidence,
+            "prediction_set": prediction_set,
+            "prediction_set_size": len(prediction_set),
+            "student_rule_disagreement": disagreement,
+            "defer_recommended": defer_recommended,
+            "requires_review": bool(
+                low_student_confidence
+                or len(prediction_set) > 1
+                or disagreement
+                or defer_recommended
+            ),
+            "source": "student_rule_defer_signals",
+        }
+        if uses_current_state_contract:
+            synchronous_reasons = []
+            if len(prediction_set) > 1:
+                synchronous_reasons.append("prediction_set_ambiguous")
+            if defer_recommended:
+                synchronous_reasons.append("defer_recommended")
+            if (
+                student_available
+                and disagreement
+                and student_confidence
+                < self.current_state_sync_confidence_threshold
+            ):
+                synchronous_reasons.append(
+                    "student_no_majority_and_rule_disagreement"
+                )
+            uncertainty_update.update(
+                {
+                    "requires_synchronous_review": bool(synchronous_reasons),
+                    "synchronous_review_reasons": synchronous_reasons,
+                    "synchronous_review_confidence_threshold": round(
+                        self.current_state_sync_confidence_threshold, 6
                     ),
-                    6,
-                ),
-                "student_available": student_available,
-                "student_confidence": round(student_confidence, 6)
-                if student_available
-                else None,
-                "student_confidence_threshold": round(
-                    self._edge_llm.student_confidence_threshold, 6
-                ),
-                "student_low_confidence": low_student_confidence,
-                "prediction_set": prediction_set,
-                "prediction_set_size": len(prediction_set),
-                "student_rule_disagreement": disagreement,
-                "defer_recommended": defer_recommended,
-                "requires_review": bool(
-                    low_student_confidence
-                    or len(prediction_set) > 1
-                    or disagreement
-                    or defer_recommended
-                ),
-                "source": "student_rule_defer_signals",
-            }
-        )
+                    "synchronous_review_resolution": "unresolved"
+                    if synchronous_reasons
+                    else "not_required",
+                }
+            )
+        uncertainty.update(uncertainty_update)
         metadata = dict(selected.metadata)
         metadata.update(
             {
@@ -1501,6 +1553,47 @@ class TrafficPlugin(ScenePlugin):
             }
         )
         return replace(selected, metadata=metadata)
+
+    def _resolve_current_state_synchronous_uncertainty(
+        self,
+        event: SemanticEvent,
+        decision: Any,
+    ) -> Any:
+        """Let an agreeing local Qwen result resolve only Student uncertainty."""
+        if not self._uses_current_state_contract(event.scene_payload):
+            return decision
+        metadata = dict(getattr(decision, "metadata", {}))
+        if (
+            metadata.get("edge_decision_path") != "edge_qwen"
+            or metadata.get("edge_llm_model_disagreement") is not False
+            or metadata.get("edge_llm_requires_cloud") is not False
+        ):
+            return decision
+        uncertainty = metadata.get("model_uncertainty", {})
+        uncertainty = dict(uncertainty) if isinstance(uncertainty, dict) else {}
+        reasons = uncertainty.get("synchronous_review_reasons", [])
+        if not isinstance(reasons, list):
+            return decision
+        reasons = [str(value) for value in reasons]
+        student_reason = "student_no_majority_and_rule_disagreement"
+        if student_reason not in reasons:
+            return decision
+        unresolved = [
+            reason for reason in reasons if reason != student_reason
+        ]
+        uncertainty.update(
+            {
+                "requires_synchronous_review": bool(unresolved),
+                "synchronous_review_reasons": unresolved,
+                "synchronous_review_resolution": (
+                    "edge_qwen_corroborated_student"
+                    if not unresolved
+                    else "edge_qwen_corroborated_student_with_unresolved_signals"
+                ),
+            }
+        )
+        metadata["model_uncertainty"] = uncertainty
+        return replace(decision, metadata=metadata)
 
     def routing_advice(
         self,
@@ -1816,6 +1909,10 @@ class TrafficPlugin(ScenePlugin):
                         decision,
                         metadata={**decision.metadata, **defer_metadata},
                     )
+                decision = self._resolve_current_state_synchronous_uncertainty(
+                    event,
+                    decision,
+                )
                 if bool(
                     decision.metadata.get("traffic_selective_defer_enabled", False)
                 ):

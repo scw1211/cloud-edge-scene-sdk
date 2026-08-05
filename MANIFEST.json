@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.13.1",
-  "built_at_utc": "2026-08-05T09:16:00.597928+00:00",
+  "built_at_utc": "2026-08-05T10:19:02.879140+00:00",
   "python_requires": ">=3.8",
   "included_files": [
     {
@@ -210,13 +210,13 @@
     },
     {
       "path": "cloud_edge_framework/runtime.py",
-      "bytes": 112969,
-      "sha256": "79d1d6ada38c6d504ad5bdce9b9bca72d887068e601a5dcc332dda79a5f5209e"
+      "bytes": 113967,
+      "sha256": "640eb5f2d4bce8bf175aae7d8a6816373b7faadc250ec634b8fac31c2aa59545"
     },
     {
       "path": "cloud_edge_framework/scheduling.py",
-      "bytes": 10758,
-      "sha256": "b8a1fca026df01faafe38fe1c715760a9a43b4357e4be1c3de2d132c00c8cfb1"
+      "bytes": 10950,
+      "sha256": "4227bf38d929250faaba97a7670f16aa0675584aba66e40d03c7045d27be98b0"
     },
     {
       "path": "cloud_edge_framework/server.py",
@@ -530,8 +530,8 @@
     },
     {
       "path": "scenes/freeway_traffic/README.md",
-      "bytes": 14335,
-      "sha256": "bcd2dc6f773ba8ba8d1d4761454c07bb64e2d809338edba4887d6197f12702d3"
+      "bytes": 15319,
+      "sha256": "5350aaab1c0ba18201356a7dfdd4b20e874e35c1f066c84411f90282c3309c54"
     },
     {
       "path": "scenes/freeway_traffic/asset_catalog.json",
@@ -700,8 +700,8 @@
     },
     {
       "path": "scenes/freeway_traffic/benchmark_real_current_state_e2e.py",
-      "bytes": 53211,
-      "sha256": "96b06c351f67934734dc21466c83f946441af048a4a1958f7201dd930b8a5bd3"
+      "bytes": 57009,
+      "sha256": "29a43d29bcee978e994bda1e663e7fc6dc306d3cc86ca1c8cdb0fe7820655b68"
     },
     {
       "path": "scenes/freeway_traffic/configurations/PEMS08_astgcn.conf",
@@ -765,8 +765,8 @@
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/scene_plugins_edge.json",
-      "bytes": 1586,
-      "sha256": "7ca68a638092efc07e2003b7ed5babcecac7d0453578a68900896903dbf51dd9"
+      "bytes": 1642,
+      "sha256": "04e7fc1af835ce39c52a103c8f7c1c64d1007d62a0c2ee98146f4fd9ee59c67e"
     },
     {
       "path": "scenes/freeway_traffic/deployment/scene_plugins.json",
@@ -790,13 +790,13 @@
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_full/edge_llm.py",
-      "bytes": 24031,
-      "sha256": "a6492d6fcac7cd30aa292ad4dec2555ea46f04157dc5e92f504e64093fc573a2"
+      "bytes": 25186,
+      "sha256": "02d69fb6ba9798591558778f4f4306920d6997cda6f7fb2f829c185b71747166"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_full/plugin_impl.py",
-      "bytes": 84892,
-      "sha256": "c65cd6b7fd7cb2019948833d08a0a815177b22d63b5cb623424ce925178f7894"
+      "bytes": 89056,
+      "sha256": "dc978c830f85e697dd07ebad49a16a835371ee1b003d8b3d3de3163eb3854666"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_scene/__init__.py",
@@ -905,13 +905,13 @@
     },
     {
       "path": "scenes/freeway_traffic/tests/test_current_state_qwen_contract.py",
-      "bytes": 17680,
-      "sha256": "1f49a2c2b56fc7e4c919bb20a436269f4e28f32db292ec6da9c08dceddfda84b"
+      "bytes": 27036,
+      "sha256": "4d43a025b7ce160eae86266f4b37de0a0219825c65ac007e33c6d9d671f5d5c7"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_traffic_semantics_and_edge_llm.py",
-      "bytes": 23961,
-      "sha256": "3872992535cb62d19ca5b95385371ee8cce14b55fadb8aa20fa83ae4f1697166"
+      "bytes": 25443,
+      "sha256": "565f78bb1c0993d52a6c47edbc5bb5cce451fe19d68bf34cfbb02de39eb5bf58"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/__init__.py",
@@ -1675,8 +1675,8 @@
     },
     {
       "path": "tests/test_async_summary_delivery.py",
-      "bytes": 89312,
-      "sha256": "9742532593cd6481db5fea18911f331852d4f845459b890e5373bf40292b94b6"
+      "bytes": 95270,
+      "sha256": "8e21be30dffc0e40ca6dca5ee85038fdf1b386bed9d155317cc6168a6e4eecdf"
     },
     {
       "path": "tests/test_durable_handoff.py",
@@ -1695,8 +1695,8 @@
     },
     {
       "path": "tests/test_pems08_e2e_benchmark.py",
-      "bytes": 5037,
-      "sha256": "4b035f02e82f9cb49b93065110b116c76ee648c0b3b1894229b116993a7ba32f"
+      "bytes": 5381,
+      "sha256": "76665ffa3aea4ce438c8dc38aaa7768694630867bc3748265d282c0e6ed7494c"
     },
     {
       "path": "tests/test_protocol_compatibility.py",
@@ -1715,8 +1715,8 @@
     },
     {
       "path": "tests/test_scheduler_risk_routing.py",
-      "bytes": 4033,
-      "sha256": "c3ee4d7cf9dead128879752fc81f10f9f4e1356fe93a3104e2257a04779c2a80"
+      "bytes": 5461,
+      "sha256": "a2777a14087f10ff13bfe0548417e4396117171d52216959c044ebb0a697b78d"
     },
     {
       "path": "tests/test_transport_deadline.py",

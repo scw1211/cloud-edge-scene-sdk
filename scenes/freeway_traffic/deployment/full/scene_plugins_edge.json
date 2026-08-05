@@ -17,6 +17,7 @@
         "edge_llm_gain_profile_path": "scenes/freeway_traffic/assets/models/edge_qwen_gain_router_current_state_v1.json",
         "edge_llm_mode": "selective",
         "edge_llm_student_confidence_threshold": 0.75,
+        "current_state_sync_confidence_threshold": 0.5,
         "edge_llm_min_expected_gain": 0.05,
         "edge_llm_deadline_margin_ms": 45.0,
         "edge_llm_deadline_probe_interval": 20,

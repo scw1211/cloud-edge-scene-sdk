@@ -88,6 +88,14 @@ current-state v2.0.2 允许 Qwen 在当前仍为 low、但 Student 已授权非�
 动作后果风险高、模型高不确定、跨区冲突或策略强制审核命中时，网络和 deadline
 允许才同步等待云端；需要云确认的动作在权威 final 前不会被授权。
 
+当前态势链路区分“建议复核”和“必须同步”：Student 置信度低于 0.75 或与当前
+规则不同会设置宽泛的 `requires_review`，用于特征证据和异步全局复核；只有
+Student 最高类概率低于 `current_state_sync_confidence_threshold`（默认 0.50）
+且与规则不同、预测集多值或 defer 命中，才设置
+`requires_synchronous_review` 阻塞业务。若本地 Qwen 的决策及动作语义与 Student
+一致，可消解第一种 Student 不确定性；它不能消解预测集歧义、高动作风险、
+跨区冲突、策略强制审核或动作的云确认要求。
+
 正式基准的共同 T0 位于常驻、预热完成后，紧挨一个已到齐的 12 步窗口处理前：
 
 - `local_actionable_ms`：T0 到四个 compact `/decide` 响应全部返回；
@@ -95,6 +103,11 @@ current-state v2.0.2 允许 Qwen 在当前仍为 low、但 Student 已授权非�
   权威 final；
 - `global_authoritative_final_ms`：T0 到四个 review 都完成权威回填；
   `partial_final` 和 `local_only_timeout` 不算权威完成。
+
+异步上传字节从框架 `/metrics` 的 `distributions.async_http_*` 测量前后增量计算，
+不能使用 `/decide` 返回瞬间尚未发生的后台传输字段。报告同时分开 scheduled
+sync 与最终实际执行的 `cloud_sync`、`cloud_async`、`local_autonomy`，避免把同步
+调度失败后的本地降级误写成云审成功时延。
 
 使用固定连续段复测：
 

@@ -1255,7 +1255,55 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 outbox.close()
                 registry.close()
 
-    def test_local_model_uncertainty_reaches_runtime_scheduler(self) -> None:
+    def test_explicitly_resolved_review_hint_does_not_force_sync(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="local-review-hint-") as directory:
+            root = Path(directory)
+            plugin = _AggregationPlugin(
+                aggregation_enabled=False,
+                requires_cloud_confirmation=False,
+                risk_level="low",
+            )
+            original_edge_decide = plugin.edge_decide
+
+            def review_edge_decide(event):
+                decision = original_edge_decide(event)
+                return replace(
+                    decision,
+                    metadata={
+                        **decision.metadata,
+                        "model_uncertainty": {
+                            "requires_review": True,
+                            "requires_synchronous_review": False,
+                            "student_confidence": 0.40,
+                            "student_low_confidence": True,
+                        },
+                    },
+                )
+
+            plugin.edge_decide = review_edge_decide
+            registry = SceneRegistry([plugin])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _DeadlineAwareDecisionCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                result = runtime.process(_payload(), network=_network())
+
+                self.assertEqual(result["schedule"]["route"], "edge_only")
+                self.assertFalse(result["schedule"]["waits_for_cloud"])
+                self.assertFalse(result["schedule"]["uncertain"])
+                self.assertEqual(cloud.calls, 0)
+            finally:
+                tracker.close()
+                outbox.close()
+                registry.close()
+
+    def test_explicit_synchronous_model_uncertainty_reaches_scheduler(self) -> None:
         with tempfile.TemporaryDirectory(prefix="local-model-uncertainty-") as directory:
             root = Path(directory)
             plugin = _AggregationPlugin(
@@ -1273,6 +1321,7 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                         **decision.metadata,
                         "model_uncertainty": {
                             "requires_review": True,
+                            "requires_synchronous_review": True,
                             "student_confidence": 0.40,
                             "student_low_confidence": True,
                         },
@@ -1297,6 +1346,101 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 self.assertTrue(result["schedule"]["waits_for_cloud"])
                 self.assertTrue(result["schedule"]["uncertain"])
                 self.assertIn("uncertain local result", result["schedule"]["reason"])
+                self.assertEqual(cloud.calls, 1)
+            finally:
+                tracker.close()
+                outbox.close()
+                registry.close()
+
+    def test_legacy_broad_review_hint_remains_synchronous(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="legacy-review-hint-") as directory:
+            root = Path(directory)
+            plugin = _AggregationPlugin(
+                aggregation_enabled=False,
+                requires_cloud_confirmation=False,
+                risk_level="low",
+            )
+            original_edge_decide = plugin.edge_decide
+
+            def legacy_uncertain_edge_decide(event):
+                decision = original_edge_decide(event)
+                return replace(
+                    decision,
+                    metadata={
+                        **decision.metadata,
+                        "model_uncertainty": {"requires_review": True},
+                    },
+                )
+
+            plugin.edge_decide = legacy_uncertain_edge_decide
+            registry = SceneRegistry([plugin])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _DeadlineAwareDecisionCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                result = runtime.process(_payload(), network=_network())
+
+                self.assertEqual(result["schedule"]["route"], "cloud_sync")
+                self.assertTrue(result["schedule"]["waits_for_cloud"])
+                self.assertTrue(result["schedule"]["uncertain"])
+                self.assertEqual(cloud.calls, 1)
+            finally:
+                tracker.close()
+                outbox.close()
+                registry.close()
+
+    def test_legacy_false_review_hint_preserves_generic_uncertainty(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="legacy-false-hint-") as directory:
+            root = Path(directory)
+            plugin = _AggregationPlugin(
+                aggregation_enabled=False,
+                requires_cloud_confirmation=False,
+                risk_level="low",
+            )
+            original_normalize = plugin.normalize
+            original_edge_decide = plugin.edge_decide
+
+            def low_confidence_normalize(envelope):
+                event = original_normalize(envelope)
+                return replace(
+                    event,
+                    prediction=replace(event.prediction, confidence=0.40),
+                    uncertainty=replace(event.uncertainty, confidence=0.40),
+                )
+
+            def legacy_certain_edge_decide(event):
+                decision = original_edge_decide(event)
+                return replace(
+                    decision,
+                    metadata={
+                        **decision.metadata,
+                        "model_uncertainty": {"requires_review": False},
+                    },
+                )
+
+            plugin.normalize = low_confidence_normalize
+            plugin.edge_decide = legacy_certain_edge_decide
+            registry = SceneRegistry([plugin])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _DeadlineAwareDecisionCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                result = runtime.process(_payload(), network=_network())
+
+                self.assertEqual(result["schedule"]["route"], "cloud_sync")
+                self.assertTrue(result["schedule"]["uncertain"])
                 self.assertEqual(cloud.calls, 1)
             finally:
                 tracker.close()

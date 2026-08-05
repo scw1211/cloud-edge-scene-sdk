@@ -219,17 +219,21 @@ def _edge_llm_health(health: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 def _metric_total(snapshot: Mapping[str, Any], name: str) -> float:
-    samples = snapshot.get("samples", {})
-    samples = dict(samples) if isinstance(samples, dict) else {}
-    value = samples.get(name, {})
+    distributions = snapshot.get("distributions", snapshot.get("samples", {}))
+    distributions = (
+        dict(distributions) if isinstance(distributions, dict) else {}
+    )
+    value = distributions.get(name, {})
     value = dict(value) if isinstance(value, dict) else {}
     return float(value.get("count", 0) or 0) * float(value.get("mean", 0.0) or 0.0)
 
 
 def _metric_count(snapshot: Mapping[str, Any], name: str) -> int:
-    samples = snapshot.get("samples", {})
-    samples = dict(samples) if isinstance(samples, dict) else {}
-    value = samples.get(name, {})
+    distributions = snapshot.get("distributions", snapshot.get("samples", {}))
+    distributions = (
+        dict(distributions) if isinstance(distributions, dict) else {}
+    )
+    value = distributions.get(name, {})
     value = dict(value) if isinstance(value, dict) else {}
     return int(value.get("count", 0) or 0)
 
@@ -424,6 +428,25 @@ def _record_event(
         "local_requires_review": bool(
             model_uncertainty.get("requires_review", False)
         ),
+        "local_requires_synchronous_review": bool(
+            model_uncertainty.get("requires_synchronous_review", False)
+        ),
+        "synchronous_review_reasons": list(
+            model_uncertainty.get("synchronous_review_reasons", [])
+        )
+        if isinstance(
+            model_uncertainty.get("synchronous_review_reasons", []), list
+        )
+        else [],
+        "synchronous_review_resolution": str(
+            model_uncertainty.get("synchronous_review_resolution", "")
+        ),
+        "model_uncertainty_score": float(
+            model_uncertainty.get("score", 0.0) or 0.0
+        ),
+        "perception_confidence": float(
+            model_uncertainty.get("perception_confidence", 0.0) or 0.0
+        ),
         "student_confidence": model_uncertainty.get("student_confidence"),
         "student_low_confidence": bool(
             model_uncertainty.get("student_low_confidence", False)
@@ -535,6 +558,13 @@ def _stratum_summary(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         for row in rows
         if row.get("global_final_ms") is not None
     ]
+    pipeline_names = (
+        "normalization",
+        "edge_decision",
+        "data_plane_preparation",
+        "scheduling",
+        "route_execution",
+    )
     return {
         "events": len(rows),
         "local_actionable_ms": _summary(local_values),
@@ -548,9 +578,26 @@ def _stratum_summary(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
         "qwen_selected": sum(bool(row.get("edge_llm_selected")) for row in rows),
         "qwen_accepted": sum(bool(row.get("edge_llm_accepted")) for row in rows),
         "schedule_routes": _counts(row.get("schedule_route") for row in rows),
+        "executed_routes": _counts(row.get("executed_route") for row in rows),
+        "decision_delivery_paths": _counts(
+            row.get("decision_delivery_path") for row in rows
+        ),
         "operational_risk_levels": _counts(
             row.get("operational_risk_level") for row in rows
         ),
+        "event_http_wall_ms": _summary(
+            float(row.get("http_wall_ms", 0.0)) for row in rows
+        ),
+        "framework_runtime_ms": _summary(
+            float(row.get("framework_runtime_ms", 0.0)) for row in rows
+        ),
+        "pipeline_stage_ms": {
+            name: _summary(
+                float(row.get("pipeline_stage_ms", {}).get(name, 0.0))
+                for row in rows
+            )
+            for name in pipeline_names
+        },
     }
 
 
@@ -1035,6 +1082,11 @@ def main() -> None:
         _metric_total(final_edge_metrics, "async_http_response_bytes")
         - _metric_total(initial_edge_metrics, "async_http_response_bytes"),
     )
+    async_delivery_count = max(
+        0,
+        _metric_count(final_edge_metrics, "async_http_request_bytes")
+        - _metric_count(initial_edge_metrics, "async_http_request_bytes"),
+    )
     aggregation_results = [
         aggregation.get("result", {})
         for sample in samples
@@ -1172,6 +1224,36 @@ def main() -> None:
                 and not bool(row.get("schedule_waits_for_cloud"))
                 for row in rows
             ),
+            "local_requires_synchronous_review_count": sum(
+                bool(row.get("local_requires_synchronous_review"))
+                for row in rows
+            ),
+            "local_requires_synchronous_review_without_sync_count": sum(
+                bool(row.get("local_requires_synchronous_review"))
+                and not bool(row.get("schedule_waits_for_cloud"))
+                for row in rows
+            ),
+            "synchronous_review_reason_counts": _counts(
+                reason
+                for row in rows
+                for reason in row.get("synchronous_review_reasons", [])
+            ),
+            "student_rule_disagreement_async_count": sum(
+                bool(row.get("student_rule_disagreement"))
+                and not bool(row.get("schedule_waits_for_cloud"))
+                for row in rows
+            ),
+            "qwen_corroborated_async_count": sum(
+                row.get("synchronous_review_resolution")
+                == "edge_qwen_corroborated_student"
+                and not bool(row.get("schedule_waits_for_cloud"))
+                for row in rows
+            ),
+            "scheduled_sync_executed_routes": _counts(
+                row["executed_route"]
+                for row in rows
+                if bool(row.get("schedule_waits_for_cloud"))
+            ),
             "measurement_wall_seconds": round(measurement_wall_seconds, 6),
         },
         "latency_ms": {
@@ -1185,6 +1267,19 @@ def main() -> None:
             "event_framework_runtime": _summary(
                 row["framework_runtime_ms"] for row in rows
             ),
+            "pipeline_stage": {
+                name: _summary(
+                    row.get("pipeline_stage_ms", {}).get(name, 0.0)
+                    for row in rows
+                )
+                for name in (
+                    "normalization",
+                    "edge_decision",
+                    "data_plane_preparation",
+                    "scheduling",
+                    "route_execution",
+                )
+            },
             "edge_qwen_selected": _summary(
                 row["edge_llm_latency_ms"]
                 for row in qwen_rows
@@ -1221,11 +1316,7 @@ def main() -> None:
             "response_time_cloud_transport_request_bytes_per_event": _summary(
                 row["actual_cloud_transport_request_bytes"] for row in rows
             ),
-            "measured_async_http_delivery_count": max(
-                0,
-                _metric_count(final_edge_metrics, "async_http_request_bytes")
-                - _metric_count(initial_edge_metrics, "async_http_request_bytes"),
-            ),
+            "measured_async_http_delivery_count": async_delivery_count,
             "measured_async_http_request_bytes_total": round(
                 async_request_bytes, 3
             ),
@@ -1234,6 +1325,12 @@ def main() -> None:
             ),
             "measured_async_http_request_bytes_per_event": round(
                 async_request_bytes / max(1, len(rows)), 3
+            ),
+            "measured_async_http_request_bytes_per_delivery": round(
+                async_request_bytes / max(1, async_delivery_count), 3
+            ),
+            "measured_async_http_transport_bytes_total": round(
+                async_request_bytes + async_response_bytes, 3
             ),
         },
         "consistency": {

@@ -352,6 +352,46 @@ class TrafficSemanticTests(unittest.TestCase):
             "traffic_uncertainty_with_cloud_gain",
         )
 
+    def test_cloud_llm_does_not_promote_broad_async_review_to_sync(self):
+        plugin, event = _normalize()
+        local = _student(
+            event,
+            confidence=0.55,
+            metadata={
+                "model_uncertainty": {
+                    "requires_review": True,
+                    "requires_synchronous_review": False,
+                    "student_confidence": 0.55,
+                    "student_rule_disagreement": True,
+                },
+                "escalation_expected_gain": event.metadata[
+                    "escalation_expected_gain"
+                ],
+            },
+        )
+        metadata = plugin.cloud_submission_metadata(event, local)
+
+        policy = metadata["cloud_llm_review_policy"]
+        self.assertTrue(policy["model_uncertainty_requires_review"])
+        self.assertFalse(
+            policy["model_uncertainty_requires_synchronous_review"]
+        )
+        self.assertFalse(policy["eligible"])
+        self.assertEqual(policy["reason"], "traffic_no_model_uncertainty")
+
+        explicit_plugin, explicit_event = _normalize(
+            cloud_llm_review_requested=True
+        )
+        explicit = explicit_plugin.cloud_submission_metadata(
+            explicit_event,
+            local,
+        )
+        self.assertTrue(explicit["cloud_llm_review_policy"]["eligible"])
+        self.assertEqual(
+            explicit["cloud_llm_review_policy"]["reason"],
+            "traffic_explicit_cloud_llm_review",
+        )
+
     def test_defer_preparation_preserves_student_confidence_and_disagreement(self):
         plugin = TrafficPlugin(edge_student_path=Path("student-not-loaded.json"))
         event = plugin.normalize(SceneEventEnvelope.from_dict(_raw_event()))

@@ -140,7 +140,7 @@ class Pems08E2EBenchmarkTests(unittest.TestCase):
 
     def test_async_metric_total_reconstructs_byte_sum(self):
         snapshot = {
-            "samples": {
+            "distributions": {
                 "async_http_request_bytes": {"count": 4, "mean": 123.5}
             }
         }
@@ -150,6 +150,17 @@ class Pems08E2EBenchmarkTests(unittest.TestCase):
         )
         self.assertEqual(
             benchmark._metric_count(snapshot, "async_http_request_bytes"), 4
+        )
+
+    def test_async_metric_total_accepts_legacy_samples_key(self):
+        snapshot = {
+            "samples": {
+                "async_http_request_bytes": {"count": 2, "mean": 50.0}
+            }
+        }
+        self.assertEqual(
+            benchmark._metric_total(snapshot, "async_http_request_bytes"),
+            100.0,
         )
 
 
