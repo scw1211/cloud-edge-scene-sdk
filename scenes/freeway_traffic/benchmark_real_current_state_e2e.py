@@ -265,7 +265,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--require-qwen-accepted", action="store_true")
     parser.add_argument("--min-qwen-selected", type=int, default=0)
     parser.add_argument("--min-qwen-accepted", type=int, default=0)
-    parser.add_argument("--require-risk-coverage", action="store_true")
+    parser.add_argument(
+        "--require-congestion-level-coverage",
+        "--require-risk-coverage",
+        dest="require_congestion_level_coverage",
+        action="store_true",
+        help=(
+            "require low/medium/high/severe congestion strata; the legacy "
+            "--require-risk-coverage spelling is not a selective-risk metric"
+        ),
+    )
     parser.add_argument("--require-complete-final", action="store_true")
     parser.add_argument(
         "--output",
@@ -497,6 +506,54 @@ def _under_threshold_sla(
         "under_threshold_rate": round(
             sum(value <= float(threshold_ms) for value in data) / max(1, expected),
             6,
+        ),
+    }
+
+
+def _conflict_metrics(
+    initial_conflicts: int,
+    residual_conflicts: int,
+    coordinated_events: int,
+    aggregation_result_count: int,
+    expected_aggregation_result_count: int,
+    expected_coordinated_event_count: int,
+    aggregations_complete: bool,
+) -> Dict[str, Any]:
+    """Build fail-closed natural-conflict metrics for the fixed population."""
+    initial = int(initial_conflicts)
+    residual = int(residual_conflicts)
+    coordinated = int(coordinated_events)
+    result_count = int(aggregation_result_count)
+    expected_results = int(expected_aggregation_result_count)
+    expected_events = int(expected_coordinated_event_count)
+    # Conflicts are action-pair records and can outnumber events.  Only their
+    # ordering is constrained; population completeness is checked separately.
+    counts_valid = 0 <= residual <= initial and coordinated >= 0
+    complete = bool(
+        aggregations_complete
+        and expected_results > 0
+        and expected_events > 0
+        and result_count == expected_results
+        and coordinated == expected_events
+        and counts_valid
+    )
+    resolution_evaluated = bool(complete and initial > 0)
+    return {
+        "complete": complete,
+        "aggregation_result_count": result_count,
+        "expected_aggregation_result_count": expected_results,
+        "coordinated_event_count": coordinated,
+        "expected_coordinated_event_count": expected_events,
+        "initial_conflict_count": initial,
+        "residual_conflict_count": residual,
+        "conflict_rate": (
+            round(initial / coordinated, 6) if complete else None
+        ),
+        "conflict_resolution_evaluated": resolution_evaluated,
+        "conflict_resolution_success_rate": (
+            round((initial - residual) / initial, 6)
+            if resolution_evaluated
+            else None
         ),
     }
 
@@ -1429,8 +1486,25 @@ def main() -> None:
     coordinated_events = sum(
         int(value.get("event_count", 0) or 0) for value in aggregation_results
     )
+    consistency = _conflict_metrics(
+        initial_conflicts=initial_conflicts,
+        residual_conflicts=residual_conflicts,
+        coordinated_events=coordinated_events,
+        aggregation_result_count=len(aggregation_results),
+        expected_aggregation_result_count=len(samples),
+        expected_coordinated_event_count=expected_event_count,
+        aggregations_complete=bool(
+            len(samples) == len(sample_ids)
+            and all(sample["aggregations_complete"] for sample in samples)
+        ),
+    )
+    consistency["note"] = (
+        "natural PEMS aggregation conflicts only; a null rate means the fixed "
+        "population was incomplete or no natural conflict exercised resolution; "
+        "conflict-positive policy branches require separate regression"
+    )
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "task": "pems08_current_state_deployed_e2e",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "experiment_id": experiment_id,
@@ -1666,25 +1740,7 @@ def main() -> None:
                 async_request_bytes + async_response_bytes, 3
             ),
         },
-        "consistency": {
-            "aggregation_result_count": len(aggregation_results),
-            "coordinated_event_count": coordinated_events,
-            "initial_conflict_count": initial_conflicts,
-            "residual_conflict_count": residual_conflicts,
-            "conflict_rate": round(
-                initial_conflicts / max(1, coordinated_events), 6
-            ),
-            "conflict_resolution_success_rate": round(
-                (initial_conflicts - residual_conflicts) / max(1, initial_conflicts),
-                6,
-            )
-            if initial_conflicts
-            else 1.0,
-            "note": (
-                "natural PEMS aggregation conflicts only; explicit "
-                "conflict_suspected/policy-force branches require separate regression"
-            ),
-        },
+        "consistency": consistency,
         "strata": {
             name: _stratum_summary(values) for name, values in sorted(strata.items())
         },
@@ -1749,7 +1805,7 @@ def main() -> None:
                 len(qwen_accepted_rows), args.min_qwen_accepted
             )
         )
-    if args.require_risk_coverage:
+    if args.require_congestion_level_coverage:
         observed = {str(row["legacy_congestion_level"]) for row in rows}
         missing = {"low", "medium", "high", "severe"} - observed
         if missing:
@@ -1768,6 +1824,10 @@ def main() -> None:
         ]
         if incomplete:
             raise RuntimeError("incomplete sample groups: {}".format(incomplete))
+        if not consistency["complete"]:
+            raise RuntimeError(
+                "natural conflict metrics are incomplete: {}".format(consistency)
+            )
 
 
 if __name__ == "__main__":

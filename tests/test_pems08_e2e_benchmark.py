@@ -6,6 +6,7 @@ import socket
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from cloud_edge_framework.http_api import build_role_handler
 from scenes.freeway_traffic import benchmark_real_current_state_e2e as benchmark
@@ -200,6 +201,15 @@ class _DropFirstRequestHandler(BaseHTTPRequestHandler):
 
 
 class Pems08E2EBenchmarkTests(unittest.TestCase):
+    def test_congestion_coverage_flag_keeps_legacy_cli_alias(self):
+        for flag in (
+            "--require-congestion-level-coverage",
+            "--require-risk-coverage",
+        ):
+            with self.subTest(flag=flag), patch("sys.argv", ["benchmark", flag]):
+                args = benchmark.parse_args()
+                self.assertTrue(args.require_congestion_level_coverage)
+
     def test_role_handler_uses_http_11(self):
         handler = build_role_handler(_ConcurrentRoleService(), 4096, False)
         self.assertEqual(handler.protocol_version, "HTTP/1.1")
@@ -496,6 +506,43 @@ class Pems08E2EBenchmarkTests(unittest.TestCase):
         self.assertFalse(report["event_local_complete"])
         self.assertFalse(report["event_business_complete"])
         self.assertFalse(report["event_global_authoritative_final_complete"])
+
+    def test_conflict_metrics_distinguish_zero_conflicts_from_missing_data(self):
+        complete_zero = benchmark._conflict_metrics(
+            0, 0, 400, 100, 100, 400, True
+        )
+        self.assertTrue(complete_zero["complete"])
+        self.assertEqual(complete_zero["conflict_rate"], 0.0)
+        self.assertFalse(complete_zero["conflict_resolution_evaluated"])
+        self.assertIsNone(complete_zero["conflict_resolution_success_rate"])
+
+        observed = benchmark._conflict_metrics(
+            4, 1, 400, 100, 100, 400, True
+        )
+        self.assertTrue(observed["complete"])
+        self.assertEqual(observed["conflict_rate"], 0.01)
+        self.assertTrue(observed["conflict_resolution_evaluated"])
+        self.assertEqual(observed["conflict_resolution_success_rate"], 0.75)
+
+        missing = benchmark._conflict_metrics(
+            0, 0, 396, 99, 100, 400, False
+        )
+        self.assertFalse(missing["complete"])
+        self.assertIsNone(missing["conflict_rate"])
+        self.assertIsNone(missing["conflict_resolution_success_rate"])
+
+        inconsistent = benchmark._conflict_metrics(
+            1, 2, 400, 100, 100, 400, True
+        )
+        self.assertFalse(inconsistent["complete"])
+        self.assertIsNone(inconsistent["conflict_rate"])
+        for initial, residual in ((0, 1), (-1, 0)):
+            with self.subTest(initial=initial, residual=residual):
+                invalid = benchmark._conflict_metrics(
+                    initial, residual, 400, 100, 100, 400, True
+                )
+                self.assertFalse(invalid["complete"])
+                self.assertIsNone(invalid["conflict_rate"])
 
     def test_partial_final_never_counts_as_authoritative_or_business_complete(self):
         row = benchmark._record_event(

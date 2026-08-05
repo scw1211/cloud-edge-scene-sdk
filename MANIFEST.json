@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.13.1",
-  "built_at_utc": "2026-08-05T11:50:24.955973+00:00",
+  "built_at_utc": "2026-08-05T13:09:45.095968+00:00",
   "python_requires": ">=3.8",
   "included_files": [
     {
@@ -530,8 +530,8 @@
     },
     {
       "path": "scenes/freeway_traffic/README.md",
-      "bytes": 16611,
-      "sha256": "0417ddcdad6e02e69e620350380ca8083b2e8b2864f866117fd37e3d8e2a287a"
+      "bytes": 20906,
+      "sha256": "692743852490b4a063d506d55ab79882891bda01805cad550df4d299b6943ff4"
     },
     {
       "path": "scenes/freeway_traffic/asset_catalog.json",
@@ -700,8 +700,8 @@
     },
     {
       "path": "scenes/freeway_traffic/benchmark_real_current_state_e2e.py",
-      "bytes": 70730,
-      "sha256": "34e0b66f174bfe189098d327cd1839c0e3b23aa2f257b59be17cf69da90fa37c"
+      "bytes": 73087,
+      "sha256": "88831440d6f637b85885519ba55bf756d3a9a427049e2754aec660ce600d84c7"
     },
     {
       "path": "scenes/freeway_traffic/configurations/PEMS08_astgcn.conf",
@@ -900,8 +900,8 @@
     },
     {
       "path": "scenes/freeway_traffic/tests/test_current_state_perception.py",
-      "bytes": 7154,
-      "sha256": "3ab2fecf42552a0d8cac899ea21c872212755b907c184a75c59aa763892a3f97"
+      "bytes": 12246,
+      "sha256": "36df5f5538b6eb7a00c384eaa176f103e436260f7be0174fd27d0b68d73ad533"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_current_state_qwen_contract.py",
@@ -1075,8 +1075,8 @@
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/current_state_perception_runtime.py",
-      "bytes": 14239,
-      "sha256": "2040c90ccd64a1b3966a00eff918b6328b48991d00f00119e288dcaf909cc25e"
+      "bytes": 14764,
+      "sha256": "967ba1599b0a24b12485576763a6a008d361f8ea9a203b79da2a90f14a8e5d6b"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/decision_utils.py",
@@ -1700,8 +1700,8 @@
     },
     {
       "path": "tests/test_pems08_e2e_benchmark.py",
-      "bytes": 21923,
-      "sha256": "7997435f98123eb93bb1c9b5ff917813520ee7c67a1a2b524b87013f2f5f1769"
+      "bytes": 24003,
+      "sha256": "a8b7d54ebe0ba9104a620ed6fe148b7886bd9903858aa7c074fce54242ede749"
     },
     {
       "path": "tests/test_protocol_compatibility.py",

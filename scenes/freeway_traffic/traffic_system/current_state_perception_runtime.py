@@ -14,6 +14,7 @@ from traffic_system.risk_labels import RISK_CLASSES
 FEATURE_FLOW = 0
 FEATURE_OCCUPANCY = 1
 FEATURE_SPEED = 2
+_RISK_PRIORITIES = np.linspace(0.0, 1.0, len(RISK_CLASSES), dtype=np.float64)
 
 
 @dataclass(frozen=True)
@@ -109,8 +110,14 @@ def current_window_risk(
 
 
 def _risk_score(probabilities: np.ndarray) -> float:
-    priorities = np.linspace(0.0, 1.0, len(RISK_CLASSES), dtype=np.float64)
-    return float(np.dot(np.asarray(probabilities, dtype=np.float64), priorities))
+    return float(
+        np.dot(np.asarray(probabilities, dtype=np.float64), _RISK_PRIORITIES)
+    )
+
+
+def _mean_risk_score(probabilities: np.ndarray) -> float:
+    values = np.asarray(probabilities, dtype=np.float64)
+    return float(np.mean(np.dot(values, _RISK_PRIORITIES)))
 
 
 class CurrentStateTrafficPerceptionRuntime:
@@ -211,16 +218,27 @@ class CurrentStateTrafficPerceptionRuntime:
         state: Mapping[str, np.ndarray],
     ) -> List[Dict[str, Any]]:
         probabilities = state["probabilities"]
-        rows = []
-        for node_id in managed_nodes:
-            node_probs = probabilities[int(node_id)]
+        ranked_nodes = []
+        for position, raw_node_id in enumerate(managed_nodes):
+            node_id = int(raw_node_id)
+            node_probs = probabilities[node_id]
             label_id = int(np.argmax(node_probs))
-            speed_history = state["speed_history"][int(node_id)]
+            # The legacy implementation sorts on the six-decimal value exposed
+            # in the event, not on the unrounded score.  Keep that exact key and
+            # the original managed-node position so equal keys remain stable.
+            risk_score = round(_risk_score(node_probs), 6)
+            ranked_nodes.append((label_id, risk_score, position, node_id))
+        ranked_nodes.sort(key=lambda item: (-item[0], -item[1], item[2]))
+
+        rows = []
+        for label_id, risk_score, _, node_id in ranked_nodes[: self.top_k]:
+            node_probs = probabilities[node_id]
+            speed_history = state["speed_history"][node_id]
             rows.append(
                 {
-                    "node_id": int(node_id),
+                    "node_id": node_id,
                     "risk_level": RISK_CLASSES[label_id],
-                    "risk_score": round(_risk_score(node_probs), 6),
+                    "risk_score": risk_score,
                     "risk_confidence": round(float(np.max(node_probs)), 6),
                     "risk_probabilities": {
                         name: round(float(node_probs[index]), 6)
@@ -233,23 +251,16 @@ class CurrentStateTrafficPerceptionRuntime:
                         round(float(value), 6) for value in speed_history
                     ],
                     "current_observation": {
-                        "flow_mean": round(float(state["flow_mean"][int(node_id)]), 6),
+                        "flow_mean": round(float(state["flow_mean"][node_id]), 6),
                         "occupancy_mean": round(
-                            float(state["occupancy_mean"][int(node_id)]), 6
+                            float(state["occupancy_mean"][node_id]), 6
                         ),
-                        "speed_mean": round(float(state["speed_mean"][int(node_id)]), 6),
-                        "speed_min": round(float(state["speed_min"][int(node_id)]), 6),
+                        "speed_mean": round(float(state["speed_mean"][node_id]), 6),
+                        "speed_min": round(float(state["speed_min"][node_id]), 6),
                     },
                 }
             )
-        rows.sort(
-            key=lambda item: (
-                RISK_CLASSES.index(item["risk_level"]),
-                item["risk_score"],
-            ),
-            reverse=True,
-        )
-        return rows[: self.top_k]
+        return rows
 
     def infer_sample(self, sample_id: int) -> TrafficPerceptionResult:
         sample_id = self.validate_sample_ids([sample_id])[0]
@@ -291,9 +302,7 @@ class CurrentStateTrafficPerceptionRuntime:
                     for index, name in enumerate(RISK_CLASSES)
                 },
                 "node_risk_counts": counts,
-                "mean_node_risk_score": round(
-                    float(np.mean([_risk_score(value) for value in node_probs])), 6
-                ),
+                "mean_node_risk_score": round(_mean_risk_score(node_probs), 6),
                 "max_node_risk_level": RISK_CLASSES[max_label_id],
             }
             events.append(

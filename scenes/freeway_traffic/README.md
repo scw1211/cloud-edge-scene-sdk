@@ -136,10 +136,61 @@ python scenes/freeway_traffic/benchmark_real_current_state_e2e.py \
   --warmup-samples 86,125,0 \
   --require-qwen-selected \
   --require-qwen-accepted \
-  --require-risk-coverage \
+  --require-congestion-level-coverage \
   --require-complete-final \
   --output /tmp/pems08-current-state-e2e.json
 ```
+
+## 设计依据和术语边界
+
+这套调度采用“风险硬门 + 受验证增益和时延预算约束的选择性升级”，不是只凭一个
+主观置信度阈值。Selective Classification 的 risk-coverage 口径提供了让不可靠
+样本退出本地接受集合的理论背景；Learning to Defer 进一步要求考虑下游专家在
+该类输入上的能力和咨询成本。NeurIPS 2023 的级联研究还表明，下游模型具有专长
+差异、标签噪声或分布漂移时，单一 confidence 阈值可能明显次优。因此，本实现
+把动作后果风险、预测集歧义、Student/规则分歧、验证集 Qwen 增益、云端可用性
+和剩余 deadline 分开记录和判定；当前是有审计字段的规则/模型混合路由，不能写成
+已经训练出的最优 Learning-to-Defer 策略。
+
+基准参数 `--require-congestion-level-coverage` 只检查固定连续段是否出现 low、
+medium、high、severe 四类拥堵层，不计算 selective-classification 的选择性风险、
+本地接受覆盖率或 AURC。旧参数名 `--require-risk-coverage` 仅为命令兼容别名，
+不能作为论文 risk-coverage 指标；正式能力评估需要另做带真值的选择性风险曲线。
+
+- [Selective Classification for Deep Neural Networks, NeurIPS 2017](https://papers.neurips.cc/paper_files/paper/2017/hash/4a8423d5e91fda00bb7e46540e2b0cf1-Abstract.html)
+- [Consistent Estimators for Learning to Defer to an Expert, ICML 2020](https://proceedings.mlr.press/v119/mozannar20b.html)
+- [When Does Confidence-Based Cascade Deferral Suffice?, NeurIPS 2023](https://proceedings.neurips.cc/paper_files/paper/2023/hash/1f09e1ee5035a4c3fe38a5681cae5815-Abstract-Conference.html)
+- [Neurosurgeon: Collaborative Intelligence Between the Cloud and Mobile Edge, ASPLOS 2017](https://doi.org/10.1145/3037697.3037698)
+
+其中 Neurosurgeon 只作为“调度应测量设备、云端和传输成本”的边云背景；当前
+链路不是 DNN 层级切分，不能声称复现了它的算法。
+
+当前态势感知在四个分区内分别为所属节点计算与旧实现相同的轻量风险和稳定排序，
+再只为每分区 Top-10（全样本最多 40 个）构造概率字典、观测字段和 12 步历史。
+这是 late materialization 的工程类比：延后昂贵的宽对象构造，同时保持公开六位
+分数、并列顺序和除时延字段外的事件语义字段兼容；它仍评估全部节点，也没有阈值
+提前终止，因此不是 Fagin Threshold Algorithm，不能作为新的 Top-K 算法创新。
+`test[100:200]` 的 400 个真实事件另做逐字段 golden 对比，只有
+`inference_latency_ms` / `perception_ms` 被排除。
+
+- [Materialization Strategies in a Column-Oriented DBMS, ICDE 2007](https://www.cs.umd.edu/~abadi/papers/abadiicde2007.pdf)
+- [Attention Based Spatial-Temporal Graph Convolutional Networks for Traffic Flow Forecasting, AAAI 2019](https://ojs.aaai.org/index.php/AAAI/article/view/3881)
+
+ASTGCN 论文在这里用于说明 PEMS 的时空序列背景；默认纯 NumPy 当前态势路径不做
+ASTGCN 未来预测，也不引用该论文证明 late materialization 的性能。
+
+Outbox 链路提供的是本地持久接受、至少一次重试和接收端幂等组合，不宣称跨机
+exactly-once。幂等键、请求指纹、原响应重放和 lease/fencing 属于故障恢复边界，
+性能优化不能绕过这些字段。普通事件的云端摘要是异步全局汇聚；只有业务动作确实
+等待权威云端结果的分支才称为同步审核。
+
+自然连续流的冲突发生率与冲突阳性回归的解决率分开报告：固定段没有自然冲突时，
+解决率为 `null` 而不是 100%；聚合样本缺失时，两种比率都为 `null`。竞赛要求的
+“冲突解决成功率”必须来自另行构造的冲突阳性集，不能由自然段的 0/0 推导。
+
+- [Life beyond Distributed Transactions, CIDR 2007](https://www.cidrdb.org/cidr2007/papers/cidr07p15.pdf)
+- [Making retries safe with idempotent APIs, Amazon Builders' Library](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/)
+- [Debezium Outbox Event Router documentation](https://debezium.io/documentation/reference/stable/transformations/outbox-event-router.html)
 
 ## 一、安装
 
