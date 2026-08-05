@@ -3,7 +3,7 @@
   "provider": "ollama",
   "endpoint": "http://127.0.0.1:11434",
   "model": "qwen3.5:9b",
-  "timeout_seconds": 30,
+  "timeout_seconds": 120,
   "generation": {
     "max_input_tokens": 2048,
     "max_output_tokens": 128,

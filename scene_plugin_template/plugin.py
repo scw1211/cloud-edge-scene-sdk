@@ -6,6 +6,7 @@ import hashlib
 import json
 import socket
 import struct
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -31,6 +32,8 @@ import os
 import pandas as pd
 from pathlib import Path
 
+from scene_plugin_template.industry_ExtraTrees import predict_single
+
 # 当前代码同级目录下的 xlsx
 xlsx_path = Path(__file__).parent / "summary_f1_review_bands.xlsx"
 
@@ -55,7 +58,7 @@ for _, row in df.iterrows():
     review_bands[modality][product]["review_high"] = row["review_high"]
 
 
-def _fetch_edge_heatmap(heatmap_uri, edge_url) -> Dict[str, Any]:
+def _fetch_edge_heatmap(heatmap_uri, edge_url, modality) -> Dict[str, Any]:
     """请求边缘节点把 heatmap_uri 指向的原始文件字节发送过来，保存到本地并返回信息。"""
     if not heatmap_uri or not edge_url:
         raise ValueError(
@@ -89,7 +92,7 @@ def _fetch_edge_heatmap(heatmap_uri, edge_url) -> Dict[str, Any]:
     digest = hashlib.sha256(content).hexdigest()
     dest_dir = Path(__file__).parent / "fetched_heatmaps"
     dest_dir.mkdir(parents=True, exist_ok=True)
-    name = Path(raw_path).name or "heatmap_{}.bin".format(digest[:8])
+    name = modality + "_" + (Path(raw_path).name or "heatmap_{}.bin".format(digest[:8]))
     dest = dest_dir / name
     dest.write_bytes(content)
     return {
@@ -183,6 +186,53 @@ def _call_ollama_review(
         "prompt_tokens": result.get("prompt_eval_count"),
         "output_tokens": result.get("eval_count"),
     }
+
+
+def _warm_ollama_model(config_path: Optional[Path] = None) -> Dict[str, Any]:
+    """发送一个最小请求，让 Ollama 把模型加载并常驻，避免调用时冷启动超时。"""
+    if config_path is None:
+        config_path = Path(__file__).parent / "cloud_qwen9b_ollama.json"
+    with config_path.open("r", encoding="utf-8") as file_obj:
+        config = json.load(file_obj)
+    endpoint = str(config["endpoint"]).rstrip("/")
+    generation = config.get("generation", {}) or {}
+    body = {
+        "model": str(config["model"]),
+        "messages": [{"role": "user", "content": "ping"}],
+        "stream": False,
+        "think": False,
+        "keep_alive": str(generation.get("keep_alive", "30m")),
+        "options": {"num_predict": 1, "num_ctx": 512},
+    }
+    request = urllib.request.Request(
+        endpoint + "/api/chat",
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    started = time.perf_counter()
+    with urllib.request.urlopen(
+        request, timeout=float(config.get("timeout_seconds", 120))
+    ) as response:
+        result = json.loads(response.read().decode("utf-8"))
+    print(
+        "[ExampleScenePlugin] qwen warmed {} in {:.1f}s".format(
+            config["model"], time.perf_counter() - started
+        )
+    )
+    return result
+
+
+def _safe_warm_ollama() -> None:
+    """包装预热调用：任何异常都只打日志，绝不影响程序启动。"""
+    try:
+        _warm_ollama_model()
+    except Exception as exc:  # noqa: BLE001
+        print(
+            "[ExampleScenePlugin] qwen warmup failed: {}: {}".format(
+                type(exc).__name__, exc
+            )
+        )
 
 
 class ExampleScenePlugin(ScenePlugin):
@@ -329,7 +379,7 @@ class ExampleScenePlugin(ScenePlugin):
         parts = path.split(os.sep)
         class_type = parts[parts.index("MulSen_AD") + 1].lower()
         mode = parts[parts.index("MulSen_AD") + 2]
-        index = parts[-1]
+        index = parts[-2] + "_" + parts[-1]
         
         # 根据物品分类设置风险等级和置信度
         review_low = review_bands.get(mode, {}).get(class_type, {}).get("review_low")
@@ -356,7 +406,8 @@ class ExampleScenePlugin(ScenePlugin):
             "decision": final_decision,
             # 与 raw_uri 同结构的 file:// 路径；scene_payload 默认不上云，这里单独随事件带给云端
             "heatmap_uri": event.scene_payload.get("heatmap_uri"),
-            "edge_url": current_url
+            "edge_url": current_url,
+            "score":score
         })
 
         # TODO 发送云端请求
@@ -420,16 +471,26 @@ class ExampleScenePlugin(ScenePlugin):
             decision = event.metadata.get("decision")
             heatmap_uri = event.metadata.get("heatmap_uri")
             edge_url = event.metadata.get("edge_url")
+            score = event.metadata.get("score")
 
             ot_mode = "RGB" if mode == "Infrared" else "Infrared"
             if class_type not in history_decision[mode]:
                 history_decision[mode][class_type] = {}
 
-            history_decision[mode][class_type][index] = [decision, edge_url, heatmap_uri]   # 在这里记录边缘判断的结果
-            ot_decision = "waiting_decision"
-            # 获取上一个模态的决策结果
-            if history_decision[ot_mode].get(class_type, {}).get(index) is not None:
-                ot_decision = history_decision[ot_mode][class_type][index][0]
+            # 在这里记录边缘判断的结果
+            history_decision[mode][class_type][index] = [decision, edge_url, heatmap_uri, score]   
+  
+            # 如果上一个模态没执行完，直接跳过
+            # TODO: 这里可能需要整一个原子操作
+            if history_decision[ot_mode].get(class_type, {}).get(index) is None:
+                return self.decision_from_candidates(
+                            event,
+                            source="example_cloud_placeholder",
+                            confidence=event.uncertainty.confidence,
+                        )
+            
+            # 获取另一个模态的决策结果
+            ot_decision = history_decision[ot_mode][class_type][index][0]
 
             # 测试行
             # try:
@@ -475,75 +536,91 @@ class ExampleScenePlugin(ScenePlugin):
             #     )
 
             # 现在判断是否需要复核
-            if ot_decision == "review":
-                # 上一个模态已经申请过复核，直接跳过
-                pass
-            elif decision == "review" or (ot_decision != "waiting_decision" and decision != ot_decision):
+            if ot_decision == "review" or decision == "review" or decision != ot_decision:
                 # 当前模态申请复核，或者两个模态的决策不一致
                 # 请求边缘节点把 heatmap_uri 指向的文件发送过来，供人工/专家复核
-                if ot_decision != "waiting_decision":
-                    ot_url = history_decision[ot_mode][class_type][index][1]
-                    ot_heatmap_uri = history_decision[ot_mode][class_type][index][2]
-                    ot_fetched = _fetch_edge_heatmap(str(ot_heatmap_uri), ot_url)
-                else:
-                    ot_fetched = None
-                if heatmap_uri:
+                
+                ot_url = history_decision[ot_mode][class_type][index][1]
+                ot_heatmap_uri = history_decision[ot_mode][class_type][index][2]
+                ot_score = history_decision[ot_mode][class_type][index][3]
+                try:
+                    fetched = _fetch_edge_heatmap(str(heatmap_uri), edge_url, mode)
+                    ot_fetched = _fetch_edge_heatmap(str(ot_heatmap_uri), ot_url, ot_mode) 
+                    # 构造ExtraTrees模型输入 
+                    rgb_path = fetched["local_path"] if mode == "RGB" else ot_fetched["local_path"]
+                    infra_path = fetched["local_path"] if mode == "Infrared" else ot_fetched["local_path"]
+                    rgb_score = float(score) if mode == "RGB" else float(ot_score)
+                    infra_score = float(score) if mode == "Infrared" else float(ot_score)
+                    extra_tree_result = predict_single(
+                        class_type,
+                        rgb_path,
+                        infra_path,
+                        rgb_score,
+                        infra_score,
+                        nine_b_enabled=True
+                    )["prediction"]
+
+                    # print("Prediction result:", extra_tree_result["prediction"])
+                    if not extra_tree_result["needs_9b_review"]:
+                        return self.decision_from_candidates(
+                                    event,
+                                    source="example_cloud_placeholder",
+                                    confidence=event.uncertainty.confidence,
+                                )
+                    
+                    # 调用云端千问：把两个模态热力图文件信息作为 prompt
                     try:
-                        fetched = _fetch_edge_heatmap(str(heatmap_uri), edge_url)
-                        # 调用云端千问：把两个模态热力图文件信息作为 prompt
-                        try:
-                            llm_result = _call_ollama_review(
-                                fetched,
-                                ot_fetched=ot_fetched,
-                                context={
-                                    "mode": mode,
-                                    "type": class_type,
-                                    "index": index,
-                                    "edge_decision": decision,
-                                },
-                            )
-                            event.metadata["cloud_llm_review"] = {
-                                "text": llm_result["text"],
-                                "provider": llm_result["provider"],
-                                "model": llm_result["model"],
-                                "latency_ms": llm_result["latency_ms"],
-                            }
-                            print(
-                                "Qwen review for type: {}, index: {}, mode: {}: {} ({:.0f} ms)".format(
-                                    class_type,
-                                    index,
-                                    mode,
-                                    llm_result["text"][:200],
-                                    llm_result["latency_ms"],
-                                )
-                            )
-                        except Exception as llm_exc:  # noqa: BLE001
-                            print(
-                                "Qwen review failed for {}: {}: {}".format(
-                                    event.event_id, type(llm_exc).__name__, llm_exc
-                                )
-                            )
+                        llm_result = _call_ollama_review(
+                        fetched,
+                        ot_fetched=ot_fetched,
+                        context={
+                            "mode": mode,
+                            "type": class_type,
+                            "index": index,
+                            "edge_decision": decision,
+                        },
+                        )
+                        event.metadata["cloud_llm_review"] = {
+                            "text": llm_result["text"],
+                            "provider": llm_result["provider"],
+                            "model": llm_result["model"],
+                            "latency_ms": llm_result["latency_ms"],
+                        }
                         print(
-                            "Fetched heatmap from edge for type: {}, index: {}, mode: {}: {}".format(
-                                class_type, index, mode, fetched
+                            "Qwen review for type: {}, index: {}, mode: {}: {} ({:.0f} ms)".format(
+                                class_type,
+                                index,
+                                mode,
+                                llm_result["text"][:200],
+                                llm_result["latency_ms"],
                             )
                         )
-                    except Exception as fetch_exc:  # noqa: BLE001
+                    except Exception as llm_exc:  # noqa: BLE001
                         print(
-                            "Failed to fetch heatmap from edge for {}: {}: {}".format(
-                                event.event_id, type(fetch_exc).__name__, fetch_exc
+                            "Qwen review failed for {}: {}: {}".format(
+                                event.event_id, type(llm_exc).__name__, llm_exc
                             )
                         )
-                else:
                     print(
-                        "No heatmap_uri in event for type: {}, index: {}, mode: {}".format(
-                            class_type, index, mode
+                        "Fetched heatmap from edge for type: {}, index: {}, mode: {}: {}".format(
+                            class_type, index, mode, fetched
                         )
                     )
-                print("Triggering review for type: {}, index: {}, mode: {}, decision: {}, {} decision: {}".format(class_type, index, mode, decision, ot_mode, ot_decision))
-            else:
-                # 当前模态不需要复核，且两个模态的决策一致
-                pass
+                except Exception as fetch_exc:  # noqa: BLE001
+                    print(
+                        "Failed to fetch heatmap from edge for {}: {}: {}".format(
+                            event.event_id, type(fetch_exc).__name__, fetch_exc
+                        )
+                    )             
+                # if heatmap_uri:
+                    
+                # else:
+                #     print(
+                #         "No heatmap_uri in event for type: {}, index: {}, mode: {}".format(
+                #             class_type, index, mode
+                #         )
+                #     )
+                # print("Triggering review for type: {}, index: {}, mode: {}, decision: {}, {} decision: {}".format(class_type, index, mode, decision, ot_mode, ot_decision))
         
 
 
@@ -591,3 +668,11 @@ def get_ip_address(interface="wlan0"):
     )[20:24]
 
     return socket.inet_ntoa(ip)
+
+
+# 程序一启动（本模块被加载）就触发千问模型加载；后台守护线程，不阻塞启动流程
+threading.Thread(
+    target=_safe_warm_ollama,
+    name="qwen-startup-warmup",
+    daemon=True,
+).start()

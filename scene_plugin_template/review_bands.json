@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "policy_version": "industrial-review-bands-2026-08-03",
+  "calibration_version": "rgb-20260731_infrared-20260730",
+  "source_workbook": "review_bands.xlsx",
+  "source_sha256": "7819d8123957fc8309c0bcab9445254a774227c6b5eaa91ece620b0bcb54ce8f",
+  "model_version": "source_workbook_unspecified",
+  "bands": {
+    "button_cell": {
+      "rgb": {"review_low": 0.005780165, "review_high": 0.00657566},
+      "infrared": {"review_low": 0.006430829999, "review_high": 0.0072365}
+    },
+    "capsule": {
+      "rgb": {"review_low": 0.0071401599999999996, "review_high": 0.007825799999999999},
+      "infrared": {"review_low": 0.007957835, "review_high": 0.00804616}
+    },
+    "cotton": {
+      "rgb": {"review_low": 0.006621785, "review_high": 0.006826495},
+      "infrared": {"review_low": 0.007112185, "review_high": 0.007714435}
+    },
+    "cube": {
+      "rgb": {"review_low": 0.006500995000000001, "review_high": 0.00747595},
+      "infrared": {"review_low": 0.00615532, "review_high": 0.00656293}
+    },
+    "piggy": {
+      "rgb": {"review_low": 0.007962595, "review_high": 0.00842094},
+      "infrared": {"review_low": 0.008971400000000001, "review_high": 0.009136775}
+    },
+    "plastic_cylinder": {
+      "rgb": {"review_low": 0.003878009999, "review_high": 0.00479772},
+      "infrared": {"review_low": 0.0057940249999999995, "review_high": 0.00699447}
+    },
+    "screw": {
+      "rgb": {"review_low": 0.0077074299999999995, "review_high": 0.008241615},
+      "infrared": {"review_low": 0.00752653, "review_high": 0.00785741}
+    },
+    "solar_panel": {
+      "rgb": {"review_low": 0.007318189998999999, "review_high": 0.007594324000000003},
+      "infrared": {"review_low": 0.008005737999999998, "review_high": 0.00862247}
+    },
+    "toothbrush": {
+      "rgb": {"review_low": 0.006159295, "review_high": 0.00654842},
+      "infrared": {"review_low": 0.00747425, "review_high": 0.007722854999999999}
+    },
+    "zipper": {
+      "rgb": {"review_low": 0.006947025, "review_high": 0.0073032900000000005},
+      "infrared": {"review_low": 0.007824645, "review_high": 0.008014285}
+    }
+  }
+}
