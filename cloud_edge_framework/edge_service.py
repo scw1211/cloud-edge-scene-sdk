@@ -7,6 +7,7 @@ from typing import Any, Dict, Mapping
 
 from cloud_edge_framework.contracts import SCHEMA_VERSION, stable_id
 from cloud_edge_framework.feedback import DecisionFeedbackStore
+from cloud_edge_framework.handoff import DurableOutboxHandoff
 from cloud_edge_framework.http_api import ApiNotFoundError, create_http_server
 from cloud_edge_framework.metrics import FrameworkMetrics
 from cloud_edge_framework.monitoring import CalibrationDriftMonitor, MonitoringPolicy
@@ -62,6 +63,7 @@ class EdgeApiService:
             self.project_root / "runtime" / "framework_edge_idempotency.sqlite3"
         )
         self.outbox = SQLiteOutbox(outbox_path)
+        self.durable_handoff = DurableOutboxHandoff(self.outbox)
         self.idempotency = SQLiteIdempotencyStore(
             idempotency_path,
             ttl_seconds=config.idempotency.ttl_seconds,
@@ -139,6 +141,7 @@ class EdgeApiService:
             scheduler=self.scheduler,
             calibration_monitor=self.calibration_monitor,
             utility_router=self.utility_router,
+            durable_handoff=self.durable_handoff,
         )
         self.release_watcher = None
         if config.release_watch is not None and config.release_watch.enabled:
@@ -164,10 +167,19 @@ class EdgeApiService:
             config=config.replay,
             metrics=self.metrics,
         )
+        # The handoff may already be recovering journaled puts while the rest of
+        # the service starts.  Install the callback only after the replay worker
+        # exists, then issue one initial notification to cover an append that
+        # completed in the small interval before callback installation.
+        self.durable_handoff.persisted_callback = (
+            lambda _event, _inserted: self.replay_worker.notify()
+        )
         self.replay_worker.start()
+        self.replay_worker.notify()
 
     def health(self) -> Dict[str, Any]:
         network = self.network_monitor.health()
+        runtime = self.manager.health()
         return {
             "status": "ok",
             "ready": True,
@@ -175,17 +187,13 @@ class EdgeApiService:
             "framework_version": FRAMEWORK_VERSION,
             "schema_version": SCHEMA_VERSION,
             "cloud_available": bool(network["snapshot"]["available"]),
-            "runtime": self.manager.health(),
+            "runtime": runtime,
             "network": network,
             "outbox": self.outbox.snapshot(),
             "replay": self.replay_worker.health(),
             "idempotency": self.idempotency.snapshot(),
-            "reviews": self.review_tracker.snapshot(),
-            "monitoring": (
-                self.calibration_monitor.snapshot()
-                if self.calibration_monitor is not None
-                else {"status": "disabled"}
-            ),
+            "reviews": runtime["review_lifecycle"],
+            "monitoring": runtime["calibration_drift_monitor"],
             "edge_llm_release": self.release_watcher.health()
             if self.release_watcher is not None
             else {"status": "disabled"},
@@ -197,6 +205,14 @@ class EdgeApiService:
             "role": self.role,
             "accepted_input": "SceneEventEnvelope",
             "network_source": "edge-owned active HTTP probe",
+            "decide_response_profiles": {
+                "default": "full",
+                "compact": [
+                    "Prefer: return=minimal",
+                    "X-Response-Detail: compact",
+                ],
+                "idempotency_identity_includes_profile": True,
+            },
             "endpoints": {
                 "decide": DECIDE_ENDPOINT,
                 "flush_pending": FLUSH_ENDPOINT,
@@ -234,6 +250,15 @@ class EdgeApiService:
         request_key = str(headers.get("idempotency-key", "")).strip() or stable_id(
             "edge_request", event_id
         )
+        prefer = str(headers.get("prefer", "")).lower()
+        requested_detail = str(headers.get("x-response-detail", "")).strip().lower()
+        response_detail = (
+            "compact"
+            if requested_detail == "compact" or "return=minimal" in prefer
+            else "full"
+        )
+        if requested_detail not in {"", "compact", "full"}:
+            raise ValueError("X-Response-Detail must be compact or full")
         network = self.network_monitor.snapshot()
         started = time.perf_counter()
 
@@ -246,9 +271,15 @@ class EdgeApiService:
                         payload.get("conflict_suspected", False)
                     ),
                     model_disagreement=bool(payload.get("model_disagreement", False)),
+                    response_detail=response_detail,
                 )
 
-        result, replayed = self.idempotency.execute(request_key, payload, operation)
+        idempotency_payload = dict(payload)
+        idempotency_payload["event"] = event
+        idempotency_payload["_response_detail"] = response_detail
+        result, replayed = self.idempotency.execute(
+            request_key, idempotency_payload, operation
+        )
         # Waking the worker unconditionally is cheaper than asking the Outbox
         # how much work exists: `count()` is a second SQLite round trip on the
         # request path, while a spurious wake only costs the background thread
@@ -257,6 +288,7 @@ class EdgeApiService:
         self.replay_worker.notify()
         result["idempotency_key"] = request_key
         result["idempotency_replay"] = replayed
+        result["response_detail"] = response_detail
         result["edge_service_wall_ms"] = round(
             (time.perf_counter() - started) * 1000.0, 6
         )
@@ -364,6 +396,10 @@ class EdgeApiService:
     def close(self) -> None:
         if self.release_watcher is not None:
             self.release_watcher.stop()
+        # Drain every fsynced handoff put into the Outbox while the replay worker
+        # can still observe callback notifications.  A put that cannot be
+        # drained remains in the journal for recovery on the next start.
+        self.durable_handoff.close()
         self.replay_worker.stop()
         self.network_monitor.stop()
         self.cloud_client.flush_feedback()
@@ -371,6 +407,7 @@ class EdgeApiService:
         if self.calibration_monitor is not None:
             self.calibration_monitor.close()
         self.review_tracker.close()
+        self.idempotency.close()
         # Released last: the replay worker and runtime above may still touch the
         # durable Outbox while they wind down.
         self.outbox.close()

@@ -2,7 +2,7 @@
 
 import json
 import time
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -98,20 +98,48 @@ class ReliableHttpCloudClient(HttpCloudClient):
         path: str,
         data: bytes,
         headers: Dict[str, str],
+        timeout_seconds: Optional[float] = None,
     ) -> Dict[str, Any]:
+        deadline = self._timeout_deadline(timeout_seconds)
         last_error: Exception = CloudTransportError("artifact upload did not start")
         for attempt in range(1, self.max_attempts + 1):
             try:
-                result = super()._put_bytes(path, data, headers)
+                remaining = self._remaining_timeout(deadline)
+                result = (
+                    super()._put_bytes(path, data, headers)
+                    if remaining is None
+                    else super()._put_bytes(
+                        path,
+                        data,
+                        headers,
+                        timeout_seconds=min(self.timeout_seconds, remaining),
+                    )
+                )
+                if deadline is not None and time.monotonic() > deadline:
+                    raise CloudTransportError(
+                        "cloud request exceeded its timeout budget"
+                    )
                 result["attempts"] = attempt
                 return result
             except CloudTransportError as exc:
                 last_error = exc
                 if attempt < self.max_attempts:
-                    time.sleep(self.retry_backoff_seconds * (2 ** (attempt - 1)))
+                    delay = self.retry_backoff_seconds * (2 ** (attempt - 1))
+                    if deadline is not None:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= delay:
+                            raise CloudTransportError(
+                                "cloud request exceeded its timeout budget"
+                            ) from last_error
+                    time.sleep(delay)
         raise last_error
 
-    def _post(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _post(
+        self,
+        path: str,
+        payload: Dict[str, Any],
+        timeout_seconds: Optional[float] = None,
+    ) -> Dict[str, Any]:
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         request_id, trace_id = self._request_identity(path, payload)
         headers = {
@@ -123,11 +151,18 @@ class ReliableHttpCloudClient(HttpCloudClient):
         if trace_id:
             headers["X-Trace-ID"] = trace_id
         started = time.perf_counter()
+        deadline = self._timeout_deadline(timeout_seconds)
         response_body = b""
         last_error: Exception = CloudTransportError("cloud request did not start")
         attempts = 0
         for attempt in range(1, self.max_attempts + 1):
             attempts = attempt
+            remaining = self._remaining_timeout(deadline)
+            attempt_timeout = (
+                self.timeout_seconds
+                if remaining is None
+                else min(self.timeout_seconds, remaining)
+            )
             request = Request(
                 self.base_url + path,
                 data=body,
@@ -135,8 +170,12 @@ class ReliableHttpCloudClient(HttpCloudClient):
                 method="POST",
             )
             try:
-                with urlopen(request, timeout=self.timeout_seconds) as response:
+                with urlopen(request, timeout=attempt_timeout) as response:
                     response_body = response.read()
+                if deadline is not None and time.monotonic() > deadline:
+                    raise CloudTransportError(
+                        "cloud request exceeded its timeout budget"
+                    )
                 last_error = CloudTransportError("")
                 break
             except HTTPError as exc:
@@ -149,7 +188,14 @@ class ReliableHttpCloudClient(HttpCloudClient):
             except (TimeoutError, URLError, OSError) as exc:
                 last_error = CloudTransportError("cloud request failed: {}".format(exc))
             if attempt < self.max_attempts:
-                time.sleep(self.retry_backoff_seconds * (2 ** (attempt - 1)))
+                delay = self.retry_backoff_seconds * (2 ** (attempt - 1))
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= delay:
+                        raise CloudTransportError(
+                            "cloud request exceeded its timeout budget"
+                        ) from last_error
+                time.sleep(delay)
         else:
             raise last_error
         elapsed_ms = (time.perf_counter() - started) * 1000.0
@@ -167,4 +213,5 @@ class ReliableHttpCloudClient(HttpCloudClient):
             "response_bytes": len(response_body),
             "http_round_trip_ms": round(elapsed_ms, 6),
         }
+        self._remaining_timeout(deadline)
         return value

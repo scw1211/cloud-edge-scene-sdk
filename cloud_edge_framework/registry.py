@@ -124,7 +124,11 @@ class SceneRegistry:
             )
         return self._plugins[scene]
 
-    def for_envelope(self, envelope: SceneEventEnvelope) -> ScenePlugin:
+    def for_envelope(
+        self,
+        envelope: SceneEventEnvelope,
+        validate: bool = True,
+    ) -> ScenePlugin:
         plugin = self.get(envelope.scene)
         event_scene = self._event_types.get(envelope.event_type)
         if event_scene is None:
@@ -135,7 +139,8 @@ class SceneRegistry:
                     envelope.event_type, event_scene, plugin.scene
                 )
             )
-        plugin.validate_envelope(envelope)
+        if validate:
+            plugin.validate_envelope(envelope)
         return plugin
 
     def for_payload(self, payload: Dict[str, Any]) -> ScenePlugin:

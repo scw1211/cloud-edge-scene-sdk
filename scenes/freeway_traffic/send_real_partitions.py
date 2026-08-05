@@ -37,13 +37,23 @@ def _post(url, event, timeout_seconds):
             "Content-Type": "application/json",
             "Idempotency-Key": event["id"],
             "X-Trace-Id": "trace_" + event["id"],
+            # The sender executes only the selected action/route. Detailed
+            # diagnostics remain available through review/metrics endpoints and
+            # would otherwise dominate response serialization and idempotency I/O.
+            "Prefer": "return=minimal",
         },
         method="POST",
     )
     started = time.perf_counter()
     with urlopen(request, timeout=timeout_seconds) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    return payload, round((time.perf_counter() - started) * 1000.0, 6), len(body)
+        response_body = response.read()
+        payload = json.loads(response_body.decode("utf-8"))
+    return (
+        payload,
+        round((time.perf_counter() - started) * 1000.0, 6),
+        len(body),
+        len(response_body),
+    )
 
 
 def main():
@@ -170,18 +180,41 @@ def main():
 
     def submit(partition_id, envelope):
         dispatch_ms = (time.perf_counter() - dispatch_zero) * 1000.0
-        response, wall_ms, request_bytes = _post(
+        response, wall_ms, request_bytes, response_bytes = _post(
             args.edge_url, envelope, args.timeout_seconds
         )
+        accounting = response.get("closed_loop_accounting", {})
+        pipeline = accounting.get("pipeline_stage_ms", {})
+        delivery = response.get("summary_delivery", {})
         return {
             "partition_id": partition_id,
             "event_id": envelope["id"],
             "local_dispatch_ms": round(dispatch_ms, 6),
             "client_wall_ms": wall_ms,
             "request_bytes": request_bytes,
+            "response_bytes": response_bytes,
+            "response_detail": response.get("response_detail", "full"),
+            "edge_service_wall_ms": response.get("edge_service_wall_ms"),
+            "framework_runtime_ms": response.get("framework_runtime_ms"),
+            "pipeline_stage_ms": dict(pipeline)
+            if isinstance(pipeline, dict)
+            else {},
+            "post_framework_service_ms": round(
+                max(
+                    0.0,
+                    float(response.get("edge_service_wall_ms", 0.0))
+                    - float(response.get("framework_runtime_ms", 0.0)),
+                ),
+                6,
+            ),
+            "summary_delivery_mode": delivery.get("mode"),
+            "summary_persistence_stage": delivery.get("persistence_stage"),
+            "ordinary_summary_fast_path": delivery.get("fast_path"),
             "route": response["final_decision"]["route"],
             "status": response["final_decision"]["status"],
-            "edge_decision_path": response["local_decision"]
+            "edge_decision_path": response.get(
+                "local_decision", response["final_decision"]
+            )
             .get("metadata", {})
             .get("edge_decision_path"),
         }

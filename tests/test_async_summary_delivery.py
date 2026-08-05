@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import tempfile
+import threading
 import time
 import unittest
 from typing import Any, Dict, Optional
@@ -15,6 +16,7 @@ from typing import Any, Dict, Optional
 from cloud_edge_framework.contracts import DecisionEnvelope, SemanticEvent, build_decision
 from cloud_edge_framework.cloud_llm import CloudLLMReviewer
 from cloud_edge_framework.event_envelope import SceneEventEnvelope
+from cloud_edge_framework.handoff import DurableOutboxHandoff
 from cloud_edge_framework.metrics import FrameworkMetrics
 from cloud_edge_framework.networking import StaticNetworkMonitor
 from cloud_edge_framework.plugins.base import ScenePlugin
@@ -42,10 +44,12 @@ class _AggregationPlugin(ScenePlugin):
         aggregation_enabled: bool = True,
         requires_cloud_confirmation: bool = True,
         risk_level: str = "high",
+        deadline_ms: float = 500.0,
     ) -> None:
         self.aggregation_enabled = bool(aggregation_enabled)
         self.requires_cloud_confirmation = bool(requires_cloud_confirmation)
         self.risk_level = str(risk_level)
+        self.deadline_ms = float(deadline_ms)
 
     def payload_schema(self) -> Dict[str, Any]:
         return {
@@ -99,7 +103,7 @@ class _AggregationPlugin(ScenePlugin):
                     "method": "fixture",
                 },
                 "timing": {
-                    "deadline_ms": 500.0,
+                    "deadline_ms": self.deadline_ms,
                     "preprocessing_ms": 1.0,
                     "edge_inference_ms": 2.0,
                 },
@@ -195,6 +199,19 @@ class _ForbiddenSlowCloud:
     def decide(self, event: SemanticEvent):
         del event
         raise AssertionError("process() must not call the slow cloud path")
+
+
+class _RejectingHandoff:
+    def __init__(self) -> None:
+        self.timeout_seconds = None
+
+    def submit(self, event, timeout_seconds: float):
+        del event
+        self.timeout_seconds = float(timeout_seconds)
+        raise OSError("journal unavailable")
+
+    def snapshot(self):
+        return {"pending": 0}
 
 
 class _CoalescingWorkerProbe(OutboxReplayWorker):
@@ -315,6 +332,68 @@ class _ToggleAggregationCloud:
         del events
         self.coordinate_calls += 1
         raise AssertionError("frozen aggregate delivery must not become coordinate")
+
+
+class _ResultPollingCloud(_ToggleAggregationCloud):
+    def __init__(self, aggregate_delay_seconds: float = 0.0) -> None:
+        super().__init__(complete=False)
+        self.aggregate_delay_seconds = float(aggregate_delay_seconds)
+        self.result_calls = 0
+
+    def aggregate(self, event: SemanticEvent) -> Dict[str, Any]:
+        if self.aggregate_delay_seconds > 0.0:
+            time.sleep(self.aggregate_delay_seconds)
+        return super().aggregate(event)
+
+    def aggregation_results_batch(self, events, event_group_ids):
+        self.result_calls += 1
+        items = []
+        for event in events:
+            completed = _ToggleAggregationCloud(complete=True).aggregate(event)
+            completed["event_id"] = event.event_id
+            completed["group_id"] = event_group_ids[event.event_id]
+            completed["aggregation"]["group_id"] = event_group_ids[event.event_id]
+            items.append(completed)
+        return {
+            "items": items,
+            "transport": {
+                "request_bytes": 32,
+                "response_bytes": 96,
+                "http_round_trip_ms": 1.0,
+            },
+        }
+
+
+class _DeadlineAwareDecisionCloud:
+    supports_request_timeout = True
+
+    def __init__(self, delay_seconds: float = 0.0) -> None:
+        self.delay_seconds = float(delay_seconds)
+        self.timeout_seconds = None
+        self.calls = 0
+
+    def decide(
+        self,
+        event: SemanticEvent,
+        timeout_seconds: Optional[float] = None,
+    ) -> DecisionEnvelope:
+        self.calls += 1
+        self.timeout_seconds = timeout_seconds
+        if self.delay_seconds:
+            time.sleep(self.delay_seconds)
+        return replace(
+            build_decision(
+                event=event,
+                decision="monitor",
+                actions=[],
+                confidence=0.99,
+                reason="bounded non-aggregation cloud review",
+                source="fixture_cloud",
+                policy_version=_AggregationPlugin.policy_version,
+            ),
+            route="cloud_sync",
+            status="final",
+        )
 
 
 class _LateMemberAggregationCloud:
@@ -878,7 +957,7 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
         finally:
             registry.close()
 
-    def test_required_cloud_confirmation_still_uses_async_summary_ingress(
+    def test_required_cloud_confirmation_submits_synchronously_then_falls_back(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory(prefix="async-summary-process-") as directory:
@@ -904,17 +983,196 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 self.assertTrue(
                     result["data_plane"]["scheduler_selected_wait"]
                 )
-                self.assertEqual(result["schedule"]["route"], "cloud_async")
-                self.assertFalse(result["schedule"]["waits_for_cloud"])
+                self.assertEqual(result["schedule"]["route"], "cloud_sync")
+                self.assertTrue(result["schedule"]["waits_for_cloud"])
                 self.assertEqual(result["local_decision"]["status"], "provisional")
+                # This fixture emulates an older cloud client without the
+                # result-only polling endpoint.  The edge still makes the
+                # synchronous submission, then durably falls back to replay
+                # because the peer summary is not complete yet.
                 self.assertEqual(result["final_decision"]["route"], "cloud_async")
                 self.assertEqual(result["final_decision"]["status"], "provisional")
                 self.assertEqual(result["pending_review_count"], 1)
                 self.assertEqual(outbox.count(), 1)
-                self.assertEqual(cloud.aggregate_calls, 0)
+                self.assertEqual(cloud.aggregate_calls, 1)
                 self.assertEqual(cloud.coordinate_calls, 0)
             finally:
                 tracker.close()
+                registry.close()
+
+    def test_required_cloud_confirmation_polls_result_before_returning(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="sync-summary-result-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry([_AggregationPlugin()])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _ResultPollingCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                result = runtime.process(_payload(), network=_network())
+
+                self.assertEqual(result["schedule"]["route"], "cloud_sync")
+                self.assertTrue(result["schedule"]["waits_for_cloud"])
+                self.assertEqual(result["final_decision"]["status"], "final")
+                self.assertTrue(
+                    result["final_decision"]["metadata"]["aggregation"][
+                        "global_confirmation"
+                    ]
+                )
+                self.assertEqual(cloud.aggregate_calls, 1)
+                self.assertEqual(cloud.result_calls, 1)
+                self.assertEqual(outbox.count(), 0)
+            finally:
+                tracker.close()
+                registry.close()
+
+    def test_initial_cloud_round_trip_is_charged_to_sync_deadline(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="sync-summary-deadline-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry([_AggregationPlugin(deadline_ms=30.0)])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _ResultPollingCloud(aggregate_delay_seconds=0.04)
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                result = runtime.process(_payload(), network=_network())
+
+                # The submission itself consumed the business budget.  The
+                # edge must durably fall back instead of granting polling a new
+                # post-submission deadline window.
+                self.assertEqual(cloud.aggregate_calls, 1)
+                self.assertEqual(cloud.result_calls, 0)
+                self.assertEqual(result["final_decision"]["status"], "provisional")
+                self.assertEqual(result["final_decision"]["route"], "cloud_async")
+                self.assertEqual(outbox.count(), 1)
+            finally:
+                tracker.close()
+                registry.close()
+
+    def test_compact_sync_response_projects_review_and_preserves_metrics(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="compact-sync-summary-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry([_AggregationPlugin()])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _ToggleAggregationCloud(complete=True)
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                full = runtime.process(
+                    _payload(event_id="summary-full"),
+                    network=_network(),
+                )
+                compact = runtime.process(
+                    _payload(event_id="summary-compact"),
+                    network=_network(),
+                    response_detail="compact",
+                )
+
+                self.assertEqual(compact["response_detail"], "compact")
+                self.assertEqual(
+                    full["data_plane"]["summary_delivery_mode"],
+                    "sync_cloud_review",
+                )
+                self.assertEqual(
+                    compact["summary_delivery"]["mode"], "sync_cloud_review"
+                )
+                self.assertEqual(
+                    compact["summary_delivery"]["persistence_stage"],
+                    "cloud_review_completed",
+                )
+                self.assertNotIn("local_decision", compact["review"])
+                self.assertNotIn("final_decision", compact["review"])
+                self.assertNotIn("routing_features", compact["review"])
+                transport = compact["final_decision"]["metadata"]["transport"]
+                self.assertGreater(transport["request_bytes"], 0)
+                self.assertIn(
+                    "actual_artifact_request_bytes", compact["data_plane"]
+                )
+                compact_bytes = len(
+                    json.dumps(compact, separators=(",", ":")).encode("utf-8")
+                )
+                full_bytes = len(
+                    json.dumps(full, separators=(",", ":")).encode("utf-8")
+                )
+                self.assertLess(compact_bytes, full_bytes * 0.6)
+            finally:
+                tracker.close()
+                registry.close()
+
+    def test_non_aggregation_sync_review_receives_remaining_deadline(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="sync-decision-deadline-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry(
+                [_AggregationPlugin(aggregation_enabled=False, deadline_ms=100.0)]
+            )
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _DeadlineAwareDecisionCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                result = runtime.process(_payload(), network=_network())
+
+                self.assertEqual(cloud.calls, 1)
+                self.assertIsNotNone(cloud.timeout_seconds)
+                self.assertGreater(cloud.timeout_seconds, 0.0)
+                self.assertLessEqual(cloud.timeout_seconds, 0.1)
+                self.assertEqual(result["final_decision"]["status"], "final")
+                self.assertEqual(outbox.count(), 0)
+            finally:
+                tracker.close()
+                outbox.close()
+                registry.close()
+
+    def test_late_non_aggregation_result_fails_closed_to_outbox(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="sync-decision-late-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry(
+                [_AggregationPlugin(aggregation_enabled=False, deadline_ms=30.0)]
+            )
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _DeadlineAwareDecisionCloud(delay_seconds=0.04)
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                result = runtime.process(_payload(), network=_network())
+
+                self.assertEqual(cloud.calls, 1)
+                self.assertEqual(result["final_decision"]["status"], "provisional")
+                self.assertEqual(result["final_decision"]["route"], "local_autonomy")
+                self.assertFalse(
+                    result["final_decision"]["metadata"]["action_authorization"][
+                        "all_actions_authorized"
+                    ]
+                )
+                self.assertEqual(outbox.count(), 1)
+            finally:
+                tracker.close()
+                outbox.close()
                 registry.close()
 
     def test_ordinary_summary_is_delivered_through_background_outbox(self) -> None:
@@ -956,6 +1214,124 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 tracker.close()
                 registry.close()
 
+    def test_ordinary_summary_returns_after_journal_before_outbox_append(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="async-handoff-runtime-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry(
+                [
+                    _AggregationPlugin(
+                        requires_cloud_confirmation=False,
+                        risk_level="low",
+                    )
+                ]
+            )
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            append_started = threading.Event()
+            append_release = threading.Event()
+            original_append = outbox.append
+
+            def blocked_append(event):
+                append_started.set()
+                append_release.wait(timeout=2.0)
+                return original_append(event)
+
+            outbox.append = blocked_append
+            handoff = DurableOutboxHandoff(
+                outbox,
+                root / "handoff.jsonl",
+            )
+            cloud = _ToggleAggregationCloud(complete=True)
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                    durable_handoff=handoff,
+                )
+                started = time.monotonic()
+                result = runtime.process(
+                    _payload(),
+                    network=_network(),
+                    response_detail="compact",
+                )
+                elapsed = time.monotonic() - started
+
+                self.assertTrue(append_started.wait(timeout=0.5))
+                self.assertLess(elapsed, 0.2)
+                self.assertEqual(
+                    result["summary_delivery"]["mode"], "background_handoff"
+                )
+                self.assertEqual(
+                    result["summary_delivery"]["persistence_stage"],
+                    "handoff_durable",
+                )
+                self.assertTrue(result["summary_delivery"]["fast_path"])
+                self.assertEqual(outbox.count(), 0)
+
+                append_release.set()
+                deadline = time.monotonic() + 1.0
+                while outbox.count() == 0 and time.monotonic() < deadline:
+                    time.sleep(0.005)
+                self.assertEqual(outbox.count(), 1)
+
+                flushed = runtime.flush_pending(
+                    waiting_poll_seconds=0.001,
+                    max_backoff_seconds=0.001,
+                )
+                self.assertEqual(flushed["completed"], 1)
+                self.assertEqual(tracker.get("summary-1")["state"], "completed")
+            finally:
+                append_release.set()
+                handoff.close()
+                tracker.close()
+                outbox.close()
+                registry.close()
+
+    def test_handoff_failure_falls_back_to_synchronous_outbox_durability(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="async-handoff-fallback-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry(
+                [
+                    _AggregationPlugin(
+                        requires_cloud_confirmation=False,
+                        risk_level="low",
+                    )
+                ]
+            )
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            handoff = _RejectingHandoff()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=_ForbiddenSlowCloud(),
+                    review_store=outbox,
+                    review_tracker=tracker,
+                    durable_handoff=handoff,
+                )
+                result = runtime.process(
+                    _payload(),
+                    network=_network(),
+                    response_detail="compact",
+                )
+
+                self.assertLessEqual(handoff.timeout_seconds, 0.05)
+                self.assertFalse(result["summary_delivery"]["fast_path"])
+                self.assertEqual(
+                    result["summary_delivery"]["mode"], "background_outbox"
+                )
+                self.assertEqual(
+                    result["summary_delivery"]["persistence_stage"],
+                    "outbox_durable",
+                )
+                self.assertEqual(outbox.count(), 1)
+            finally:
+                tracker.close()
+                outbox.close()
+                registry.close()
+
     def test_context_v3_freezes_delivery_operation_across_plugin_reload(self) -> None:
         with tempfile.TemporaryDirectory(prefix="async-summary-freeze-") as directory:
             root = Path(directory)
@@ -974,7 +1350,7 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 context = stored.metadata["_edge_review_context"]
                 self.assertEqual(context["schema_version"], 3)
                 self.assertEqual(context["delivery_operation"], "aggregate")
-                self.assertEqual(context["requested_route"], "cloud_async")
+                self.assertEqual(context["requested_route"], "cloud_sync")
                 self.assertGreater(context["requested_at_ms"], 0)
                 self.assertGreater(context["preliminary_latency_ms"], 0.0)
                 self.assertIsInstance(context["routing_features"], dict)
@@ -1009,7 +1385,15 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
     def test_waiting_summary_is_not_failure_or_ack_then_retry_completes(self) -> None:
         with tempfile.TemporaryDirectory(prefix="async-summary-wait-") as directory:
             root = Path(directory)
-            registry = SceneRegistry([_AggregationPlugin(True)])
+            registry = SceneRegistry(
+                [
+                    _AggregationPlugin(
+                        True,
+                        requires_cloud_confirmation=False,
+                        risk_level="low",
+                    )
+                ]
+            )
             outbox = SQLiteOutbox(root / "outbox.sqlite3")
             tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
             cloud = _ToggleAggregationCloud(complete=False)
@@ -1210,7 +1594,15 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory(prefix="async-summary-offline-backlog-") as directory:
             root = Path(directory)
-            registry = SceneRegistry([_AggregationPlugin(True)])
+            registry = SceneRegistry(
+                [
+                    _AggregationPlugin(
+                        True,
+                        requires_cloud_confirmation=False,
+                        risk_level="low",
+                    )
+                ]
+            )
             outbox = SQLiteOutbox(root / "outbox.sqlite3")
             tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
             cloud = _ToggleAggregationCloud(complete=False)

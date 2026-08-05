@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 import json
 import math
 from pathlib import Path
+import queue
 import sqlite3
 import threading
 import time
@@ -91,6 +92,19 @@ class MonitoringPolicy:
             )
 
 
+@dataclass(frozen=True)
+class _DeferredObservation:
+    """The minimal immutable payload needed by the persistence worker."""
+
+    event_id: str
+    scene: str
+    predicted_label: str
+    confidence: float
+    prediction_set: List[str]
+    signals: Dict[str, float]
+    observed_at_ms: int
+
+
 class CalibrationDriftMonitor:
     """Persists monitoring observations and never treats cloud output as ground truth."""
 
@@ -98,7 +112,10 @@ class CalibrationDriftMonitor:
         self,
         path: Optional[Path] = None,
         policy: Optional[MonitoringPolicy] = None,
+        deferred_queue_size: int = 1024,
     ) -> None:
+        if deferred_queue_size < 1:
+            raise ValueError("monitoring deferred_queue_size must be positive")
         self.path = Path(path).resolve() if path is not None else None
         self.policy = policy or MonitoringPolicy()
         if self.path is not None:
@@ -119,7 +136,35 @@ class CalibrationDriftMonitor:
         self._last_evaluation_monotonic_ms: Dict[str, float] = {}
         self._scene_observation_totals: Dict[str, int] = {}
         self._reference_signal_cache: Dict[str, set] = {}
+        # The request-facing cache and queue state use a lock independent from
+        # SQLite.  observe_deferred therefore cannot queue behind a long public
+        # snapshot/evaluation transaction merely to read the last known status.
+        self._deferred_lock = threading.RLock()
+        self._deferred_status_cache: Dict[str, Dict[str, Any]] = {}
+        self._deferred_queue: "queue.Queue[_DeferredObservation]" = queue.Queue(
+            maxsize=int(deferred_queue_size)
+        )
+        self._deferred_accepting = True
+        self._deferred_closing = False
+        self._deferred_stop = threading.Event()
+        self._deferred_worker_failed = False
+        self._deferred_worker_running = False
+        self._deferred_last_error: Optional[str] = None
+        self._deferred_accepted_count = 0
+        self._deferred_processed_count = 0
+        self._deferred_failed_count = 0
+        self._deferred_rejected_count = 0
+        self._deferred_close_timed_out = False
+        self._close_connection_when_worker_exits = False
+        self._connection_closed = False
         self._initialize()
+        self._warm_deferred_status_cache()
+        self._deferred_worker = threading.Thread(
+            target=self._deferred_worker_loop,
+            name="monitoring-observation-writer",
+            daemon=True,
+        )
+        self._deferred_worker.start()
 
     def _initialize(self) -> None:
         with self._lock, self._connection:
@@ -171,6 +216,20 @@ class CalibrationDriftMonitor:
         event: SemanticEvent,
         scene_signals: Optional[Mapping[str, Any]] = None,
     ) -> Dict[str, Any]:
+        observation = self._prepare_observation(event, scene_signals)
+        inserted = self._persist_observation(observation)
+        if inserted:
+            self._register_observation(observation.scene)
+            self._bootstrap_references(observation.scene, observation.signals)
+        return self._runtime_scene_snapshot(observation.scene)
+
+    def _prepare_observation(
+        self,
+        event: SemanticEvent,
+        scene_signals: Optional[Mapping[str, Any]],
+    ) -> _DeferredObservation:
+        if not isinstance(event, SemanticEvent):
+            raise TypeError("monitoring event must be a SemanticEvent")
         signals = self.standard_signals(event)
         for raw_name, raw_value in dict(scene_signals or {}).items():
             name = str(raw_name).strip()
@@ -180,9 +239,17 @@ class CalibrationDriftMonitor:
         signals = {
             name: _finite_probability(value, name) for name, value in signals.items()
         }
-        prediction_set = list(event.uncertainty.prediction_set)
-        now_ms = int(time.time() * 1000)
-        inserted = False
+        return _DeferredObservation(
+            event_id=event.event_id,
+            scene=event.scene,
+            predicted_label=event.risk.level,
+            confidence=float(event.uncertainty.confidence),
+            prediction_set=list(event.uncertainty.prediction_set),
+            signals=signals,
+            observed_at_ms=int(time.time() * 1000),
+        )
+
+    def _persist_observation(self, observation: _DeferredObservation) -> bool:
         with self._lock, self._connection:
             cursor = self._connection.execute(
                 """
@@ -192,20 +259,213 @@ class CalibrationDriftMonitor:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    event.event_id,
-                    event.scene,
-                    event.risk.level,
-                    float(event.uncertainty.confidence),
-                    _canonical(prediction_set),
-                    _canonical(signals),
-                    now_ms,
+                    observation.event_id,
+                    observation.scene,
+                    observation.predicted_label,
+                    observation.confidence,
+                    _canonical(observation.prediction_set),
+                    _canonical(observation.signals),
+                    observation.observed_at_ms,
                 ),
             )
-            inserted = cursor.rowcount > 0
+            return cursor.rowcount > 0
+
+    def observe_deferred(
+        self,
+        event: SemanticEvent,
+        scene_signals: Optional[Mapping[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Validate and enqueue an observation without waiting for SQLite.
+
+        The returned routing status is the most recently evaluated in-memory
+        status.  A known degraded state is therefore enforced immediately.  If
+        the bounded queue or its worker cannot accept the observation, the
+        response fails closed and requests cloud review rather than silently
+        dropping a monitoring safety signal.
+        """
+        observation = self._prepare_observation(event, scene_signals)
+        failure_reason: Optional[str] = None
+        accepted = False
+        with self._deferred_lock:
+            cached = copy.deepcopy(
+                self._deferred_status_cache.get(observation.scene)
+            )
+            if not self._deferred_accepting:
+                failure_reason = "monitoring_deferred_closed"
+                self._deferred_rejected_count += 1
+            elif self._deferred_worker_failed or not self._deferred_worker.is_alive():
+                if not self._deferred_worker_failed:
+                    self._deferred_worker_failed = True
+                    self._deferred_last_error = (
+                        "RuntimeError: deferred monitoring worker stopped"
+                    )
+                failure_reason = "monitoring_deferred_worker_failed"
+                self._deferred_rejected_count += 1
+            else:
+                try:
+                    self._deferred_queue.put_nowait(observation)
+                except queue.Full:
+                    failure_reason = "monitoring_deferred_queue_saturated"
+                    self._deferred_rejected_count += 1
+                else:
+                    accepted = True
+                    self._deferred_accepted_count += 1
+
+            result = cached or self._empty_runtime_snapshot(observation.scene)
+            if failure_reason is not None:
+                reasons = list(result.get("reasons", []))
+                if failure_reason not in reasons:
+                    reasons.append(failure_reason)
+                result.update(
+                    {
+                        "status": "degraded",
+                        "force_cloud_review": True,
+                        "reasons": reasons,
+                    }
+                )
+            evaluation = dict(result.get("evaluation", {}))
+            evaluation["fresh"] = False
+            evaluation["deferred"] = True
+            result["evaluation"] = evaluation
+            result["deferred"] = {
+                "accepted": accepted,
+                "pending": self._deferred_unfinished_count(),
+                "worker_failed": self._deferred_worker_failed,
+                "failure_reason": failure_reason,
+            }
+            return result
+
+    def _empty_runtime_snapshot(self, scene: str) -> Dict[str, Any]:
+        return {
+            "scene": str(scene),
+            "status": "collecting",
+            "force_cloud_review": False,
+            "reasons": [],
+            "observed_count": 0,
+            "policy": asdict(self.policy),
+            "calibration": {
+                "status": "collecting",
+                "labeled_count": 0,
+                "accuracy": None,
+                "ece": None,
+                "max_ece": self.policy.max_ece,
+                "prediction_set_samples": 0,
+                "coverage": None,
+                "target_coverage": self.policy.target_coverage,
+                "average_prediction_set_size": None,
+            },
+            "drift": {
+                "status": "collecting",
+                "max_psi": self.policy.max_psi,
+                "signals": {},
+            },
+            "evaluation": {
+                "fresh": False,
+                "event_lag": 0,
+                "max_event_lag": self.policy.evaluation_interval_events - 1,
+                "elapsed_since_full_evaluation_ms": None,
+                "max_staleness_ms": self.policy.evaluation_max_staleness_ms,
+            },
+        }
+
+    def _publish_deferred_status(self, snapshot: Mapping[str, Any]) -> None:
+        scene = str(snapshot.get("scene", "")).strip()
+        if not scene:
+            return
+        published = copy.deepcopy(dict(snapshot))
+        published.pop("deferred", None)
+        with self._deferred_lock:
+            self._deferred_status_cache[scene] = published
+
+    def _warm_deferred_status_cache(self) -> None:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT DISTINCT scene FROM monitoring_observation ORDER BY scene"
+            ).fetchall()
+        for row in rows:
+            self.scene_snapshot(str(row["scene"]))
+
+    def _process_deferred_observation(
+        self, observation: _DeferredObservation
+    ) -> None:
+        inserted = self._persist_observation(observation)
         if inserted:
-            self._register_observation(event.scene)
-            self._bootstrap_references(event.scene, signals)
-        return self._runtime_scene_snapshot(event.scene)
+            self._register_observation(observation.scene)
+            self._bootstrap_references(observation.scene, observation.signals)
+        self._runtime_scene_snapshot(observation.scene)
+
+    def _deferred_worker_loop(self) -> None:
+        with self._deferred_lock:
+            self._deferred_worker_running = True
+        try:
+            while True:
+                if self._deferred_stop.is_set():
+                    return
+                try:
+                    observation = self._deferred_queue.get(timeout=0.05)
+                except queue.Empty:
+                    with self._deferred_lock:
+                        if self._deferred_closing:
+                            return
+                    continue
+                try:
+                    self._process_deferred_observation(observation)
+                except Exception as exc:  # noqa: BLE001
+                    with self._deferred_lock:
+                        self._deferred_worker_failed = True
+                        self._deferred_failed_count += 1
+                        self._deferred_last_error = "{}: {}".format(
+                            type(exc).__name__, exc
+                        )
+                    return
+                else:
+                    with self._deferred_lock:
+                        self._deferred_processed_count += 1
+                        self._deferred_last_error = None
+                finally:
+                    self._deferred_queue.task_done()
+        finally:
+            with self._deferred_lock:
+                self._deferred_worker_running = False
+                if (
+                    not self._deferred_closing
+                    and not self._deferred_stop.is_set()
+                    and not self._deferred_worker_failed
+                ):
+                    self._deferred_worker_failed = True
+                    self._deferred_last_error = (
+                        "RuntimeError: deferred monitoring worker stopped"
+                    )
+                close_connection = self._close_connection_when_worker_exits
+            if close_connection:
+                self._close_connection()
+
+    def _deferred_unfinished_count(self) -> int:
+        with self._deferred_queue.all_tasks_done:
+            return int(self._deferred_queue.unfinished_tasks)
+
+    def deferred_snapshot(self) -> Dict[str, Any]:
+        pending = self._deferred_unfinished_count()
+        queued = self._deferred_queue.qsize()
+        with self._deferred_lock:
+            unprocessed = pending + self._deferred_failed_count
+            return {
+                "queue_capacity": self._deferred_queue.maxsize,
+                "queued": queued,
+                "pending": pending,
+                "accepted": self._deferred_accepted_count,
+                "processed": self._deferred_processed_count,
+                "failed": self._deferred_failed_count,
+                "rejected": self._deferred_rejected_count,
+                "worker_running": self._deferred_worker_running,
+                "worker_failed": self._deferred_worker_failed,
+                "last_error": self._deferred_last_error,
+                "accepting": self._deferred_accepting,
+                "closing": self._deferred_closing,
+                "close_timed_out": self._deferred_close_timed_out,
+                "unprocessed": unprocessed,
+                "unprocessed_visible": unprocessed,
+            }
 
     def _register_observation(self, scene: str) -> None:
         scene = str(scene)
@@ -285,6 +545,7 @@ class CalibrationDriftMonitor:
             "elapsed_since_full_evaluation_ms": round(elapsed_ms, 6),
             "max_staleness_ms": self.policy.evaluation_max_staleness_ms,
         }
+        self._publish_deferred_status(snapshot)
         return snapshot
 
     def _recent_signal_values(
@@ -544,6 +805,7 @@ class CalibrationDriftMonitor:
             self._events_since_evaluation[scene] = 0
             self._last_evaluation_monotonic_ms[scene] = time.monotonic() * 1000.0
             self._scene_observation_total(scene)
+        self._publish_deferred_status(snapshot)
         return snapshot
 
     def snapshot(self) -> Dict[str, Any]:
@@ -556,8 +818,45 @@ class CalibrationDriftMonitor:
             "path": str(self.path) if self.path is not None else ":memory:",
             "scene_count": len(scenes),
             "scenes": scenes,
+            "deferred": self.deferred_snapshot(),
         }
 
-    def close(self) -> None:
+    def _close_connection(self) -> None:
         with self._lock:
+            if self._connection_closed:
+                return
             self._connection.close()
+            self._connection_closed = True
+
+    def close(self, timeout_seconds: float = 2.0) -> None:
+        """Boundedly drain deferred observations before closing SQLite.
+
+        If persistence is blocked beyond the deadline, queued items remain
+        visible through ``deferred_snapshot``.  The daemon worker owns final
+        connection closure once the in-flight database call returns, avoiding a
+        use-after-close race while keeping this method bounded.
+        """
+        if timeout_seconds < 0:
+            raise ValueError("monitoring close timeout must not be negative")
+        deadline = time.monotonic() + float(timeout_seconds)
+        with self._deferred_lock:
+            self._deferred_accepting = False
+            self._deferred_closing = True
+
+        while (
+            self._deferred_unfinished_count() > 0
+            and self._deferred_worker.is_alive()
+            and time.monotonic() < deadline
+        ):
+            time.sleep(min(0.005, max(0.0, deadline - time.monotonic())))
+
+        with self._deferred_lock:
+            self._close_connection_when_worker_exits = True
+        self._deferred_stop.set()
+        self._deferred_worker.join(max(0.0, deadline - time.monotonic()))
+        worker_alive = self._deferred_worker.is_alive()
+        pending = self._deferred_unfinished_count()
+        with self._deferred_lock:
+            self._deferred_close_timed_out = worker_alive or pending > 0
+        if not worker_alive:
+            self._close_connection()

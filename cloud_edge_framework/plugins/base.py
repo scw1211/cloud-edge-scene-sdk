@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import replace
+import threading
 from typing import Any, Dict, Optional, Sequence, Tuple
 
 from jsonschema import Draft202012Validator
@@ -25,6 +26,14 @@ class ScenePlugin(ABC):
     aliases: Sequence[str] = ()
     event_types: Sequence[str] = ()
     policy_version = "framework-1.0.0"
+
+    # A scoped hand-off used only by ``normalize_envelope`` below.  Scene event
+    # payloads contain mutable dictionaries even though the envelope dataclass is
+    # frozen, so a reusable identity memo would be unsafe: callers could mutate a
+    # payload after one successful validation and accidentally skip the next one.
+    # The scope exists only for the synchronous duration of one normalize call
+    # and is always cleared in ``finally``.
+    _validation_scope = threading.local()
 
     def warmup(self) -> None:
         """Load optional model artifacts before the service starts accepting requests."""
@@ -81,6 +90,12 @@ class ScenePlugin(ABC):
 
     def validate_envelope(self, envelope: SceneEventEnvelope) -> SceneEventEnvelope:
         """Validate routing metadata and the plugin-owned payload."""
+        accepted = getattr(self._validation_scope, "accepted", None)
+        if accepted is not None:
+            plugin, validated_envelope = accepted
+            if plugin is self and validated_envelope is envelope:
+                return envelope
+
         descriptor = self.contract_descriptor()
         accepted_scenes = {descriptor["scene"], *self.aliases}
         if envelope.scene not in accepted_scenes:
@@ -110,6 +125,30 @@ class ScenePlugin(ABC):
             location = ".".join(str(part) for part in error.absolute_path) or "data"
             raise ContractError(f"scene payload {location}: {error.message}")
         return envelope
+
+    def normalize_envelope(self, envelope: SceneEventEnvelope) -> SemanticEvent:
+        """Validate once, then invoke a plugin's defensively-validating adapter.
+
+        Existing plugins call :meth:`validate_envelope` at the start of
+        ``normalize`` so that direct plugin use remains safe.  Framework ingress
+        already has the same envelope instance in hand; this tightly-scoped token
+        lets that defensive call reuse the immediately preceding validation
+        without creating a mutable-payload cache.
+        """
+        self.validate_envelope(envelope)
+        scope = self._validation_scope
+        previous = getattr(scope, "accepted", None)
+        scope.accepted = (self, envelope)
+        try:
+            return self.normalize(envelope)
+        finally:
+            if previous is None:
+                try:
+                    del scope.accepted
+                except AttributeError:
+                    pass
+            else:
+                scope.accepted = previous
 
     @abstractmethod
     def normalize(self, envelope: SceneEventEnvelope) -> SemanticEvent:

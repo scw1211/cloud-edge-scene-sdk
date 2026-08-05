@@ -67,6 +67,7 @@ class PluginRuntimeManager:
         cloud_reviewer: Optional[Any] = None,
         calibration_monitor: Optional[CalibrationDriftMonitor] = None,
         utility_router: Optional[Any] = None,
+        durable_handoff: Optional[Any] = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.config_path = (
@@ -89,6 +90,7 @@ class PluginRuntimeManager:
         self.cloud_reviewer = cloud_reviewer
         self.calibration_monitor = calibration_monitor
         self.utility_router = utility_router
+        self.durable_handoff = durable_handoff
         self._lock = threading.RLock()
         self._reload_lock = threading.Lock()
         self._active: Optional[RuntimeSnapshot] = None
@@ -123,6 +125,7 @@ class PluginRuntimeManager:
                     review_tracker=self.review_tracker,
                     calibration_monitor=self.calibration_monitor,
                     utility_router=self.utility_router,
+                    durable_handoff=self.durable_handoff,
                 )
         except Exception:
             registry.close()
@@ -192,11 +195,14 @@ class PluginRuntimeManager:
             return result
 
     def health(self) -> Dict[str, Any]:
-        with self._lock:
-            snapshot = self.snapshot()
-            retired_count = len(self._retired)
-            inflight = sum(self._inflight.values())
-            return {
+        # Hold a lease, not the manager lock, while collecting store/plugin
+        # diagnostics. Some snapshots execute SQLite queries and parse history;
+        # keeping the manager lock across them stalls every /decide lease.
+        with self.lease() as snapshot:
+            with self._lock:
+                retired_count = len(self._retired)
+                inflight = sum(self._inflight.values())
+            result = {
                 **snapshot.describe(),
                 "pending_reviews": self.review_store.count(),
                 "performance_profiles": len(
@@ -222,6 +228,9 @@ class PluginRuntimeManager:
                 "retired_snapshot_count": retired_count,
                 "inflight_requests": inflight,
             }
+            if self.durable_handoff is not None:
+                result["durable_handoff"] = self.durable_handoff.snapshot()
+            return result
 
     def close(self) -> None:
         self.feedback_store.flush()

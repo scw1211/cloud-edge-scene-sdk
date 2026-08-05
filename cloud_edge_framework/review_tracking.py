@@ -231,6 +231,11 @@ class ReviewLifecycleStore:
         review_id = stable_id("review", event.event_id, local.decision_id)
         source_identity = source_submission_identity(event.metadata)
         now_ms = int(time.time() * 1000)
+        # These structures can be several kilobytes. Serialize before entering
+        # the shared SQLite critical section so concurrent partitions do not
+        # block on each other's pure JSON work.
+        routing_features_json = _canonical(dict(routing_features or {}))
+        local_decision_json = _canonical(local.to_dict())
         with self._lock, self._connection:
             existing = self._connection.execute(
                 "SELECT review_id, source_identity FROM review_lifecycle "
@@ -276,8 +281,8 @@ class ReviewLifecycleStore:
                     str(evidence_level),
                     max(0, int(planned_request_bytes)),
                     source_identity,
-                    _canonical(dict(routing_features or {})),
-                    _canonical(local.to_dict()),
+                    routing_features_json,
+                    local_decision_json,
                 ),
             )
             if cursor.rowcount == 1:

@@ -141,6 +141,7 @@ class CollaborationScheduler:
             for level in prediction_set
         )
         possible_severe = "severe" in prediction_set
+        has_explicit_routing_risk = routing_risk_level is not None
         route_risk_level = str(routing_risk_level or event.risk.level)
         if route_risk_level not in RISK_PRIORITY:
             raise ValueError("routing_risk_level is invalid")
@@ -150,7 +151,19 @@ class CollaborationScheduler:
             critical = (
                 route_risk_priority >= RISK_PRIORITY["severe"] or possible_severe
             )
+        elif has_explicit_routing_risk:
+            # ``routing_risk_level`` may deliberately separate operational
+            # action safety from a scene's descriptive state (for example,
+            # severe congestion with only an advisory action). A possible high
+            # label is an escalation signal when it is ambiguous/uncertain, but
+            # must not override a confident low operational-risk assessment by
+            # itself. Generic plugins that do not provide an override still use
+            # event.risk here, so their high/severe semantics are unchanged.
+            critical = point_critical or (possible_high and uncertain)
         else:
+            # Without an explicit scene-level operational-risk override, the
+            # conformal set is part of the generic safety boundary even when a
+            # point confidence happens to be high.
             critical = point_critical or possible_high
         sync_feasible = (
             network.available

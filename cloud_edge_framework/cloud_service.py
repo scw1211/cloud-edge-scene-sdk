@@ -747,6 +747,7 @@ class CloudApiService:
         self._aggregation_worker_state["running"] = False
         self.manager.close()
         self.aggregator.close()
+        self.idempotency.close()
 
 
 def parse_args() -> argparse.Namespace:

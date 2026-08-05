@@ -9,6 +9,8 @@ import sqlite3
 import threading
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+import uuid
+import zlib
 
 from cloud_edge_framework.contracts import SemanticEvent
 
@@ -20,6 +22,9 @@ _SOURCE_BUSINESS_CONTEXT_FIELDS = (
     "model_disagreement",
 )
 _SQLITE_BUSY_TIMEOUT_MS = 10_000
+_OUTBOX_APPEND_MAX_BATCH = 64
+_IDEMPOTENCY_CLAIM_LEASE_MS = 60_000
+_COMPRESSED_JSON_PREFIX = b"zlib-json-v1\x00"
 
 
 def _configure_sqlite_connection(
@@ -74,6 +79,34 @@ def _request_sha256(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def _encode_cached_json(value: Any) -> Any:
+    """Return a SQLite value, compressing large replay responses losslessly."""
+    raw = _canonical_json(value).encode("utf-8")
+    if len(raw) < 1024:
+        return raw.decode("utf-8")
+    compressed = _COMPRESSED_JSON_PREFIX + zlib.compress(raw, level=1)
+    if len(compressed) >= len(raw):
+        return raw.decode("utf-8")
+    return sqlite3.Binary(compressed)
+
+
+def _decode_cached_json(value: Any) -> Dict[str, Any]:
+    if isinstance(value, memoryview):
+        value = value.tobytes()
+    if isinstance(value, bytes):
+        raw = (
+            zlib.decompress(value[len(_COMPRESSED_JSON_PREFIX) :])
+            if value.startswith(_COMPRESSED_JSON_PREFIX)
+            else value
+        )
+        decoded = json.loads(raw.decode("utf-8"))
+    else:
+        decoded = json.loads(str(value))
+    if not isinstance(decoded, dict):
+        raise ValueError("cached idempotency response must be an object")
+    return dict(decoded)
+
+
 def source_submission_identity(metadata: Dict[str, Any]) -> str:
     """Return the stable identity shared by Outbox and review lifecycle rows.
 
@@ -116,6 +149,70 @@ class OutboxLease:
     aggregation_submitted: bool = False
 
 
+class _AppendTicket:
+    """One pending `SQLiteOutbox.append`, resolvable by whichever thread commits.
+
+    Each ticket carries its own outcome so that batching stays invisible to
+    callers: an event whose id was reused for a different submission raises
+    `IdempotencyConflictError` in *its* caller, while the rows batched alongside
+    it still commit normally.  The insert is `INSERT OR IGNORE`, so a conflicting
+    ticket contributes no row to the shared transaction.
+    """
+
+    __slots__ = ("event_id", "serialized", "now_ms", "done", "inserted", "error")
+
+    def __init__(self, event_id: str, serialized: str, now_ms: int) -> None:
+        self.event_id = event_id
+        self.serialized = serialized
+        self.now_ms = now_ms
+        self.done = False
+        self.inserted = False
+        self.error: Optional[BaseException] = None
+
+    def apply(self, connection: sqlite3.Connection, identity: Any) -> None:
+        try:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO outbox_events(
+                    event_id, payload_json, state, attempts, available_at_ms,
+                    created_at_ms, updated_at_ms
+                ) VALUES (?, ?, 'pending', 0, ?, ?, ?)
+                """,
+                (
+                    self.event_id,
+                    self.serialized,
+                    self.now_ms,
+                    self.now_ms,
+                    self.now_ms,
+                ),
+            )
+            if cursor.rowcount == 1:
+                self.inserted = True
+                return
+            existing = connection.execute(
+                "SELECT payload_json FROM outbox_events WHERE event_id=?",
+                (self.event_id,),
+            ).fetchone()
+            if existing is None or identity(
+                str(existing["payload_json"])
+            ) != identity(self.serialized):
+                raise IdempotencyConflictError(
+                    "outbox event_id was already used for a different cloud submission"
+                )
+            self.inserted = False
+        except IdempotencyConflictError as exc:
+            # A business-key conflict belongs only to this ticket. SQLite and
+            # unknown failures must escape so the shared transaction rolls back
+            # for every ticket rather than partially committing after an I/O
+            # error or swallowing KeyboardInterrupt/SystemExit.
+            self.error = exc
+
+    def result(self) -> bool:
+        if self.error is not None:
+            raise self.error
+        return self.inserted
+
+
 class SQLiteOutbox:
     """Durable at-least-once queue with leases and stable event-id deduplication."""
 
@@ -138,7 +235,24 @@ class SQLiteOutbox:
         self._connection.row_factory = sqlite3.Row
         _configure_sqlite_connection(self._connection, enable_wal=True)
         self._depth = 0
+        # Guards only the handoff queue, never a commit, so a thread enqueueing an
+        # append never waits behind the fsync that another thread is performing.
+        self._append_lock = threading.Lock()
+        self._append_queue: List[_AppendTicket] = []
         self._initialize()
+        # Identity lookups are part of the handoff acceptance path.  Keep them
+        # on an independent, query-only WAL connection so a new low-risk request
+        # does not queue behind the Outbox writer's FULL-sync commit merely to
+        # reject reuse of an event id that is already durable.
+        self._identity_lock = threading.Lock()
+        self._identity_connection: Optional[sqlite3.Connection] = sqlite3.connect(
+            str(self.path),
+            timeout=0.1,
+            check_same_thread=False,
+        )
+        self._identity_connection.row_factory = sqlite3.Row
+        self._identity_connection.execute("PRAGMA query_only=ON")
+        self._identity_connection.execute("PRAGMA busy_timeout=100")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -156,13 +270,37 @@ class SQLiteOutbox:
                 raise
             else:
                 if outermost:
-                    self._connection.commit()
+                    try:
+                        self._connection.commit()
+                    except BaseException:
+                        # A failed COMMIT can leave the transaction open on this
+                        # long-lived shared connection.  Without this rollback the
+                        # rows stay staged and the *next* writer's commit sweeps
+                        # them in, so work whose caller was told it failed becomes
+                        # durable later under someone else's fsync.
+                        try:
+                            self._connection.rollback()
+                        except BaseException as rollback_exc:  # noqa: BLE001
+                            try:
+                                self._connection.close()
+                            finally:
+                                self._connection = None
+                            raise RuntimeError(
+                                "SQLite Outbox commit and rollback both failed"
+                            ) from rollback_exc
+                        raise
             finally:
                 self._depth -= 1
 
     def close(self) -> None:
+        with self._identity_lock:
+            if self._identity_connection is not None:
+                self._identity_connection.close()
+                self._identity_connection = None
         with self._lock:
-            self._connection.close()
+            if self._connection is not None:
+                self._connection.close()
+                self._connection = None
 
     def _initialize(self) -> None:
         with self._connect() as connection:
@@ -249,32 +387,112 @@ class SQLiteOutbox:
             serialized.encode("utf-8")
         ).hexdigest()
 
+    def submission_identity(self, event_id: str) -> Optional[str]:
+        """Return the immutable identity already durable for ``event_id``.
+
+        The handoff journal calls this before accepting a new put.  A dedicated
+        WAL reader preserves the asynchronous hot path: ordinary negative
+        lookups can run alongside the Outbox writer and never perform a commit
+        or fsync.
+        """
+        normalized_event_id = str(event_id).strip()
+        if not normalized_event_id:
+            raise ValueError("outbox event_id must not be empty")
+        with self._identity_lock:
+            connection = self._identity_connection
+            if connection is None:
+                raise RuntimeError("SQLite Outbox is closed")
+            row = connection.execute(
+                "SELECT payload_json FROM outbox_events WHERE event_id=?",
+                (normalized_event_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._identity(str(row["payload_json"]))
+
     def append(self, event: SemanticEvent) -> bool:
+        """Durably record one cloud submission intent, sharing fsyncs when possible.
+
+        Serialization happens before the lock because it is pure CPU over a
+        payload that can reach 12 KB, and holding the lock through it would make
+        every concurrent partition wait on work that touches nothing shared.
+
+        The commit is a group commit. A scene group delivers its partitions to
+        `/decide` simultaneously, and under `synchronous=FULL` the naive shape
+        costs one serialized fsync per partition. The first writer that reaches
+        the database drains peers already queued behind earlier lock contention;
+        peers arriving during its commit form the next bounded batch.
+
+        Measured on an Orin Nano (NVMe), 30 bursts of 4 partitions, per-append
+        mean 6.57 ms -> 5.41 ms; batches average 2.0 rows, halving 120 appends to
+        60 commits.  The win grows with contention because that is where the
+        queue forms: at 8 threads appending steadily it is 24.4 ms -> 11.5 ms.
+        At one thread there is nothing to batch and nothing changes (2.53 ->
+        2.58 ms).  Note that a *single* fsync here is only about 1.7 ms, so what
+        this removes is serialization behind the lock, not disk cost.
+
+        This does not trade durability away.  `synchronous` stays FULL and no
+        caller is told its submission is queued until the fsync covering it has
+        returned -- verified by SIGKILLing a process immediately after `append`
+        returns, both for a lone row and for four batched ones.  Batched rows
+        share a transaction, so they are all durable or none are: a peer's
+        idempotency conflict is reported to that peer alone without discarding
+        the others' inserts, while a failed commit is reported to *every* owner,
+        because a rowcount read inside a rolled-back transaction proves nothing.
+        """
         now_ms = int(time.time() * 1000)
         serialized = self._serialized(event)
-        with self._lock, self._connect() as connection:
-            cursor = connection.execute(
-                """
-                INSERT OR IGNORE INTO outbox_events(
-                    event_id, payload_json, state, attempts, available_at_ms,
-                    created_at_ms, updated_at_ms
-                ) VALUES (?, ?, 'pending', 0, ?, ?, ?)
-                """,
-                (event.event_id, serialized, now_ms, now_ms, now_ms),
-            )
-            if cursor.rowcount == 1:
-                return True
-            existing = connection.execute(
-                "SELECT payload_json FROM outbox_events WHERE event_id=?",
-                (event.event_id,),
-            ).fetchone()
-            if existing is None or self._identity(
-                str(existing["payload_json"])
-            ) != self._identity(serialized):
-                raise IdempotencyConflictError(
-                    "outbox event_id was already used for a different cloud submission"
-                )
-            return False
+        ticket = _AppendTicket(event.event_id, serialized, now_ms)
+        with self._append_lock:
+            self._append_queue.append(ticket)
+        with self._lock:
+            # Another thread may have committed this ticket as part of its batch
+            # while this one waited for the lock; then there is nothing left to do.
+            if ticket.done:
+                return ticket.result()
+            batch: List[_AppendTicket] = []
+            try:
+                with self._connect() as connection:
+                    batch = self._drain_append_queue(required=ticket)
+                    for pending in batch:
+                        pending.apply(connection, self._identity)
+            except BaseException as exc:  # noqa: BLE001
+                # The transaction rolled back, so nothing in `batch` reached the
+                # disk.  Every owner has to hear that, not just this thread: a peer
+                # that handed its ticket over must never read a rowcount taken
+                # inside a rolled-back transaction as proof of durability.
+                for pending in batch:
+                    pending.error = exc
+                    pending.done = True
+                raise
+            # Committed by `_connect`'s outermost exit; only now is the fsync
+            # that covers every row in `batch` known to have returned.
+            for pending in batch:
+                pending.done = True
+        return ticket.result()
+
+    def _drain_append_queue(
+        self,
+        required: Optional["_AppendTicket"] = None,
+    ) -> List["_AppendTicket"]:
+        with self._append_lock:
+            pending = [ticket for ticket in self._append_queue if not ticket.done]
+            batch = pending[:_OUTBOX_APPEND_MAX_BATCH]
+            if required is not None and required not in batch:
+                if required not in pending:
+                    raise RuntimeError("required Outbox append ticket was lost")
+                # A thread waiting behind more than one full batch can acquire
+                # `_lock` before the owners of the older tickets. Its transaction
+                # must include its own ticket; otherwise `append()` could return
+                # the ticket's default False result before that row was durable.
+                batch = pending[: _OUTBOX_APPEND_MAX_BATCH - 1] + [required]
+            selected = set(batch)
+            self._append_queue = [
+                ticket
+                for ticket in self._append_queue
+                if not ticket.done and ticket not in selected
+            ]
+        return batch
 
     def claim(self, limit: int, lease_seconds: float) -> List[OutboxLease]:
         if limit <= 0 or lease_seconds <= 0:
@@ -998,6 +1216,7 @@ class SQLiteIdempotencyStore:
         # WAL for every provisional response while the lock keeps it thread-safe.
         with self._lock, self._connection:
             connection = self._connection
+            connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS idempotency_responses (
@@ -1009,9 +1228,29 @@ class SQLiteIdempotencyStore:
                 )
                 """
             )
+            columns = {
+                str(row["name"])
+                for row in connection.execute(
+                    "PRAGMA table_info(idempotency_responses)"
+                ).fetchall()
+            }
+            if "state" not in columns:
+                connection.execute(
+                    "ALTER TABLE idempotency_responses "
+                    "ADD COLUMN state TEXT NOT NULL DEFAULT 'completed'"
+                )
+            if "owner_token" not in columns:
+                connection.execute(
+                    "ALTER TABLE idempotency_responses "
+                    "ADD COLUMN owner_token TEXT NOT NULL DEFAULT ''"
+                )
+            if "lease_until_ms" not in columns:
+                connection.execute(
+                    "ALTER TABLE idempotency_responses ADD COLUMN lease_until_ms INTEGER"
+                )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_idempotency_expiry "
-                "ON idempotency_responses(expires_at_ms)"
+                "ON idempotency_responses(state, expires_at_ms)"
             )
 
     def execute(
@@ -1024,58 +1263,126 @@ class SQLiteIdempotencyStore:
         if not key or len(key) > 256:
             raise ValueError("idempotency key must contain 1 to 256 characters")
         request_hash = _request_sha256(request_payload)
-        now_ms = int(time.time() * 1000)
-        expires_at_ms = now_ms + int(self.ttl_seconds * 1000)
+        owner_token = uuid.uuid4().hex
         with self._request_lock(key):
-            # Keep SQLite transactions short.  The previous implementation held
-            # both the global Python lock and a write transaction while running
-            # the full inference operation, which serialized different edge
-            # events even though their idempotency keys were independent.
+            # A short cross-instance claim prevents two service processes sharing
+            # one SQLite file from both executing the same side-effecting
+            # operation after a simultaneous cache miss. The owner performs the
+            # operation outside any SQLite/Python-global lock; peers poll the row
+            # until it is complete or its crash-recovery lease expires.
+            while True:
+                now_ms = int(time.time() * 1000)
+                replay_value: Any = None
+                wait_for_owner = False
+                with self._lock, self._connection:
+                    connection = self._connection
+                    connection.execute("BEGIN IMMEDIATE")
+                    if now_ms - self._last_cleanup_ms >= self._cleanup_interval_ms:
+                        connection.execute(
+                            "DELETE FROM idempotency_responses "
+                            "WHERE state='completed' AND expires_at_ms <= ?",
+                            (now_ms,),
+                        )
+                        self._last_cleanup_ms = now_ms
+                    row = connection.execute(
+                        "SELECT request_sha256, response_json, state, "
+                        "lease_until_ms, expires_at_ms "
+                        "FROM idempotency_responses WHERE request_key=?",
+                        (key,),
+                    ).fetchone()
+                    if (
+                        row is not None
+                        and str(row["state"]) == "completed"
+                        and int(row["expires_at_ms"]) <= now_ms
+                    ):
+                        connection.execute(
+                            "DELETE FROM idempotency_responses WHERE request_key=?",
+                            (key,),
+                        )
+                        row = None
+                    if row is not None and str(row["request_sha256"]) != request_hash:
+                        raise IdempotencyConflictError(
+                            "idempotency key was already used for a different request"
+                        )
+                    if row is not None and str(row["state"]) == "completed":
+                        replay_value = row["response_json"]
+                    elif row is not None and int(row["lease_until_ms"] or 0) > now_ms:
+                        wait_for_owner = True
+                    else:
+                        lease_until_ms = now_ms + _IDEMPOTENCY_CLAIM_LEASE_MS
+                        connection.execute(
+                            """
+                            INSERT INTO idempotency_responses(
+                                request_key, request_sha256, response_json,
+                                created_at_ms, expires_at_ms, state,
+                                owner_token, lease_until_ms
+                            ) VALUES (?, ?, '{}', ?, ?, 'inflight', ?, ?)
+                            ON CONFLICT(request_key) DO UPDATE SET
+                                request_sha256=excluded.request_sha256,
+                                response_json='{}',
+                                created_at_ms=excluded.created_at_ms,
+                                expires_at_ms=excluded.expires_at_ms,
+                                state='inflight', owner_token=excluded.owner_token,
+                                lease_until_ms=excluded.lease_until_ms
+                            """,
+                            (
+                                key,
+                                request_hash,
+                                now_ms,
+                                lease_until_ms,
+                                owner_token,
+                                lease_until_ms,
+                            ),
+                        )
+                if replay_value is not None:
+                    return _decode_cached_json(replay_value), True
+                if not wait_for_owner:
+                    break
+                time.sleep(0.005)
+
+            try:
+                response = operation()
+                if not isinstance(response, dict):
+                    raise ValueError("idempotent operation must return an object")
+                # JSON encoding/compression is pure CPU and may cover tens of
+                # kilobytes. Keep it outside the global SQLite lock so unrelated
+                # request keys remain concurrent.
+                encoded_response = _encode_cached_json(response)
+            except BaseException:
+                with self._lock, self._connection:
+                    self._connection.execute(
+                        "DELETE FROM idempotency_responses "
+                        "WHERE request_key=? AND state='inflight' AND owner_token=?",
+                        (key, owner_token),
+                    )
+                raise
+
+            completed_at_ms = int(time.time() * 1000)
+            expires_at_ms = completed_at_ms + int(self.ttl_seconds * 1000)
             with self._lock, self._connection:
                 connection = self._connection
-                if now_ms - self._last_cleanup_ms >= self._cleanup_interval_ms:
-                    connection.execute(
-                        "DELETE FROM idempotency_responses WHERE expires_at_ms <= ?",
-                        (now_ms,),
-                    )
-                    self._last_cleanup_ms = now_ms
-                row = connection.execute(
-                    "SELECT request_sha256, response_json FROM idempotency_responses "
-                    "WHERE request_key=?",
-                    (key,),
-                ).fetchone()
-            if row is not None:
-                if str(row["request_sha256"]) != request_hash:
-                    raise IdempotencyConflictError(
-                        "idempotency key was already used for a different request"
-                    )
-                response = json.loads(str(row["response_json"]))
-                return dict(response), True
-
-            response = operation()
-            if not isinstance(response, dict):
-                raise ValueError("idempotent operation must return an object")
-
-            with self._lock, self._connection:
-                connection = self._connection
-                connection.execute(
+                cursor = connection.execute(
                     """
-                    INSERT INTO idempotency_responses(
-                        request_key, request_sha256, response_json,
-                        created_at_ms, expires_at_ms
-                    ) VALUES (?, ?, ?, ?, ?)
+                    UPDATE idempotency_responses
+                    SET response_json=?, created_at_ms=?, expires_at_ms=?,
+                        state='completed', owner_token='', lease_until_ms=NULL
+                    WHERE request_key=? AND request_sha256=?
+                      AND state='inflight' AND owner_token=?
                     """,
                     (
+                        encoded_response,
+                        completed_at_ms,
+                        expires_at_ms,
                         key,
                         request_hash,
-                        _canonical_json(response),
-                        now_ms,
-                        expires_at_ms,
+                        owner_token,
                     ),
                 )
+                if cursor.rowcount != 1:
+                    raise RuntimeError("idempotency operation claim was lost")
                 overflow = connection.execute(
                     "SELECT MAX(0, COUNT(*) - ?) AS value "
-                    "FROM idempotency_responses",
+                    "FROM idempotency_responses WHERE state='completed'",
                     (self.max_entries,),
                 ).fetchone()["value"]
                 if int(overflow) > 0:
@@ -1083,6 +1390,7 @@ class SQLiteIdempotencyStore:
                         """
                         DELETE FROM idempotency_responses WHERE request_key IN (
                             SELECT request_key FROM idempotency_responses
+                            WHERE state='completed'
                             ORDER BY created_at_ms LIMIT ?
                         )
                         """,
@@ -1095,12 +1403,18 @@ class SQLiteIdempotencyStore:
         with self._lock, self._connection:
             connection = self._connection
             row = connection.execute(
-                "SELECT COUNT(*) AS count FROM idempotency_responses WHERE expires_at_ms > ?",
+                "SELECT COUNT(*) AS count FROM idempotency_responses "
+                "WHERE state='completed' AND expires_at_ms > ?",
                 (now_ms,),
+            ).fetchone()
+            inflight = connection.execute(
+                "SELECT COUNT(*) AS count FROM idempotency_responses "
+                "WHERE state='inflight'"
             ).fetchone()
         return {
             "path": str(self.path),
             "active_entries": int(row["count"]),
+            "inflight_entries": int(inflight["count"]),
             "ttl_seconds": self.ttl_seconds,
             "max_entries": self.max_entries,
         }
