@@ -364,6 +364,63 @@ class _ResultPollingCloud(_ToggleAggregationCloud):
         }
 
 
+class _AlwaysWaitingResultCloud(_ToggleAggregationCloud):
+    supports_request_timeout = True
+
+    def __init__(self) -> None:
+        super().__init__(complete=False)
+        self.result_calls = 0
+        self.submission_timeouts = []
+        self.result_timeouts = []
+
+    def aggregate(
+        self,
+        event: SemanticEvent,
+        timeout_seconds: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        self.submission_timeouts.append(timeout_seconds)
+        return super().aggregate(event)
+
+    def aggregation_results_batch(
+        self,
+        events,
+        event_group_ids,
+        timeout_seconds: Optional[float] = None,
+    ):
+        self.result_calls += 1
+        self.result_timeouts.append(timeout_seconds)
+        items = []
+        for event in events:
+            group_id = event_group_ids[event.event_id]
+            items.append(
+                {
+                    "event_id": event.event_id,
+                    "group_id": group_id,
+                    "aggregation": {
+                        "group_id": group_id,
+                        "state": "waiting",
+                        "completion_reason": "",
+                        "received_members": [event.edge_id],
+                        "missing_members": ["edge-b"],
+                        "evidence_complete": False,
+                        "global_confirmation": False,
+                        "finality": "pending",
+                        "result_revision": 0,
+                    },
+                    "coordination": None,
+                    "cloud_accepted_at_ms": self.accepted_at_ms[0],
+                }
+            )
+        return {
+            "items": items,
+            "transport": {
+                "request_bytes": 32,
+                "response_bytes": 64,
+                "http_round_trip_ms": 1.0,
+            },
+        }
+
+
 class _DeadlineAwareDecisionCloud:
     supports_request_timeout = True
 
@@ -1057,6 +1114,61 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 self.assertEqual(outbox.count(), 1)
             finally:
                 tracker.close()
+                registry.close()
+
+    def test_waiting_result_until_deadline_fails_closed_without_resubmit(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="sync-summary-waiting-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry([_AggregationPlugin(deadline_ms=100.0)])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _AlwaysWaitingResultCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                started = time.perf_counter()
+                result = runtime.process(_payload(), network=_network())
+                elapsed_seconds = time.perf_counter() - started
+
+                self.assertEqual(cloud.aggregate_calls, 1)
+                self.assertGreaterEqual(cloud.result_calls, 2)
+                self.assertGreaterEqual(elapsed_seconds, 0.06)
+                self.assertEqual(len(cloud.submission_timeouts), 1)
+                self.assertGreater(cloud.submission_timeouts[0], 0.0)
+                self.assertTrue(cloud.result_timeouts)
+                self.assertTrue(
+                    all(
+                        timeout is not None and timeout > 0.0
+                        for timeout in cloud.result_timeouts
+                    )
+                )
+
+                self.assertEqual(result["schedule"]["route"], "cloud_sync")
+                self.assertTrue(result["schedule"]["waits_for_cloud"])
+                self.assertEqual(result["final_decision"]["route"], "cloud_async")
+                self.assertEqual(result["final_decision"]["status"], "provisional")
+                authorization = result["final_decision"]["metadata"][
+                    "action_authorization"
+                ]
+                self.assertFalse(authorization["cloud_confirmed"])
+                self.assertFalse(authorization["all_actions_authorized"])
+                self.assertEqual(
+                    authorization["deferred_action_types"], ["hold_fixture"]
+                )
+
+                self.assertEqual(outbox.count(), 1)
+                leases = outbox.claim(limit=1, lease_seconds=1.0)
+                self.assertEqual(len(leases), 1)
+                self.assertTrue(leases[0].aggregation_submitted)
+            finally:
+                tracker.close()
+                outbox.close()
                 registry.close()
 
     def test_compact_sync_response_projects_review_and_preserves_metrics(self) -> None:

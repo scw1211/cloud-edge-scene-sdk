@@ -477,6 +477,63 @@ class AggregationFinalityTest(unittest.TestCase):
         finally:
             aggregator.close()
 
+    def test_expired_groups_below_minimum_do_not_starve_ready_group(self) -> None:
+        aggregator = MultiEdgeEventAggregator()
+        try:
+            stale_group_count = 64
+            for group_index in range(stale_group_count):
+                event = replace(
+                    _event(0),
+                    event_id="stale-event-{}".format(group_index),
+                )
+                spec = replace(
+                    _spec(0),
+                    key="stale-group-{}".format(group_index),
+                    timeout_ms=600_000,
+                )
+                aggregator.submit(event, spec)
+
+            # Make all 64 older groups expired. Each has only one member while
+            # minimum_members is two, so none can produce a partial result.
+            # Before the eligibility filter was fixed these rows filled the SQL
+            # LIMIT and `_claim` discarded every one, hiding ready groups behind
+            # them on every worker cycle.
+            with aggregator._lock, aggregator._connection:
+                aggregator._connection.execute(
+                    "UPDATE aggregation_groups SET deadline_at_ms=0 "
+                    "WHERE group_key LIKE 'stale-group-%'"
+                )
+
+            ready_group_id = ""
+            for member_index in range(len(EXPECTED_MEMBERS)):
+                event = replace(
+                    _event(member_index),
+                    event_id="ready-event-{}".format(member_index),
+                )
+                spec = replace(
+                    _spec(member_index),
+                    key="ready-group",
+                    timeout_ms=600_000,
+                )
+                ready_group_id = str(aggregator.submit(event, spec)["group_id"])
+
+            leases = aggregator.claim_due(limit=stale_group_count)
+
+            self.assertEqual(len(leases), 1)
+            self.assertEqual(leases[0].group_id, ready_group_id)
+            self.assertEqual(
+                leases[0].completion_reason,
+                "all_expected_members",
+            )
+            self.assertEqual(len(leases[0].events), len(EXPECTED_MEMBERS))
+            waiting_below_minimum = aggregator._connection.execute(
+                "SELECT COUNT(*) AS count FROM aggregation_groups "
+                "WHERE state='waiting' AND group_key LIKE 'stale-group-%'"
+            ).fetchone()
+            self.assertEqual(int(waiting_below_minimum["count"]), stale_group_count)
+        finally:
+            aggregator.close()
+
     def test_member_arriving_during_failed_lease_retries_richer_revision_now(self) -> None:
         aggregator = MultiEdgeEventAggregator(
             retry_base_seconds=10.0,

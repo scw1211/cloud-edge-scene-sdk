@@ -456,14 +456,17 @@ class MultiEdgeEventAggregator:
                 """
                 SELECT group_id FROM aggregation_groups
                 WHERE state='waiting' AND next_attempt_at_ms <= ? AND (
-                    deadline_at_ms <= ? OR attempts > 0 OR
                     (SELECT COUNT(*) FROM aggregation_events AS events
                      WHERE events.group_id=aggregation_groups.group_id)
-                        >= expected_member_count
+                        >= expected_member_count OR
+                    (deadline_at_ms <= ? AND
+                     (SELECT COUNT(*) FROM aggregation_events AS events
+                      WHERE events.group_id=aggregation_groups.group_id)
+                        >= minimum_members)
                 )
                 ORDER BY
                     CASE WHEN deadline_at_ms <= ? THEN 0 ELSE 1 END,
-                    next_attempt_at_ms, deadline_at_ms
+                    next_attempt_at_ms, deadline_at_ms, group_id
                 LIMIT ?
                 """,
                 (now_ms, now_ms, now_ms, int(limit)),
