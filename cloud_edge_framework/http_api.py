@@ -11,6 +11,9 @@ from cloud_edge_framework.registry import PluginLoadError
 from cloud_edge_framework.reliability import IdempotencyConflictError
 
 
+_KEEP_ALIVE_IDLE_TIMEOUT_SECONDS = 30.0
+
+
 class ApiNotFoundError(LookupError):
     pass
 
@@ -22,6 +25,43 @@ def _headers(handler: BaseHTTPRequestHandler) -> Dict[str, str]:
 def build_role_handler(service: Any, max_body_bytes: int, access_log: bool):
     class Handler(BaseHTTPRequestHandler):
         server_version = "CloudEdgeFramework/0.1"
+        # Every JSON response carries an exact Content-Length, so one accepted
+        # TCP connection can safely serve the next request.  The default on
+        # BaseHTTPRequestHandler is HTTP/1.0, which forces clients to reconnect
+        # and hides connection setup inside every /decide latency sample.
+        protocol_version = "HTTP/1.1"
+        keep_alive_idle_timeout_seconds = _KEEP_ALIVE_IDLE_TIMEOUT_SECONDS
+
+        def handle(self) -> None:
+            """Bound only the idle wait for each HTTP request line.
+
+            ``BaseHTTPRequestHandler.handle`` otherwise waits forever for both
+            the first request and later requests on an HTTP/1.1 connection,
+            pinning one server thread per idle client. The timeout is removed as
+            soon as a request line is complete, so request-body reads and
+            long-running service handlers retain their existing semantics.
+            """
+            self.close_connection = True
+            normal_timeout = self.connection.gettimeout()
+            self._normal_request_timeout = normal_timeout
+            idle_timeout = float(self.keep_alive_idle_timeout_seconds)
+            if normal_timeout is not None:
+                idle_timeout = min(idle_timeout, float(normal_timeout))
+            while True:
+                self._waiting_for_request_line = True
+                self.connection.settimeout(idle_timeout)
+                self.handle_one_request()
+                if self.close_connection:
+                    break
+
+        def parse_request(self) -> bool:
+            if getattr(self, "_waiting_for_request_line", False):
+                # handle_one_request has received the full request line. Restore
+                # the accepted socket's original timeout before parsing headers,
+                # reading a body, or invoking potentially long-running work.
+                self.connection.settimeout(self._normal_request_timeout)
+                self._waiting_for_request_line = False
+            return super().parse_request()
 
         def log_message(self, fmt: str, *args: Any) -> None:
             if access_log:
@@ -37,6 +77,8 @@ def build_role_handler(service: Any, max_body_bytes: int, access_log: bool):
             trace_id = payload.get("trace_id")
             if trace_id:
                 self.send_header("X-Trace-ID", str(trace_id))
+            if self.close_connection:
+                self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(body)
 
@@ -64,6 +106,10 @@ def build_role_handler(service: Any, max_body_bytes: int, access_log: bool):
             return self.rfile.read(content_length)
 
         def _handle_error(self, exc: Exception) -> None:
+            # A malformed request may leave unread bytes in rfile.  Closing an
+            # exceptional connection prevents those bytes from being parsed as
+            # the next HTTP/1.1 request while normal responses stay persistent.
+            self.close_connection = True
             if isinstance(exc, ApiNotFoundError):
                 status = HTTPStatus.NOT_FOUND
                 code = "not_found"

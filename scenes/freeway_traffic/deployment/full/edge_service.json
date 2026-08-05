@@ -48,7 +48,7 @@
     "max_backoff_seconds": 2.0,
     "batch_coalesce_seconds": 0.0,
     "waiting_poll_seconds": 0.025,
-    "partial_poll_seconds": 1.0,
+    "partial_poll_seconds": 0.05,
     "aggregation_max_wait_seconds": 10.0,
     "aggregation_batch_wait_seconds": 0.0,
     "reconciliation_poll_seconds": 5.0,

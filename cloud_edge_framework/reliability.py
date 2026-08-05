@@ -1166,7 +1166,12 @@ class SQLiteIdempotencyStore:
         self.max_entries = int(max_entries)
         if self.ttl_seconds <= 0 or self.max_entries <= 0:
             raise ValueError("idempotency ttl_seconds and max_entries must be positive")
+        # SQLite's connection remains serialized, but request-key lock registry
+        # bookkeeping must not share that lock.  Otherwise a request which has
+        # already committed its completed response can still queue behind another
+        # request's database transaction merely to remove its per-key lock entry.
         self._lock = threading.RLock()
+        self._request_locks_lock = threading.Lock()
         self._request_locks: Dict[str, threading.Lock] = {}
         self._request_lock_users: Dict[str, int] = {}
         self._last_cleanup_ms = 0
@@ -1188,7 +1193,7 @@ class SQLiteIdempotencyStore:
     @contextmanager
     def _request_lock(self, request_key: str) -> Iterator[None]:
         """Serialize one idempotency key without serializing unrelated work."""
-        with self._lock:
+        with self._request_locks_lock:
             lock = self._request_locks.get(request_key)
             if lock is None:
                 lock = threading.Lock()
@@ -1200,7 +1205,7 @@ class SQLiteIdempotencyStore:
             yield
         finally:
             lock.release()
-            with self._lock:
+            with self._request_locks_lock:
                 remaining = self._request_lock_users.get(request_key, 1) - 1
                 if remaining <= 0:
                     self._request_lock_users.pop(request_key, None)
@@ -1252,6 +1257,104 @@ class SQLiteIdempotencyStore:
                 "CREATE INDEX IF NOT EXISTS idx_idempotency_expiry "
                 "ON idempotency_responses(state, expires_at_ms)"
             )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_idempotency_capacity "
+                "ON idempotency_responses(state, created_at_ms, request_key)"
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS idempotency_metadata (
+                    name TEXT PRIMARY KEY,
+                    value INTEGER NOT NULL CHECK(value >= 0)
+                )
+                """
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO idempotency_metadata(name, value) "
+                "VALUES ('completed_count', 0)"
+            )
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_idempotency_completed_insert
+                AFTER INSERT ON idempotency_responses
+                WHEN NEW.state='completed'
+                BEGIN
+                    UPDATE idempotency_metadata SET value=value+1
+                    WHERE name='completed_count';
+                END
+                """
+            )
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_idempotency_completed_delete
+                AFTER DELETE ON idempotency_responses
+                WHEN OLD.state='completed'
+                BEGIN
+                    UPDATE idempotency_metadata SET value=value-1
+                    WHERE name='completed_count';
+                END
+                """
+            )
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_idempotency_completed_update_in
+                AFTER UPDATE OF state ON idempotency_responses
+                WHEN OLD.state!='completed' AND NEW.state='completed'
+                BEGIN
+                    UPDATE idempotency_metadata SET value=value+1
+                    WHERE name='completed_count';
+                END
+                """
+            )
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_idempotency_completed_update_out
+                AFTER UPDATE OF state ON idempotency_responses
+                WHEN OLD.state='completed' AND NEW.state!='completed'
+                BEGIN
+                    UPDATE idempotency_metadata SET value=value-1
+                    WHERE name='completed_count';
+                END
+                """
+            )
+            # Reconcile once at startup for databases created by an older build,
+            # or after an unclean external migration. Thereafter triggers keep the
+            # count transactionally consistent across every process sharing it.
+            connection.execute(
+                "UPDATE idempotency_metadata SET value=("
+                "SELECT COUNT(*) FROM idempotency_responses "
+                "WHERE state='completed') WHERE name='completed_count'"
+            )
+            self._enforce_capacity_locked(connection)
+
+    @staticmethod
+    def _completed_count_locked(connection: sqlite3.Connection) -> int:
+        row = connection.execute(
+            "SELECT value FROM idempotency_metadata "
+            "WHERE name='completed_count'"
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("idempotency completed counter is missing")
+        return int(row["value"])
+
+    def _enforce_capacity_locked(self, connection: sqlite3.Connection) -> None:
+        """Enforce the cross-process completed-response cap using an O(1) count."""
+        overflow = max(
+            0,
+            self._completed_count_locked(connection) - self.max_entries,
+        )
+        if overflow <= 0:
+            return
+        connection.execute(
+            """
+            DELETE FROM idempotency_responses WHERE request_key IN (
+                SELECT request_key FROM idempotency_responses
+                WHERE state='completed'
+                ORDER BY created_at_ms, request_key LIMIT ?
+            )
+            """,
+            (overflow,),
+        )
 
     def execute(
         self,
@@ -1380,22 +1483,7 @@ class SQLiteIdempotencyStore:
                 )
                 if cursor.rowcount != 1:
                     raise RuntimeError("idempotency operation claim was lost")
-                overflow = connection.execute(
-                    "SELECT MAX(0, COUNT(*) - ?) AS value "
-                    "FROM idempotency_responses WHERE state='completed'",
-                    (self.max_entries,),
-                ).fetchone()["value"]
-                if int(overflow) > 0:
-                    connection.execute(
-                        """
-                        DELETE FROM idempotency_responses WHERE request_key IN (
-                            SELECT request_key FROM idempotency_responses
-                            WHERE state='completed'
-                            ORDER BY created_at_ms LIMIT ?
-                        )
-                        """,
-                        (int(overflow),),
-                    )
+                self._enforce_capacity_locked(connection)
             return dict(response), False
 
     def snapshot(self) -> Dict[str, Any]:

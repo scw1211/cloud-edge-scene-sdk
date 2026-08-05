@@ -79,7 +79,219 @@ class _ExecuteFailureConnection:
         return self.connection.rollback()
 
 
+class _CommitFailureConnection:
+    """Connection proxy that rolls back one idempotency completion commit."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+        self.failed = False
+        self._completing_response = False
+
+    def __getattr__(self, name):
+        return getattr(self.connection, name)
+
+    def __enter__(self):
+        self.connection.__enter__()
+        self._completing_response = False
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is None and self._completing_response and not self.failed:
+            self.failed = True
+            self.connection.rollback()
+            raise sqlite3.OperationalError("injected completion commit failure")
+        return self.connection.__exit__(exc_type, exc_value, traceback)
+
+    def execute(self, sql, parameters=()):
+        normalized = " ".join(str(sql).split())
+        if (
+            "UPDATE idempotency_responses" in normalized
+            and "SET response_json=" in normalized
+        ):
+            self._completing_response = True
+        return self.connection.execute(sql, parameters)
+
+
+def _idempotency_counts(path: Path):
+    with sqlite3.connect(str(path)) as connection:
+        return connection.execute(
+            "SELECT "
+            "(SELECT COUNT(*) FROM idempotency_responses "
+            " WHERE state='completed'), "
+            "(SELECT value FROM idempotency_metadata "
+            " WHERE name='completed_count'), "
+            "(SELECT COUNT(*) FROM idempotency_responses "
+            " WHERE state='inflight')"
+        ).fetchone()
+
+
 class SQLiteIdempotencySemanticsTest(unittest.TestCase):
+    def test_request_lock_cleanup_does_not_wait_for_database_lock(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="idempotency-lock-split-") as directory:
+            store = SQLiteIdempotencyStore(
+                Path(directory) / "idempotency.sqlite3", 60.0, 100
+            )
+            entered = threading.Event()
+            release_request = threading.Event()
+            exited = threading.Event()
+
+            def use_request_lock() -> None:
+                with store._request_lock("independent-key"):
+                    entered.set()
+                    if not release_request.wait(2.0):
+                        raise TimeoutError("request lock was not released")
+                exited.set()
+
+            thread = threading.Thread(target=use_request_lock)
+            thread.start()
+            try:
+                self.assertTrue(entered.wait(1.0))
+                # Model another request holding the SQLite connection lock during
+                # its completion transaction. Registry cleanup for this unrelated
+                # key must still finish instead of joining that database convoy.
+                with store._lock:
+                    release_request.set()
+                    completed_without_database_lock = exited.wait(0.5)
+                self.assertTrue(completed_without_database_lock)
+            finally:
+                release_request.set()
+                thread.join(timeout=2.0)
+                store.close()
+            self.assertFalse(thread.is_alive())
+
+    def test_capacity_is_strict_across_ten_store_instances(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="idempotency-shared-cap-") as directory:
+            path = Path(directory) / "idempotency.sqlite3"
+            stores = [
+                SQLiteIdempotencyStore(path, 60.0, max_entries=3)
+                for _ in range(10)
+            ]
+
+            def execute(index: int):
+                value, replayed = stores[index].execute(
+                    "shared-cap-key-{}".format(index),
+                    {"index": index},
+                    lambda: {"index": index},
+                )
+                return value, replayed, _idempotency_counts(path)
+
+            try:
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    results = list(executor.map(execute, range(10)))
+
+                for index, (value, replayed, counts) in enumerate(results):
+                    self.assertEqual(value, {"index": index})
+                    self.assertFalse(replayed)
+                    actual, tracked, _inflight = counts
+                    self.assertEqual(actual, tracked)
+                    self.assertLessEqual(actual, 3)
+
+                self.assertEqual(_idempotency_counts(path), (3, 3, 0))
+            finally:
+                for store in stores:
+                    store.close()
+
+    def test_capacity_count_survives_eviction_expiry_and_restart(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="idempotency-cap-lifecycle-") as directory:
+            path = Path(directory) / "idempotency.sqlite3"
+            now = [1_000.0]
+            store = SQLiteIdempotencyStore(path, 1.0, max_entries=3)
+            traced_statements = []
+            store._connection.set_trace_callback(traced_statements.append)
+            try:
+                with patch(
+                    "cloud_edge_framework.reliability.time.time",
+                    side_effect=lambda: now[0],
+                ):
+                    for index in range(4):
+                        value, replayed = store.execute(
+                            "key-{}".format(index),
+                            {"index": index},
+                            lambda index=index: {"index": index},
+                        )
+                        self.assertEqual(value, {"index": index})
+                        self.assertFalse(replayed)
+                        now[0] += 0.01
+
+                self.assertEqual(_idempotency_counts(path), (3, 3, 0))
+                with sqlite3.connect(str(path)) as connection:
+                    retained = {
+                        row[0]
+                        for row in connection.execute(
+                            "SELECT request_key FROM idempotency_responses "
+                            "WHERE state='completed'"
+                        ).fetchall()
+                    }
+                self.assertEqual(retained, {"key-1", "key-2", "key-3"})
+                self.assertFalse(
+                    any(
+                        "COUNT(*) FROM IDEMPOTENCY_RESPONSES" in statement.upper()
+                        for statement in traced_statements
+                    ),
+                    traced_statements,
+                )
+            finally:
+                store.close()
+
+            # Startup reconciliation repairs metadata written by an older build
+            # or an interrupted external migration before enforcing the cap.
+            with sqlite3.connect(str(path)) as connection:
+                connection.execute(
+                    "UPDATE idempotency_metadata SET value=99 "
+                    "WHERE name='completed_count'"
+                )
+
+            with patch(
+                "cloud_edge_framework.reliability.time.time",
+                side_effect=lambda: now[0],
+            ):
+                reopened = SQLiteIdempotencyStore(path, 1.0, max_entries=3)
+                try:
+                    self.assertEqual(_idempotency_counts(path), (3, 3, 0))
+                    now[0] += 1.1
+                    value, replayed = reopened.execute(
+                        "fresh-key",
+                        {"index": "fresh"},
+                        lambda: {"index": "fresh"},
+                    )
+                    self.assertEqual(value, {"index": "fresh"})
+                    self.assertFalse(replayed)
+                    self.assertEqual(_idempotency_counts(path), (1, 1, 0))
+                finally:
+                    reopened.close()
+
+            final_store = SQLiteIdempotencyStore(path, 1.0, max_entries=3)
+            try:
+                self.assertEqual(_idempotency_counts(path), (1, 1, 0))
+            finally:
+                final_store.close()
+
+    def test_completion_commit_failure_rolls_back_row_and_counter(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="idempotency-commit-fail-") as directory:
+            path = Path(directory) / "idempotency.sqlite3"
+            store = SQLiteIdempotencyStore(path, 60.0, max_entries=3)
+            proxy = _CommitFailureConnection(store._connection)
+            store._connection = proxy
+            calls = 0
+
+            def operation():
+                nonlocal calls
+                calls += 1
+                return {"decision": "allow"}
+
+            try:
+                with self.assertRaisesRegex(
+                    sqlite3.OperationalError,
+                    "injected completion commit failure",
+                ):
+                    store.execute("commit-failure", {"event_id": "a"}, operation)
+
+                self.assertTrue(proxy.failed)
+                self.assertEqual(calls, 1)
+                self.assertEqual(_idempotency_counts(path), (0, 0, 1))
+            finally:
+                store.close()
+
     def test_two_store_instances_execute_same_key_once_and_replay(self) -> None:
         with tempfile.TemporaryDirectory(prefix="idempotency-two-store-") as directory:
             path = Path(directory) / "idempotency.sqlite3"

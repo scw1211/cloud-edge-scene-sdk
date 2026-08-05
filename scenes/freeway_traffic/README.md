@@ -88,6 +88,14 @@ current-state v2.0.2 允许 Qwen 在当前仍为 low、但 Student 已授权非�
 动作后果风险高、模型高不确定、跨区冲突或策略强制审核命中时，网络和 deadline
 允许才同步等待云端；需要云确认的动作在权威 final 前不会被授权。
 
+连续时间流中，四个分区通常会紧邻到达。常态完整配置对尚未形成结果的完整聚合
+每 25 ms 复查一次，对已收到 `partial_final` 的结果每 50 ms 复查一次，使迟到
+分区补齐后能尽快取得新的完整版本；这只缩短查询间隔，不改变 10 s 的完整聚合
+最大等待、5 s 的 reconciliation 复查间隔或 60 s 的 reconciliation 截止边界。
+更短的轮询会提高聚合等待期间的云端结果查询频率，部署时应结合并发样本数和云端
+查询负载监控；非连续流或大规模部署可适当调大 `waiting_poll_seconds` 和
+`partial_poll_seconds`，但不能借此放宽云确认和动作授权边界。
+
 当前态势链路区分“建议复核”和“必须同步”：Student 置信度低于 0.75 或与当前
 规则不同会设置宽泛的 `requires_review`，用于特征证据和异步全局复核；只有
 Student 最高类概率低于 `current_state_sync_confidence_threshold`（默认 0.50）
@@ -98,11 +106,18 @@ Student 最高类概率低于 `current_state_sync_confidence_threshold`（默认
 
 正式基准的共同 T0 位于常驻、预热完成后，紧挨一个已到齐的 12 步窗口处理前：
 
+- `event_local_actionable_ms` / `event_business_completion_ms`：单个 METIS 区域
+  决策的本地返回与动作可完成时延，覆盖连续段内全部风险层；
 - `local_actionable_ms`：T0 到四个 compact `/decide` 响应全部返回；
 - `business_completion_ms`：本地已授权动作止于本地响应，需要云确认的动作止于
   权威 final；
 - `global_authoritative_final_ms`：T0 到四个 review 都完成权威回填；
   `partial_final` 和 `local_only_timeout` 不算权威完成。
+
+测试进程为四个分区各保留一条 HTTP/1.1 连接和一个常驻 worker；预热、连续窗口
+共用同一连接池，避免把每个 5 分钟窗口都错误建模为四次冷 TCP 连接。报告同时给出
+单区域 event 口径和“四区域全部完成”的 sample 最大值口径；`<= 200 ms` 的完整性、
+平均值门禁和达标率分别列出，不能用低风险子集代替全段指标。
 
 异步上传字节从框架 `/metrics` 的 `distributions.async_http_*` 测量前后增量计算，
 不能使用 `/decide` 返回瞬间尚未发生的后台传输字段。报告同时分开 scheduled

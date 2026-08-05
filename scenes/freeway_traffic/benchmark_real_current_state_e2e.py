@@ -14,14 +14,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import copy
 from datetime import datetime, timezone
 import hashlib
+from http.client import HTTPConnection, HTTPSConnection, HTTPException
 import json
 from pathlib import Path
 import statistics
 import sys
+import threading
 import time
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 import uuid
 
@@ -30,6 +32,207 @@ REVIEW_PATH = "/api/v1/collaboration/reviews/{}"
 AGGREGATION_PATH = "/api/v1/collaboration/aggregations/{}"
 METRICS_PATH = "/api/v1/framework/metrics"
 NON_AUTHORITATIVE_REVIEW_STAGES = {"partial_final", "local_only_timeout"}
+
+
+class _PersistentJsonConnection:
+    """One reusable HTTP/1.1 connection with one idempotent reconnect.
+
+    A connection is assigned to one METIS partition by the pool below.  The
+    lock is defensive: the steady-state executor submits at most one request
+    per partition at a time, but a future caller cannot accidentally interleave
+    two request/response pairs on the same HTTP/1.1 socket.
+    """
+
+    def __init__(self, base_url: str, timeout_seconds: float) -> None:
+        parsed = urlsplit(str(base_url).rstrip("/"))
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("persistent HTTP base URL must use http or https")
+        if parsed.query or parsed.fragment or parsed.username or parsed.password:
+            raise ValueError("persistent HTTP base URL must not contain credentials/query")
+        self.scheme = parsed.scheme
+        self.host = str(parsed.hostname)
+        self.port = parsed.port
+        self.base_path = parsed.path.rstrip("/")
+        self.timeout_seconds = float(timeout_seconds)
+        if self.timeout_seconds <= 0:
+            raise ValueError("persistent HTTP timeout must be positive")
+        self._connection: Optional[HTTPConnection] = None
+        self._lock = threading.Lock()
+        self.logical_requests = 0
+        self.transport_attempts = 0
+        self.connections_opened = 0
+        self.reused_requests = 0
+        self.reconnects = 0
+
+    def _open(self, timeout_seconds: float) -> HTTPConnection:
+        connection_type = HTTPSConnection if self.scheme == "https" else HTTPConnection
+        connection = connection_type(
+            self.host,
+            port=self.port,
+            timeout=float(timeout_seconds),
+        )
+        self.connections_opened += 1
+        self._connection = connection
+        return connection
+
+    def _close_unlocked(self) -> None:
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
+
+    def close(self) -> None:
+        with self._lock:
+            self._close_unlocked()
+
+    def post_json(
+        self,
+        path: str,
+        body: bytes,
+        headers: Mapping[str, str],
+        timeout_seconds: Optional[float] = None,
+    ) -> Tuple[Dict[str, Any], int, bool, int]:
+        timeout = (
+            self.timeout_seconds
+            if timeout_seconds is None
+            else float(timeout_seconds)
+        )
+        if timeout <= 0:
+            raise ValueError("request timeout must be positive")
+        request_path = "{}{}".format(self.base_path, path)
+        deadline = time.monotonic() + timeout
+        request_headers = {str(name): str(value) for name, value in headers.items()}
+        request_headers["Content-Length"] = str(len(body))
+        request_headers.setdefault("Connection", "keep-alive")
+
+        with self._lock:
+            self.logical_requests += 1
+            last_error: Optional[BaseException] = None
+            for attempt in (1, 2):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                connection = self._connection
+                reused = bool(connection is not None and connection.sock is not None)
+                if not reused:
+                    connection = self._open(remaining)
+                else:
+                    connection.timeout = remaining
+                    assert connection.sock is not None
+                    connection.sock.settimeout(remaining)
+                self.transport_attempts += 1
+                try:
+                    connection.request(
+                        "POST",
+                        request_path,
+                        body=body,
+                        headers=request_headers,
+                    )
+                    response = connection.getresponse()
+                    response_body = response.read()
+                    status = int(response.status)
+                    reason = str(response.reason or "")
+                    if response.will_close:
+                        self._close_unlocked()
+                    if not 200 <= status < 300:
+                        detail = response_body.decode("utf-8", errors="replace")
+                        raise RuntimeError(
+                            "POST {} failed with HTTP {} {}: {}".format(
+                                request_path, status, reason, detail
+                            )
+                        )
+                    try:
+                        value = json.loads(response_body.decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                        raise ValueError(
+                            "POST {} returned invalid JSON".format(request_path)
+                        ) from exc
+                    if not isinstance(value, dict):
+                        raise ValueError(
+                            "POST {} did not return an object".format(request_path)
+                        )
+                    if reused:
+                        self.reused_requests += 1
+                    return value, len(response_body), reused, attempt
+                except RuntimeError:
+                    # A complete HTTP error response is authoritative; retrying
+                    # it would only add latency and load.
+                    raise
+                except ValueError:
+                    # The response was fully received but violated the JSON
+                    # contract. Reconnecting cannot make that response valid.
+                    raise
+                except (HTTPException, OSError, TimeoutError) as exc:
+                    last_error = exc
+                    self._close_unlocked()
+                    if attempt == 1 and time.monotonic() < deadline:
+                        # The server may have committed before the socket broke.
+                        # The unchanged Idempotency-Key makes this retry safe.
+                        self.reconnects += 1
+                        continue
+                    break
+            if last_error is None:
+                raise TimeoutError("persistent HTTP request exceeded its deadline")
+            raise RuntimeError(
+                "persistent HTTP request failed after reconnect: {}: {}".format(
+                    type(last_error).__name__, last_error
+                )
+            ) from last_error
+
+    def snapshot(self) -> Dict[str, int]:
+        with self._lock:
+            return {
+                "logical_requests": self.logical_requests,
+                "transport_attempts": self.transport_attempts,
+                "connections_opened": self.connections_opened,
+                "reused_requests": self.reused_requests,
+                "reconnects": self.reconnects,
+            }
+
+
+class _PartitionConnectionPool:
+    """Keep independent persistent connections for concurrent partitions."""
+
+    def __init__(
+        self,
+        base_url: str,
+        timeout_seconds: float,
+        connection_count: int = 4,
+    ) -> None:
+        count = int(connection_count)
+        if count < 4:
+            raise ValueError("PEMS08 stream requires at least four HTTP connections")
+        self._connections = [
+            _PersistentJsonConnection(base_url, timeout_seconds)
+            for _ in range(count)
+        ]
+
+    @property
+    def connection_count(self) -> int:
+        return len(self._connections)
+
+    def for_partition(self, partition_id: int) -> _PersistentJsonConnection:
+        return self._connections[int(partition_id) % len(self._connections)]
+
+    def close(self) -> None:
+        for connection in self._connections:
+            connection.close()
+
+    def snapshot(self) -> Dict[str, Any]:
+        values = [connection.snapshot() for connection in self._connections]
+        return {
+            "connection_count": len(values),
+            "connections": values,
+            "totals": {
+                name: sum(value[name] for value in values)
+                for name in (
+                    "logical_requests",
+                    "transport_attempts",
+                    "connections_opened",
+                    "reused_requests",
+                    "reconnects",
+                )
+            },
+        }
 
 
 def parse_args() -> argparse.Namespace:
@@ -116,38 +319,35 @@ def _get_json(base_url: str, path: str, timeout: float) -> Dict[str, Any]:
 
 
 def _post_compact(
-    edge_url: str,
+    connection: _PersistentJsonConnection,
     envelope: Mapping[str, Any],
     body: bytes,
     timeout: float,
     sample_t0: float,
 ) -> Dict[str, Any]:
     event_id = str(envelope["id"])
-    request = Request(
-        edge_url.rstrip("/") + DECIDE_PATH,
-        data=body,
-        headers={
+    headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
             "Idempotency-Key": event_id,
             "X-Trace-Id": "trace_" + event_id,
             "Prefer": "return=minimal",
-        },
-        method="POST",
-    )
+        }
     dispatch_ms = (time.perf_counter() - sample_t0) * 1000.0
     request_started = time.perf_counter()
     try:
-        with urlopen(request, timeout=timeout) as response:
-            response_body = response.read()
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
+        value, response_bytes, connection_reused, transport_attempts = (
+            connection.post_json(
+                DECIDE_PATH,
+                body,
+                headers,
+                timeout_seconds=timeout,
+            )
+        )
+    except (RuntimeError, TimeoutError, ValueError) as exc:
         raise RuntimeError(
-            "POST {} failed with HTTP {}: {}".format(event_id, exc.code, detail)
+            "POST {} failed: {}".format(event_id, exc)
         ) from exc
-    value = json.loads(response_body.decode("utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError("edge response must be an object")
     return {
         "event_id": event_id,
         "dispatch_ms": round(dispatch_ms, 6),
@@ -156,7 +356,9 @@ def _post_compact(
         ),
         "response_at_ms": round((time.perf_counter() - sample_t0) * 1000.0, 6),
         "request_bytes": len(body),
-        "response_bytes": len(response_body),
+        "response_bytes": response_bytes,
+        "connection_reused": connection_reused,
+        "transport_attempts": transport_attempts,
         "response": value,
     }
 
@@ -276,6 +478,62 @@ def _summary(values: Iterable[float]) -> Dict[str, Any]:
     }
 
 
+def _under_threshold_sla(
+    values: Iterable[float],
+    expected_count: int,
+    threshold_ms: float = 200.0,
+) -> Dict[str, Any]:
+    """Report both the complete-set mean gate and population success rate."""
+    data = [float(value) for value in values]
+    expected = int(expected_count)
+    if expected < 0:
+        raise ValueError("expected_count must not be negative")
+    complete = bool(expected > 0 and len(data) == expected)
+    return {
+        "complete": complete,
+        "mean_under_threshold": bool(
+            complete and statistics.fmean(data) <= float(threshold_ms)
+        ),
+        "under_threshold_rate": round(
+            sum(value <= float(threshold_ms) for value in data) / max(1, expected),
+            6,
+        ),
+    }
+
+
+def _latency_sla_report(
+    sample_local: Sequence[float],
+    sample_business: Sequence[float],
+    sample_final: Sequence[float],
+    event_local: Sequence[float],
+    event_business: Sequence[float],
+    event_final: Sequence[float],
+    expected_sample_count: int,
+    expected_event_count: int,
+    threshold_ms: float = 200.0,
+) -> Dict[str, Any]:
+    """Build fail-closed sample and event SLA fields from fixed populations."""
+    report: Dict[str, Any] = {"threshold_ms": float(threshold_ms)}
+    scopes = (
+        ("sample_local", sample_local, expected_sample_count),
+        ("sample_business", sample_business, expected_sample_count),
+        ("sample_global_authoritative_final", sample_final, expected_sample_count),
+        ("event_local", event_local, expected_event_count),
+        ("event_business", event_business, expected_event_count),
+        ("event_global_authoritative_final", event_final, expected_event_count),
+    )
+    for prefix, values, expected_count in scopes:
+        status = _under_threshold_sla(values, expected_count, threshold_ms)
+        report["{}_complete".format(prefix)] = status["complete"]
+        report["{}_mean_under_200ms".format(prefix)] = status[
+            "mean_under_threshold"
+        ]
+        report["{}_under_200ms_rate".format(prefix)] = status[
+            "under_threshold_rate"
+        ]
+    return report
+
+
 def _counts(values: Iterable[Any]) -> Dict[str, int]:
     return dict(sorted(Counter(str(value) for value in values).items()))
 
@@ -320,8 +578,20 @@ def _record_event(
         dict(model_uncertainty) if isinstance(model_uncertainty, dict) else {}
     )
     local_auth = _action_authorization(local)
-    deferred = local_auth.get("deferred_action_types", [])
-    deferred = list(deferred) if isinstance(deferred, list) else []
+    compact_auth = _action_authorization(compact_final)
+    # Fail closed if the lifecycle row is missing or incomplete: a compact
+    # provisional response can already carry deferred high-consequence actions.
+    # Either source saying "deferred" means business completion must wait for
+    # an authoritative final instead of silently dropping the absent review
+    # from the SLA.
+    deferred = []
+    for authorization in (local_auth, compact_auth):
+        values = authorization.get("deferred_action_types", [])
+        if isinstance(values, list):
+            for value in values:
+                action_type = str(value)
+                if action_type and action_type not in deferred:
+                    deferred.append(action_type)
     completed_at_ms = review.get("completed_at_ms") if authoritative else None
     final_exact_ms: Optional[float]
     if not authoritative:
@@ -333,8 +603,7 @@ def _record_event(
             final_exact_ms = review_observed_at_ms
     response_at_ms = float(post["response_at_ms"])
     final_status = str(compact_final.get("status", ""))
-    final_auth = _action_authorization(compact_final)
-    cloud_confirmed_in_response = bool(final_auth.get("cloud_confirmed", False))
+    cloud_confirmed_in_response = bool(compact_auth.get("cloud_confirmed", False))
     if deferred and not (final_status == "final" and cloud_confirmed_in_response):
         business_completion_ms = (
             max(response_at_ms, float(final_exact_ms))
@@ -511,6 +780,8 @@ def _record_event(
         ),
         "ingress_request_bytes": int(post["request_bytes"]),
         "ingress_response_bytes": int(post["response_bytes"]),
+        "ingress_connection_reused": bool(post.get("connection_reused", False)),
+        "ingress_transport_attempts": int(post.get("transport_attempts", 1) or 1),
         "selected_cloud_request_bytes": int(
             data_plane.get("selected_request_bytes", 0) or 0
         ),
@@ -638,7 +909,8 @@ def _submit_sample(
     traffic_event_from_output: Any,
     sample_id: int,
     experiment_id: str,
-    edge_url: str,
+    edge_connections: _PartitionConnectionPool,
+    event_executor: ThreadPoolExecutor,
     request_timeout_seconds: float,
     aggregation_timeout_ms: int,
 ) -> Dict[str, Any]:
@@ -658,31 +930,31 @@ def _submit_sample(
 
     posts: Dict[str, Dict[str, Any]] = {}
     errors: List[Dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=len(prepared)) as executor:
-        futures = {
-            executor.submit(
-                _post_compact,
-                edge_url,
-                envelope,
-                body,
-                request_timeout_seconds,
-                sample_t0,
-            ): (native, envelope)
-            for native, envelope, body in prepared
-        }
-        for future in as_completed(futures):
-            native, envelope = futures[future]
-            try:
-                posts[str(envelope["id"])] = future.result()
-            except Exception as exc:  # noqa: BLE001
-                errors.append(
-                    {
-                        "event_id": str(envelope["id"]),
-                        "partition_id": int(native["partition_id"]),
-                        "error": "{}: {}".format(type(exc).__name__, exc),
-                    }
-                )
-    partition_count = len(prepared)
+    futures = {
+        event_executor.submit(
+            _post_compact,
+            edge_connections.for_partition(int(native["partition_id"])),
+            envelope,
+            body,
+            request_timeout_seconds,
+            sample_t0,
+        ): (native, envelope)
+        for native, envelope, body in prepared
+    }
+    for future in as_completed(futures):
+        native, envelope = futures[future]
+        try:
+            posts[str(envelope["id"])] = future.result()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(
+                {
+                    "event_id": str(envelope["id"]),
+                    "partition_id": int(native["partition_id"]),
+                    "error": "{}: {}".format(type(exc).__name__, exc),
+                }
+            )
+    produced_partition_count = len(prepared)
+    partition_count = len(runtime.partitions)
     local_group_ms = (
         max(float(value["response_at_ms"]) for value in posts.values())
         if len(posts) == partition_count
@@ -699,6 +971,7 @@ def _submit_sample(
         "posts": posts,
         "errors": errors,
         "partition_count": partition_count,
+        "produced_partition_count": produced_partition_count,
         "local_actionable_ms": local_group_ms,
     }
 
@@ -843,6 +1116,8 @@ def _run_sample(
     experiment_id: str,
     edge_url: str,
     cloud_url: str,
+    edge_connections: _PartitionConnectionPool,
+    event_executor: ThreadPoolExecutor,
     request_timeout_seconds: float,
     final_wait_seconds: float,
     poll_interval_seconds: float,
@@ -853,7 +1128,8 @@ def _run_sample(
         traffic_event_from_output,
         sample_id,
         experiment_id,
-        edge_url,
+        edge_connections,
+        event_executor,
         request_timeout_seconds,
         aggregation_timeout_ms,
     )
@@ -936,57 +1212,78 @@ def main() -> None:
             raise RuntimeError(
                 "Edge-Qwen must be loaded in selective mode with its gain profile"
             )
-    warmups = []
-    for index, sample_id in enumerate(warmup_ids):
-        warmups.append(
-            _run_sample(
+    event_parallelism = max(4, len(runtime.partitions))
+    edge_connections = _PartitionConnectionPool(
+        args.edge_url,
+        args.request_timeout_seconds,
+        connection_count=event_parallelism,
+    )
+    event_executor = ThreadPoolExecutor(
+        max_workers=event_parallelism,
+        thread_name_prefix="pems08-edge",
+    )
+    try:
+        # Warmups and the measured contiguous stream share both workers and
+        # sockets. This models resident edge senders instead of rebuilding a
+        # thread pool and four TCP connections for every five-minute window.
+        warmups = []
+        for index, sample_id in enumerate(warmup_ids):
+            warmups.append(
+                _run_sample(
+                    runtime,
+                    traffic_event_from_output,
+                    sample_id,
+                    "{}-warmup-{}".format(experiment_id, index),
+                    args.edge_url,
+                    args.cloud_url,
+                    edge_connections,
+                    event_executor,
+                    args.request_timeout_seconds,
+                    args.final_wait_seconds,
+                    args.poll_interval_seconds,
+                    args.aggregation_timeout_ms,
+                )
+            )
+
+        measured_initial_edge_health = _get_json(
+            args.edge_url, "/health", args.request_timeout_seconds
+        )
+        measured_initial_cloud_health = _get_json(
+            args.cloud_url, "/health", args.request_timeout_seconds
+        )
+        initial_edge_metrics = _get_json(
+            args.edge_url, METRICS_PATH, args.request_timeout_seconds
+        )
+        initial_cloud_metrics = _get_json(
+            args.cloud_url, METRICS_PATH, args.request_timeout_seconds
+        )
+        measured_started = time.perf_counter()
+        submissions = []
+        for index, sample_id in enumerate(sample_ids, start=1):
+            submission = _submit_sample(
                 runtime,
                 traffic_event_from_output,
                 sample_id,
-                "{}-warmup-{}".format(experiment_id, index),
-                args.edge_url,
-                args.cloud_url,
+                experiment_id,
+                edge_connections,
+                event_executor,
                 args.request_timeout_seconds,
-                args.final_wait_seconds,
-                args.poll_interval_seconds,
                 args.aggregation_timeout_ms,
             )
-        )
-
-    measured_initial_edge_health = _get_json(
-        args.edge_url, "/health", args.request_timeout_seconds
-    )
-    measured_initial_cloud_health = _get_json(
-        args.cloud_url, "/health", args.request_timeout_seconds
-    )
-    initial_edge_metrics = _get_json(
-        args.edge_url, METRICS_PATH, args.request_timeout_seconds
-    )
-    initial_cloud_metrics = _get_json(
-        args.cloud_url, METRICS_PATH, args.request_timeout_seconds
-    )
-    measured_started = time.perf_counter()
-    submissions = []
-    for index, sample_id in enumerate(sample_ids, start=1):
-        submission = _submit_sample(
-            runtime,
-            traffic_event_from_output,
-            sample_id,
-            experiment_id,
-            args.edge_url,
-            args.request_timeout_seconds,
-            args.aggregation_timeout_ms,
-        )
-        submissions.append(submission)
-        print(
-            "[{}/{}] submitted sample={} local={}ms".format(
-                index,
-                len(sample_ids),
-                sample_id,
-                submission.get("local_actionable_ms"),
-            ),
-            flush=True,
-        )
+            submissions.append(submission)
+            print(
+                "[{}/{}] submitted sample={} local={}ms".format(
+                    index,
+                    len(sample_ids),
+                    sample_id,
+                    submission.get("local_actionable_ms"),
+                ),
+                flush=True,
+            )
+        edge_connection_pool = edge_connections.snapshot()
+    finally:
+        event_executor.shutdown(wait=True)
+        edge_connections.close()
     measured_event_ids = [
         str(envelope["id"])
         for submission in submissions
@@ -1043,6 +1340,34 @@ def main() -> None:
         for sample in samples
         if sample.get("global_authoritative_final_ms") is not None
     ]
+    event_local = [
+        float(row["response_at_ms"])
+        for row in rows
+        if row.get("response_at_ms") is not None
+    ]
+    event_business = [
+        float(row["business_completion_ms"])
+        for row in rows
+        if row.get("business_completion_ms") is not None
+    ]
+    event_final = [
+        float(row["global_final_ms"])
+        for row in rows
+        if row.get("global_final_ms") is not None
+    ]
+    expected_event_count = sum(
+        int(submission["partition_count"]) for submission in submissions
+    )
+    sla = _latency_sla_report(
+        sample_local,
+        sample_business,
+        sample_final,
+        event_local,
+        event_business,
+        event_final,
+        expected_sample_count=len(samples),
+        expected_event_count=expected_event_count,
+    )
     qwen_rows = [row for row in rows if row["edge_llm_selected"]]
     qwen_accepted_rows = [row for row in rows if row["edge_llm_accepted"]]
     raw_window_bytes = int(170 * 3 * 12 * 4)
@@ -1129,7 +1454,8 @@ def main() -> None:
             "sample_aggregation": "maximum of the four METIS partition events",
             "stream_replay": (
                 "contiguous windows are submitted in order; the next window starts "
-                "after local responses without waiting for prior async cloud finality"
+                "after local responses without waiting for prior async cloud finality; "
+                "four partition workers and HTTP/1.1 connections stay resident"
             ),
             "excluded": [
                 "NPZ/model/config cold load",
@@ -1142,6 +1468,11 @@ def main() -> None:
             "python": sys.version.split()[0],
             "edge_url": args.edge_url,
             "cloud_url": args.cloud_url,
+            "edge_decide_transport": {
+                "protocol": "HTTP/1.1",
+                "parallel_workers": event_parallelism,
+                "connection_pool": edge_connection_pool,
+            },
         },
         "assets": {
             "data_path": str(data_path),
@@ -1260,6 +1591,9 @@ def main() -> None:
             "sample_local_actionable": _summary(sample_local),
             "sample_business_completion": _summary(sample_business),
             "sample_global_authoritative_final": _summary(sample_final),
+            "event_local_actionable": _summary(event_local),
+            "event_business_completion": _summary(event_business),
+            "event_global_authoritative_final": _summary(event_final),
             "sample_perception": _summary(
                 sample["perception_observed_ms"] for sample in samples
             ),
@@ -1286,22 +1620,21 @@ def main() -> None:
                 if row["edge_llm_latency_ms"] > 0.0
             ),
         },
-        "sla": {
-            "sample_business_mean_under_200ms": bool(
-                sample_business and statistics.fmean(sample_business) < 200.0
-            ),
-            "sample_business_under_200ms_rate": round(
-                sum(value < 200.0 for value in sample_business)
-                / max(1, len(samples)),
-                6,
-            ),
-            "sample_local_under_200ms_rate": round(
-                sum(value < 200.0 for value in sample_local) / max(1, len(samples)),
-                6,
-            ),
-        },
+        "sla": sla,
         "communication": {
             "nominal_raw_input_bytes_per_sample": raw_window_bytes,
+            "edge_ingress_persistent_connection_reused_events": sum(
+                bool(row.get("ingress_connection_reused")) for row in rows
+            ),
+            "edge_ingress_persistent_connection_reuse_rate": round(
+                sum(bool(row.get("ingress_connection_reused")) for row in rows)
+                / max(1, len(rows)),
+                6,
+            ),
+            "edge_ingress_transport_retry_count": sum(
+                max(0, int(row.get("ingress_transport_attempts", 1) or 1) - 1)
+                for row in rows
+            ),
             "edge_ingress_request_bytes_per_sample": _summary(
                 sum(row["ingress_request_bytes"] for row in sample["events"])
                 for sample in samples

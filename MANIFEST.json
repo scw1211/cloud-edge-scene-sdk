@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.13.1",
-  "built_at_utc": "2026-08-05T10:19:02.879140+00:00",
+  "built_at_utc": "2026-08-05T11:50:24.955973+00:00",
   "python_requires": ">=3.8",
   "included_files": [
     {
@@ -130,8 +130,8 @@
     },
     {
       "path": "cloud_edge_framework/http_api.py",
-      "bytes": 5105,
-      "sha256": "daf9b97c35ad57dcf8fa27280e2f615df4c561a99309945ebd1fa2bc114a7181"
+      "bytes": 7553,
+      "sha256": "7dca540c0c2d750a746caa8267be456179370e2caad3d8da17f5e6357b644d7e"
     },
     {
       "path": "cloud_edge_framework/ingest_client.py",
@@ -185,8 +185,8 @@
     },
     {
       "path": "cloud_edge_framework/reliability.py",
-      "bytes": 60833,
-      "sha256": "acd7d9a40ce293611df6dc263464c03decc8c57b58134adbd2d0a61536226aa1"
+      "bytes": 64520,
+      "sha256": "3cf9ff453f1e2969cdab985a29589e2f37f28212b232096f18011b3738345d45"
     },
     {
       "path": "cloud_edge_framework/reliable_transport.py",
@@ -530,8 +530,8 @@
     },
     {
       "path": "scenes/freeway_traffic/README.md",
-      "bytes": 15319,
-      "sha256": "5350aaab1c0ba18201356a7dfdd4b20e874e35c1f066c84411f90282c3309c54"
+      "bytes": 16611,
+      "sha256": "0417ddcdad6e02e69e620350380ca8083b2e8b2864f866117fd37e3d8e2a287a"
     },
     {
       "path": "scenes/freeway_traffic/asset_catalog.json",
@@ -700,8 +700,8 @@
     },
     {
       "path": "scenes/freeway_traffic/benchmark_real_current_state_e2e.py",
-      "bytes": 57009,
-      "sha256": "29a43d29bcee978e994bda1e663e7fc6dc306d3cc86ca1c8cdb0fe7820655b68"
+      "bytes": 70730,
+      "sha256": "34e0b66f174bfe189098d327cd1839c0e3b23aa2f257b59be17cf69da90fa37c"
     },
     {
       "path": "scenes/freeway_traffic/configurations/PEMS08_astgcn.conf",
@@ -750,8 +750,8 @@
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/edge_service.json",
-      "bytes": 1760,
-      "sha256": "f9ab572fffd49b28578d6d8706810b81b916de314488f91fca225fce929d7f6d"
+      "bytes": 1761,
+      "sha256": "dd15c052fda2badcf017710ea7f5839953365b6b028645f7b46ca917234d4913"
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/edge_service_qwen9b.json",
@@ -907,6 +907,11 @@
       "path": "scenes/freeway_traffic/tests/test_current_state_qwen_contract.py",
       "bytes": 27036,
       "sha256": "4d43a025b7ce160eae86266f4b37de0a0219825c65ac007e33c6d9d671f5d5c7"
+    },
+    {
+      "path": "scenes/freeway_traffic/tests/test_full_deployment_config.py",
+      "bytes": 1240,
+      "sha256": "89652db4356e60912a36cba8db4fd0df9d8afde83f7be8dfcd133d5eb9abf8e5"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_traffic_semantics_and_edge_llm.py",
@@ -1695,8 +1700,8 @@
     },
     {
       "path": "tests/test_pems08_e2e_benchmark.py",
-      "bytes": 5381,
-      "sha256": "76665ffa3aea4ce438c8dc38aaa7768694630867bc3748265d282c0e6ed7494c"
+      "bytes": 21923,
+      "sha256": "7997435f98123eb93bb1c9b5ff917813520ee7c67a1a2b524b87013f2f5f1769"
     },
     {
       "path": "tests/test_protocol_compatibility.py",
@@ -1705,8 +1710,8 @@
     },
     {
       "path": "tests/test_reliability_semantics.py",
-      "bytes": 13738,
-      "sha256": "5e24e661d77ad6c681c22c8bf04ba72ae8b4d8554a9cdc92cc42f2ba7e24055e"
+      "bytes": 22609,
+      "sha256": "25dec00f6265440cdcbdb569da18df4684085cd166a4f19eb58e9c968bf24882"
     },
     {
       "path": "tests/test_review_tracking_metrics.py",
