@@ -1086,6 +1086,15 @@ class EdgeRuntime:
         edge_llm_disagreement = bool(
             local.metadata.get("edge_llm_model_disagreement", False)
         )
+        local_model_uncertainty = local.metadata.get("model_uncertainty", {})
+        local_model_uncertainty = (
+            dict(local_model_uncertainty)
+            if isinstance(local_model_uncertainty, dict)
+            else {}
+        )
+        decision_uncertain = bool(
+            local_model_uncertainty.get("requires_review", False)
+        )
         cloud_review_requested = bool(
             event.metadata.get("cloud_review_requested", False)
         )
@@ -1147,6 +1156,7 @@ class EdgeRuntime:
             model_disagreement=(
                 model_disagreement or edge_llm_escalation or edge_llm_disagreement
             ),
+            decision_uncertain=decision_uncertain,
             cloud_review_requested=cloud_review_requested,
             sla_probe_requested=sla_probe_requested,
             upload_bytes=planned_upload_bytes,

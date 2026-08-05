@@ -1255,6 +1255,54 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
                 outbox.close()
                 registry.close()
 
+    def test_local_model_uncertainty_reaches_runtime_scheduler(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="local-model-uncertainty-") as directory:
+            root = Path(directory)
+            plugin = _AggregationPlugin(
+                aggregation_enabled=False,
+                requires_cloud_confirmation=False,
+                risk_level="low",
+            )
+            original_edge_decide = plugin.edge_decide
+
+            def uncertain_edge_decide(event):
+                decision = original_edge_decide(event)
+                return replace(
+                    decision,
+                    metadata={
+                        **decision.metadata,
+                        "model_uncertainty": {
+                            "requires_review": True,
+                            "student_confidence": 0.40,
+                            "student_low_confidence": True,
+                        },
+                    },
+                )
+
+            plugin.edge_decide = uncertain_edge_decide
+            registry = SceneRegistry([plugin])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            cloud = _DeadlineAwareDecisionCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                )
+                result = runtime.process(_payload(), network=_network())
+
+                self.assertEqual(result["schedule"]["route"], "cloud_sync")
+                self.assertTrue(result["schedule"]["waits_for_cloud"])
+                self.assertTrue(result["schedule"]["uncertain"])
+                self.assertIn("uncertain local result", result["schedule"]["reason"])
+                self.assertEqual(cloud.calls, 1)
+            finally:
+                tracker.close()
+                outbox.close()
+                registry.close()
+
     def test_late_non_aggregation_result_fails_closed_to_outbox(self) -> None:
         with tempfile.TemporaryDirectory(prefix="sync-decision-late-") as directory:
             root = Path(directory)

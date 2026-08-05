@@ -17,7 +17,7 @@
       "slot": "B",
       "decision": "congestion_warning",
       "candidate_action_type": "traffic_advisory",
-      "min_risk_level": "medium",
+      "min_risk_level": "low",
       "max_risk_level": "severe",
       "requires_cloud": false,
       "safe_offline": true

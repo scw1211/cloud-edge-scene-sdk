@@ -1,7 +1,7 @@
 {
   "action_mapping": {
     "path": "action_mapping.json",
-    "sha256": "8c842896d91ef92e19c070c300f914bd858cc615406199c7abad3a81d07b28ba"
+    "sha256": "61595d62e7ac0dfbdcf98187dbb2e33dae84bbd32c67fbad492216764ec260e0"
   },
   "adapter_artifact": {
     "bytes": 25584224,
@@ -203,5 +203,5 @@
     "test_set_used_for_training": false,
     "train_dataset_id": "current-state-future-v2-train-3600-events"
   },
-  "version": "2.0.1"
+  "version": "2.0.2"
 }

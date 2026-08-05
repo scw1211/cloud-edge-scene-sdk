@@ -4,6 +4,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -12,8 +13,11 @@ for import_root in (REPOSITORY_ROOT, TRAFFIC_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from cloud_edge_framework.contracts import build_decision
+from cloud_edge_framework.contracts import Action, build_decision
 from cloud_edge_framework.event_envelope import SceneEventEnvelope
+from edge_llm_factory.adapter_package import validate_adapter_package
+from edge_llm_factory.contracts import read_json_object
+from edge_llm_factory.runtime import ActionDecoder
 from freeway_traffic_full.edge_llm import TrafficEdgeLLMController
 from freeway_traffic_full.plugin_impl import TrafficPlugin
 from traffic_system.build_current_state_qwen_dataset import (
@@ -27,6 +31,115 @@ from traffic_system.ultracompact_codec import (
 
 
 class CurrentStateQwenContractTests(unittest.TestCase):
+    @staticmethod
+    def _current_state_event():
+        raw = {
+            "specversion": "1.0",
+            "id": "current-state-qwen-advisory-test",
+            "source": "urn:edge:test",
+            "type": "com.cloudedge.traffic.edge-event.v1",
+            "scene": "freeway_traffic_management",
+            "edgeid": "edge_node_0",
+            "subject": "125",
+            "time": "2026-08-03T00:00:00Z",
+            "datacontenttype": "application/json",
+            "dataschema": "https://cloud-edge.local/schemas/scenes/traffic-edge-event-v1.json",
+            "data": {
+                "sample_id": 125,
+                "sample_split": "test",
+                "dataset": "PEMS08",
+                "region_id": "region_0",
+                "prediction_horizon_minutes": 0,
+                "managed_node_ids": [1],
+                "region_summary": {
+                    "region_risk_level": "low",
+                    "region_risk_score": 0.2,
+                    "region_risk_confidence": 0.87,
+                    "region_risk_probabilities": {
+                        "low": 0.87,
+                        "medium": 0.1,
+                        "high": 0.02,
+                        "severe": 0.01,
+                    },
+                    "node_risk_counts": {
+                        "low": 1,
+                        "medium": 0,
+                        "high": 0,
+                        "severe": 0,
+                    },
+                },
+                "top_k_risk_nodes": [],
+                "control_capabilities": {},
+                "upload_required": False,
+                "deadline_ms": 500,
+                "preprocessing_latency_ms": 1,
+                "inference_latency_ms": 2,
+                "perception_mode": "current_state",
+                "output_type": "current_state_risk",
+            },
+        }
+        event = TrafficPlugin().normalize(SceneEventEnvelope.from_dict(raw))
+        return replace(
+            event,
+            metadata={
+                **event.metadata,
+                "edge_runtime_network_available": True,
+                "edge_runtime_network_status": "normal",
+            },
+        )
+
+    @staticmethod
+    def _advisory():
+        return Action(
+            action_type="traffic_advisory",
+            target_ids=["traffic_node:1"],
+            resource_ids=["traffic_node:1"],
+            parameters={"strategy": "issue_congestion_warning"},
+            reason="Student recommends an early congestion warning.",
+            priority=30,
+        )
+
+    @staticmethod
+    def _decoder_controller():
+        base = read_json_object(
+            TRAFFIC_ROOT / "assets" / "edge_llm" / "base_manifest.json"
+        )
+        mapping = read_json_object(
+            TRAFFIC_ROOT
+            / "assets"
+            / "edge_llm"
+            / "adapter_package_current_state_v2"
+            / "action_mapping.json"
+        )
+        decoder = ActionDecoder(base, mapping)
+
+        class DecoderBackedModel:
+            validation = {"metrics": {"decision_accuracy": 0.6613}}
+
+            @staticmethod
+            def decide(_prompt, event, network_available):
+                return {
+                    "inference": {
+                        "slot": "B",
+                        "token": "B",
+                        "latency_ms": 1.0,
+                        "prompt_tokens": 16,
+                        "output_tokens": 1,
+                    },
+                    "decision": decoder.decode("B", event, network_available),
+                }
+
+        controller = TrafficEdgeLLMController(
+            Path("release.json"), Path("runtime.json"), mode="primary"
+        )
+        controller.context_encoder = "freeway-routing-context-decimal@v2"
+        controller.active = SimpleNamespace(
+            release_id="current-state-test",
+            revision=1,
+            model=DecoderBackedModel(),
+        )
+        return controller
+
     def test_routing_reasons_do_not_read_future_correctness(self) -> None:
         reasons = routing_reasons(
             student_decision="no_action",
@@ -228,6 +341,129 @@ class CurrentStateQwenContractTests(unittest.TestCase):
         selected, reason = controller._selection(event, student)
         self.assertFalse(selected)
         self.assertEqual(reason, "edge_qwen_expected_gain_below_threshold")
+
+    def test_future_warning_can_use_only_student_authorized_advisory(self) -> None:
+        event = self._current_state_event()
+        student = build_decision(
+            event=event,
+            decision="congestion_warning",
+            actions=[self._advisory()],
+            confidence=0.371,
+            reason="test Student warning",
+            source="test_student",
+            policy_version="test",
+        )
+
+        decision = self._decoder_controller().decide(event, student, "test")
+
+        self.assertEqual(decision.decision, "congestion_warning")
+        self.assertEqual(
+            [action.action_type for action in decision.actions],
+            ["traffic_advisory"],
+        )
+        self.assertEqual(decision.metadata["edge_decision_path"], "edge_qwen")
+        self.assertFalse(decision.metadata["edge_llm_safety_fallback"])
+        self.assertTrue(
+            decision.metadata["edge_llm_student_advisory_whitelisted"]
+        )
+
+    def test_future_warning_without_student_advisory_still_falls_back(self) -> None:
+        event = self._current_state_event()
+        student = build_decision(
+            event=event,
+            decision="no_action",
+            actions=[],
+            confidence=0.7,
+            reason="test Student abstains",
+            source="test_student",
+            policy_version="test",
+        )
+
+        decision = self._decoder_controller().decide(event, student, "test")
+
+        self.assertEqual(decision.decision, "no_action")
+        self.assertEqual(
+            decision.metadata["edge_llm_fallback_reason"],
+            "authorized_candidate_action_missing",
+        )
+        self.assertEqual(
+            decision.metadata["edge_decision_path"], "student_safety_fallback"
+        )
+
+    def test_decode_whitelist_never_injects_student_control_actions(self) -> None:
+        event = self._current_state_event()
+        controls = [
+            Action(
+                action_type=name,
+                target_ids=["traffic_node:1"],
+                resource_ids=["traffic_node:1"],
+                parameters={},
+                reason="must remain outside the decoder whitelist",
+                priority=90,
+            )
+            for name in ("variable_speed_limit", "ramp_metering", "reroute")
+        ]
+        student = build_decision(
+            event=event,
+            decision="reroute",
+            actions=[self._advisory(), *controls],
+            confidence=0.5,
+            reason="test mixed Student actions",
+            source="test_student",
+            policy_version="test",
+        )
+        controller = self._decoder_controller()
+
+        decoder_event, injected = controller._decoder_event(event, student)
+
+        self.assertTrue(injected)
+        self.assertEqual(
+            {value["action_type"] for value in decoder_event["candidate_actions"]},
+            {"traffic_advisory"},
+        )
+        astgcn = replace(
+            event,
+            scene_payload={
+                **event.scene_payload,
+                "perception_mode": "astgcn",
+                "output_type": "forecast_and_risk",
+            },
+        )
+        legacy_event, legacy_injected = controller._decoder_event(astgcn, student)
+        self.assertFalse(legacy_injected)
+        self.assertEqual(legacy_event["candidate_actions"], [])
+
+    def test_current_state_action_map_changes_only_proactive_advisory(self) -> None:
+        current = read_json_object(
+            TRAFFIC_ROOT
+            / "assets"
+            / "edge_llm"
+            / "adapter_package_current_state_v2"
+            / "action_mapping.json"
+        )
+        legacy = read_json_object(
+            TRAFFIC_ROOT
+            / "assets"
+            / "edge_llm"
+            / "adapter_package"
+            / "action_mapping.json"
+        )
+        current_slots = {row["slot"]: row for row in current["entries"]}
+        legacy_slots = {row["slot"]: row for row in legacy["entries"]}
+
+        self.assertEqual(current_slots["B"]["min_risk_level"], "low")
+        self.assertEqual(legacy_slots["B"]["min_risk_level"], "medium")
+        for slot in ("C", "D", "E", "F"):
+            self.assertEqual(current_slots[slot], legacy_slots[slot])
+
+    def test_current_state_adapter_package_remains_release_valid(self) -> None:
+        result = validate_adapter_package(
+            TRAFFIC_ROOT / "assets" / "edge_llm" / "adapter_package_current_state_v2",
+            TRAFFIC_ROOT / "assets" / "edge_llm" / "base_manifest.json",
+            require_gates=True,
+        )
+        self.assertEqual(result["status"], "valid")
+        self.assertEqual(result["version"], "2.0.2")
 
 
 if __name__ == "__main__":

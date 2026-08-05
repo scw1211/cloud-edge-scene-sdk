@@ -1,7 +1,7 @@
 # freeway-traffic-current-state-qwen35-v2
 
 场景：`freeway_traffic_management`
-版本：`2.0.1`
+版本：`2.0.2`
 绑定基座：`qwen35-0.8b-text@2fc06364`
 
 此目录是自动构建的场景 LoRA 发布包。加载前必须执行：

@@ -95,6 +95,7 @@ class CollaborationScheduler:
         selective_defer: bool = False,
         defer_recommended: bool = False,
         routing_risk_level: Optional[str] = None,
+        decision_uncertain: bool = False,
     ) -> ScheduleDecision:
         upload_bytes = max(0, int(upload_bytes))
         transfer_ms = (
@@ -136,6 +137,11 @@ class CollaborationScheduler:
                 or len(prediction_set) > 1
                 or defer_recommended
             )
+        # Scene-local models can expose uncertainty after normalization (for
+        # example Student confidence or Student/rule disagreement).  It is a
+        # first-class scheduling signal and must not be lost merely because the
+        # upstream perception confidence was high.
+        uncertain = bool(uncertain or decision_uncertain)
         possible_high = any(
             RISK_PRIORITY.get(level, 0) >= RISK_PRIORITY["high"]
             for level in prediction_set

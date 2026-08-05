@@ -100,7 +100,7 @@ def _activate_edge_release(gguf_path):
 
     registry = ROOT / "runtime" / "edge_llm_release_store.json"
     result = ReleaseStore(registry).promote(
-        "freeway-traffic-current-state-v2.0.1-q6k",
+        "freeway-traffic-current-state-v2.0.2-q6k",
         ROOT / "assets" / "edge_llm" / "base_manifest.json",
         ROOT / "assets" / "edge_llm" / "adapter_package_current_state_v2",
         gguf_path,

@@ -311,6 +311,53 @@ class TrafficEdgeLLMController:
         )
         return edge_qwen_gain, source, qualified
 
+    def _decoder_event(
+        self,
+        event: SemanticEvent,
+        student: DecisionEnvelope,
+    ) -> Tuple[Dict[str, Any], bool]:
+        """Build a decode-only whitelist for proactive current-state advisories.
+
+        The v2 current-state model predicts a future action from the current
+        window.  A Student-produced traffic advisory is already locally safe,
+        but it is not part of the rule teacher's current-state candidate list.
+        Only that non-executing advisory may be added here; control actions and
+        the original SemanticEvent remain unchanged.
+        """
+        value = event.to_dict(include_scene_payload=False)
+        current_state = bool(
+            self.context_encoder == TRAFFIC_CONTEXT_ENCODER_V2
+            and (
+                str(event.scene_payload.get("perception_mode", "")).lower()
+                == "current_state"
+                or str(event.scene_payload.get("output_type", "")).lower()
+                == "current_state_risk"
+            )
+        )
+        if not current_state:
+            return value, False
+        raw_candidates = value.get("candidate_actions", [])
+        candidates = (
+            [dict(action) for action in raw_candidates if isinstance(action, dict)]
+            if isinstance(raw_candidates, list)
+            else []
+        )
+        if any(
+            str(action.get("action_type", action.get("type", "")))
+            == "traffic_advisory"
+            for action in candidates
+        ):
+            return value, False
+        advisories = [
+            action.to_dict()
+            for action in student.actions
+            if action.action_type == "traffic_advisory"
+        ]
+        if not advisories:
+            return value, False
+        value["candidate_actions"] = candidates + advisories
+        return value, True
+
     def _selection(self, event: SemanticEvent, student: DecisionEnvelope) -> Tuple[bool, str]:
         if not self.enabled:
             return False, "disabled"
@@ -386,9 +433,12 @@ class TrafficEdgeLLMController:
             prompt = build_action_prompt(event.scene_payload, "bitpacked_decimal")
         network_available = bool(event.metadata["edge_runtime_network_available"])
         try:
+            decoder_event, student_advisory_whitelisted = self._decoder_event(
+                event, student
+            )
             result = self.active.model.decide(
                 prompt,
-                event.to_dict(include_scene_payload=False),
+                decoder_event,
                 network_available,
             )
             inference = dict(result["inference"])
@@ -413,6 +463,9 @@ class TrafficEdgeLLMController:
                 "edge_llm_model_disagreement": disagreement,
                 "edge_llm_prompt_chars": len(prompt),
                 "edge_llm_context_encoder": self.context_encoder,
+                "edge_llm_student_advisory_whitelisted": (
+                    student_advisory_whitelisted
+                ),
             }
             if self.mode == "shadow":
                 return _with_metadata(

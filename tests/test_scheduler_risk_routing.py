@@ -81,6 +81,7 @@ class SchedulerRiskRoutingTest(unittest.TestCase):
             "high_risk": (_event(risk_level="high"), {}),
             "uncertainty": (_event(confidence=0.5), {}),
             "model_disagreement": (_event(), {"model_disagreement": True}),
+            "local_model_uncertainty": (_event(), {"decision_uncertain": True}),
             "cross_region_conflict": (_event(), {"conflict_suspected": True}),
             "policy_forced": (_event(), {"cloud_review_requested": True}),
         }

@@ -2,7 +2,7 @@
   "schema_version": "edge-llm-package-spec/v1",
   "adapter_id": "freeway-traffic-current-state-qwen35-v2",
   "scene": "freeway_traffic_management",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "adapter_source": "experiments/llm_sft/qwen35_0_8b_current_state_future_v2_lora",
   "action_mapping": "assets/edge_llm/action_mapping.json",
   "input_contract": {

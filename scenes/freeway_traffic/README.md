@@ -23,7 +23,10 @@ final 回填链路。该路径做当前状态识别，不能与 ASTGCN 的未来
 有净纠错收益的可观察子群；路由不再由“风险高”单独触发。在正常、弱网、断网
 三种网络状态组成的独立测试集中，选择率为 14.71%，净纠错 267、改错 0；其中
 主要收益来自断网状态下的安全动作适配，不能写成普通联网交通上的普遍增益。
-普通联网样本可以全部由 Student 处理，Edge-Qwen 选择数为零并不表示模型失效。
+固定的正常网络 `test[100:200]` 连续窗口中有 30/400 个事件自然满足验证集增益
+门槛；短片段仍可能全部由 Student 处理，不能用单个样本的选择数代表整体路由。
+current-state v2.0.2 允许 Qwen 在当前仍为 low、但 Student 已授权非执行型
+`traffic_advisory` 时发布提前预警；它不会由此获得 VSL、匝道、绕行或跨区控制权。
 旧 v9 模型与新上下文编码不兼容，框架会在新发布包未激活时自动禁用这份增益
 路由，避免误调用。
 
@@ -39,6 +42,7 @@ final 回填链路。该路径做当前状态识别，不能与 ASTGCN 的未来
 | `install_full_assets.py` | 下载大文件，逐字节核对大小与 SHA-256，并把 Edge-Qwen 发布到本地活动版本仓库 |
 | `asset_catalog.json` | 所有真实资产的版本、位置、字节数、SHA-256 和下载地址 |
 | `send_real_partitions.py` | 发送指定分区；默认运行当前态势直通模式，两台机器分别使用 `0,1` 和 `2,3`，加 `--perception-mode astgcn` 可运行原预测链路 |
+| `benchmark_real_current_state_e2e.py` | 常驻加载 PEMS08，按连续窗口顺序加速回放；统一测量本地可执行、业务完成、后台摘要字节和四分区权威 final |
 | `traffic_system/current_state_perception_runtime.py` | 纯 NumPy 当前态势感知：根据最近 12 步流量、占有率和速度生成风险事件，不加载 PyTorch 或 ASTGCN |
 | `verify_real_two_edge.py` | 从两台 Jetson 和云服务器读取 review、aggregation，检查四边完整闭环 |
 | `freeway_traffic_full/plugin_impl.py` | 真实交通插件：按事件合同选择当前态势或 ASTGCN 的 Student、特征编码器和 ExtraTrees，再做拓扑融合与冲突处理 |
@@ -58,6 +62,56 @@ final 回填链路。该路径做当前状态识别，不能与 ASTGCN 的未来
 | `deployment/full/cloud_service_qwen9b.json` | 可疑事件增强配置，打开 Qwen3.5 9B |
 | `configurations/PEMS08_astgcn.conf` | SDK 内部可迁移的 ASTGCN 配置 |
 | `evidence/本机完整系统实测.md` | 已完成的真实权重验证、诚实边界和实验室待测项 |
+
+## PEMS08 时间流与样本上传边界
+
+运行资产不是现场读取原始 CSV 后再切窗，而是已经按时间顺序切好的归一化
+`split_x`。一个 sample 是 `[170, 3, 12]`：170 个检测点、流量/占有率/速度
+三个通道、12 个 5 分钟步，也就是最近 60 分钟。float32 名义输入为 24,480
+字节。sample `i+1` 是时间上紧接 sample `i` 的下一个滑动窗口。
+
+`current_state_perception_runtime.py` 常驻加载 NPZ。每个 sample 只索引一次窗口、
+反归一化并计算当前态势，然后按冻结的 METIS4 映射产生四个分区事件。测试脚本
+按 sample 顺序提交；前一窗口取得四个本地响应后立即推进下一窗口，不等待它的
+异步云端 final。这是连续窗口的加速回放，不包含传感器接入、原始 CSV 解析和
+线上 12 步缓冲时间，冷加载也必须单独报告。
+
+数据在链路上分三层，不能都叫“上传原始样本”：
+
+1. NPZ 到感知进程：完整 `[170,3,12]` 窗口，只在 Jetson 内存中使用。
+2. 感知进程到本机 edge `/decide`：四个语义事件，包含区域摘要、控制能力、
+   top-10 风险节点和它们的 12 步速度历史，不包含完整 170 节点三通道 tensor。
+3. 138 到 160：再裁剪为区域摘要或编码特征；默认不带 `raw_evidence`，Outbox
+   后台批量发送，云端持久接收后立即 ACK，再做四分区汇聚和 final 回填。
+
+普通本地动作在持久 handoff/Outbox 接受边界后即可返回，摘要发送失败会重试。
+动作后果风险高、模型高不确定、跨区冲突或策略强制审核命中时，网络和 deadline
+允许才同步等待云端；需要云确认的动作在权威 final 前不会被授权。
+
+正式基准的共同 T0 位于常驻、预热完成后，紧挨一个已到齐的 12 步窗口处理前：
+
+- `local_actionable_ms`：T0 到四个 compact `/decide` 响应全部返回；
+- `business_completion_ms`：本地已授权动作止于本地响应，需要云确认的动作止于
+  权威 final；
+- `global_authoritative_final_ms`：T0 到四个 review 都完成权威回填；
+  `partial_final` 和 `local_only_timeout` 不算权威完成。
+
+使用固定连续段复测：
+
+```bash
+python scenes/freeway_traffic/benchmark_real_current_state_e2e.py \
+  --project-root . \
+  --edge-url http://127.0.0.1:19101 \
+  --cloud-url http://云服务器地址:19100 \
+  --sample-start 100 \
+  --sample-stop 200 \
+  --warmup-samples 86,125,0 \
+  --require-qwen-selected \
+  --require-qwen-accepted \
+  --require-risk-coverage \
+  --require-complete-final \
+  --output /tmp/pems08-current-state-e2e.json
+```
 
 ## 一、安装
 
