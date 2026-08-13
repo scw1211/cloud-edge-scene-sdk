@@ -6,6 +6,13 @@ mean `< 200 ms`; the larger provider timeout only prevents a 186.79 ms valid
 first request from being misclassified as a runtime failure. It is isolated
 from the formal release store and earlier sidecar evidence.
 
+Nano222 sidecar validation has passed for traffic plus industrial RGB and
+infrared through one edge endpoint. The bound smoke evidence is recorded in
+`candidate_identity.json`; both runner and restore exited zero, the observed
+industrial selected-model mean was `132.36455 ms`, and `/lora-adapters`
+remained empty. This validates the candidate path only. It does not authorize
+formal promotion or claim authoritative cloud finality.
+
 All promotion commands below run on Nano222. The package, model, base manifest,
 registry, and configuration paths are therefore Nano-local absolute paths.
 

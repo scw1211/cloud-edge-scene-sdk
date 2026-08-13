@@ -59,9 +59,24 @@ python scenes/industrial_anomaly/demo_dual_scene.py \
 脚本会先后发送工业 RGB/红外和交通两个成员，打印两组本地 `provisional` 与云端
 `final`。每次运行生成新的 `event_id/sample_id`，不会与 Outbox 幂等记录冲突。
 
-工业边缘动作模型使用与交通相同的 Qwen3.5-0.8B 文本基座，但使用独立 LoRA。服务
-启动时可同时预载交通和工业 Adapter，框架依据已经完成 Schema 校验的场景信封，在
-请求中显式选择对应 Adapter；模型不负责猜场景，也不会把两套权重混合起来。
+当前推荐候选是同一个静态融合 Q5_K_M 模型同时服务交通和工业，不加载运行时 LoRA。
+插件在完成 Schema 校验后，为交通 16 位输入加 `T` 前缀、为工业 16 位输入加 `I`
+前缀，形成严格 17-token 输入；模型仍只返回一个动作 token。`llama-server` 的
+`/lora-adapters` 在启动、请求和结束后都必须为 `[]`，请求体也不得携带 LoRA 字段。
+这样既避免模型猜场景，也避免双 Adapter 交替带来的调度和内存峰值。
+
+推荐部署模板位于 `deployment/joint_static_candidate_v3/`。该候选绑定：
+
+- release `traffic-industrial-joint-static-v2-q5km`；
+- 静态 Q5 SHA-256 `308daa980c7ca295e18bd76e8dcf6dc1ed725ded32ada535a0c5c1910c695ce2`；
+- 规范编码器 `scene-prefixed-decimal17@v1`；
+- Nano 500 次严格交替门禁峰值 `1,047,126,016 B`、平均时延 `132.610802 ms`；
+- 交通准确率 `72.8%`、工业准确率/宏 F1/加权 F1 均为 `100%`；
+- 统一边缘接口旁路已验证交通、工业 RGB 和红外，工业被选模型平均时延
+  `132.36455 ms`。
+
+旁路验证只证明边缘 provisional 路径；在正式云端 `18100` 未开放前，不声明
+authoritative final，也不据此自动切换正式服务。
 
 工业模型的输入是由插件从 `score/review_low/review_high` 提取的 16-token 相对阈值距离，
 输出为单 token：`A=normal`、`B=review`、`C=anomaly`。它学习的是既有 review-band
@@ -77,9 +92,10 @@ python scenes/industrial_anomaly/demo_dual_scene.py \
 因此接入 LoRA 不改变工业的安全动作边界，也不改变公共 Outbox、云端跨模态协调和
 final 回填流程。
 
-## 双 LoRA 交替稳定性门禁
+## 旧版双 LoRA 交替稳定性门禁
 
-同一 `llama-server` 预载交通/工业 LoRA 后，可在 Jetson 本机执行只读资源门禁。默认
+以下内容保留用于旧多 Adapter 回归，不是当前推荐部署。若同一 `llama-server` 预载
+交通/工业 LoRA，可在 Jetson 本机执行只读资源门禁。默认
 严格交替发送交通、工业各 250 条，共 500 条；每 20 条读取 `/proc` 中的
 `MemAvailable`、系统 swap、`pgpgin/pswpin` 以及指定 llama PID 的 RSS/VmSwap。
 `MemAvailable` 低于 256 MiB 时脚本在下一条请求前停止，并原子保留部分报告：

@@ -1,7 +1,7 @@
 {
   "schema_version": "edge-llm-joint-static-candidate-identity/v1",
   "release_id": "traffic-industrial-joint-static-v2-q5km",
-  "status": "package_validated_sidecar_not_promoted",
+  "status": "package_validated_sidecar_passed_formal_not_promoted",
   "deployment": {
     "model_mode": "joint_static_fusion",
     "path": "/home/jetson02/cloud-edge-deploy-industrial-multilora-v1/deployment/joint_static_fusion_v1/joint_static_fusion.Q5_K_M.gguf",
@@ -31,6 +31,19 @@
     "gate_summary_sha256": "54d2a553fe8ecafde645c4d542e7d630b1026caf627507a74db96656c03981c1",
     "validation_status": "valid",
     "runtime_adapters": []
+  },
+  "sidecar_validation": {
+    "path": "/home/scw/unified-distill-work-20260813/joint_traffic_industrial_v1/deployment/static_q5_sidecar_gate_v9/nano222_evidence/smoke_summary.json",
+    "bytes": 1279,
+    "sha256": "d24546bf00a8e7cf879624db0dff8d42b71199f7f134e91b129c363f17b838a9",
+    "evidence_manifest_sha256": "08f9aeed23619e3edcfd29e860e133b46f9006cf1251cb6e0ed7e6a7adf3dbc6",
+    "gate_exit": 0,
+    "restore_exit": 0,
+    "traffic_smoke_passed": true,
+    "industrial_rgb_smoke_passed": true,
+    "industrial_infrared_smoke_passed": true,
+    "industrial_selected_mean_latency_ms": 132.36455,
+    "authoritative_final_claimed": false
   },
   "runtime_contract": {
     "llama_endpoint": "http://127.0.0.1:19393",
