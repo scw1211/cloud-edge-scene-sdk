@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.13.1",
-  "built_at_utc": "2026-08-05T13:09:45.095968+00:00",
+  "built_at_utc": "2026-08-13T23:18:29.402815+00:00",
   "python_requires": ">=3.8",
   "included_files": [
     {
@@ -20,8 +20,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 21586,
-      "sha256": "b1bbf53aebe63530f4c10af79a9d8cdc46ee9564962669e3d0c647cc52e1708a"
+      "bytes": 22717,
+      "sha256": "36da0ec4447dfc5a407de1409967ec39d70360987a926ba1c6f556f5773d2e5f"
     },
     {
       "path": "VERSION",
@@ -80,13 +80,13 @@
     },
     {
       "path": "cloud_edge_framework/cloud_service.py",
-      "bytes": 33225,
-      "sha256": "1c068b3e088845160b7abc24111f4997802cf47dab3dbea1c61bff21c39e0cd1"
+      "bytes": 36925,
+      "sha256": "1462c0b05449fff6c044078b645d42aa0b051421d6426f2d2b9d5fe7bc9877a4"
     },
     {
       "path": "cloud_edge_framework/conflicts.py",
-      "bytes": 11653,
-      "sha256": "e348fbfe09aa085b420dcf988a3b67a540855bf5807ece50c7ebe8d3422c5369"
+      "bytes": 13934,
+      "sha256": "d0475a60da65c0802470e1c18af7a8edf20d4e70c55da9b1b81296c95410c544"
     },
     {
       "path": "cloud_edge_framework/contracts.py",
@@ -100,8 +100,8 @@
     },
     {
       "path": "cloud_edge_framework/edge_service.py",
-      "bytes": 19697,
-      "sha256": "dafb1a1cf41b7816a9f5eae88df70a41759670de8173c390fdc4c24c566b9777"
+      "bytes": 20029,
+      "sha256": "8254623df21087dbe6d324d1449d5be14ee08149c92493cf05e07c591c152d32"
     },
     {
       "path": "cloud_edge_framework/event_envelope.py",
@@ -130,8 +130,8 @@
     },
     {
       "path": "cloud_edge_framework/http_api.py",
-      "bytes": 7553,
-      "sha256": "7dca540c0c2d750a746caa8267be456179370e2caad3d8da17f5e6357b644d7e"
+      "bytes": 7683,
+      "sha256": "ed7a7745102169ff50272521749ed35ef78b70587e3bfdd67990d66e03d302a5"
     },
     {
       "path": "cloud_edge_framework/ingest_client.py",
@@ -170,8 +170,8 @@
     },
     {
       "path": "cloud_edge_framework/plugins/base.py",
-      "bytes": 12168,
-      "sha256": "89ddf2ee991ccfa54b0261a1c85e9113f20d757adac40e1f37a3ddce68d7cbc3"
+      "bytes": 12826,
+      "sha256": "070c4be88e75701994ffde88a779d047cd3d1a31d8360b9a31b72d32ce44ab84"
     },
     {
       "path": "cloud_edge_framework/registry.py",
@@ -210,18 +210,18 @@
     },
     {
       "path": "cloud_edge_framework/runtime.py",
-      "bytes": 113967,
-      "sha256": "640eb5f2d4bce8bf175aae7d8a6816373b7faadc250ec634b8fac31c2aa59545"
+      "bytes": 118305,
+      "sha256": "56e56bc9dba01806172f8ea7c3519de95ed755219380b4558e54c5b9a94307ba"
     },
     {
       "path": "cloud_edge_framework/scheduling.py",
-      "bytes": 10950,
-      "sha256": "4227bf38d929250faaba97a7670f16aa0675584aba66e40d03c7045d27be98b0"
+      "bytes": 12653,
+      "sha256": "8de56c408f1877542bcd990d6ed2e801d0945ba75a6f99dee4e1dffe473a0f30"
     },
     {
       "path": "cloud_edge_framework/server.py",
-      "bytes": 12506,
-      "sha256": "1377350c39c0289d6ef0bd58f7d579ba024a656e6c98ced3819a51af8e931bab"
+      "bytes": 12496,
+      "sha256": "782325892225edf727a4ad5fd137a0ea7c45e251670c114b24542ecc987e094f"
     },
     {
       "path": "cloud_edge_framework/service_config.py",
@@ -259,9 +259,44 @@
       "sha256": "33381f230ca002b2139df670cc6b60629ed7074edeabea3ee5b6e5d525aa72a3"
     },
     {
+      "path": "docs/competition_final_evidence_20260813.json",
+      "bytes": 4838,
+      "sha256": "8628b9f34aa77ba2aabd5e0e1c45acfd1caf8c0c6ec579dfe261fe1cefe6b7b0"
+    },
+    {
+      "path": "docs/七项统一证据门禁.md",
+      "bytes": 27309,
+      "sha256": "131794065a70fc167027934e70c02aed752ee163d59b725f614e9fb677dcb233"
+    },
+    {
+      "path": "docs/云边模型更新闭环正式取证.md",
+      "bytes": 8840,
+      "sha256": "73762fcccd46f2e91508786925e6556e8fbd3092d16cdea9b9f6ab3e9acbfef0"
+    },
+    {
       "path": "docs/从零部署真实交通系统.md",
       "bytes": 5541,
       "sha256": "56c86fa3aee8a0ac1227134420cb1454531156df9491cc6ea9c62d9186a4c4e7"
+    },
+    {
+      "path": "docs/四路径多实验证据汇总.md",
+      "bytes": 5351,
+      "sha256": "fff434554368f61d56806a68d46c0e96c21ccc7dd3c1b4254766771c0562e365"
+    },
+    {
+      "path": "docs/当前交通边缘大模型前三项实测.md",
+      "bytes": 5065,
+      "sha256": "84d699b056f2cd7b94e73c92c44e2f6ceb6dc0a58d75ca998e637b26db6c4ffb"
+    },
+    {
+      "path": "docs/模型更新闭环正式取证.md",
+      "bytes": 6846,
+      "sha256": "85e3335e2041e05561e9d458b0f5f7ff144246e10a50bec53a8cdd6177e6281c"
+    },
+    {
+      "path": "docs/竞赛核心指标最终核验.md",
+      "bytes": 8004,
+      "sha256": "9e07fd347cf9299e50a7059c0ace30f2c079d93d4a16b1a6bc8f8c54a7ddb11b"
     },
     {
       "path": "edge_llm/README.md",
@@ -305,8 +340,13 @@
     },
     {
       "path": "edge_llm_factory/__main__.py",
-      "bytes": 3678,
-      "sha256": "86963b63660bcd33f6cebf7afdef29dd1d347bf1a2ee31d70ce6e365982d0629"
+      "bytes": 5470,
+      "sha256": "748ac4ceca307753baa1d903f323a900eb714e1087e6316043a918e8960e3c6c"
+    },
+    {
+      "path": "edge_llm_factory/action_constraints.py",
+      "bytes": 2376,
+      "sha256": "8210a6b95a1a8da0e38059b07f35e3b8c60c50e53d27aefd0fc83c62b8a157a5"
     },
     {
       "path": "edge_llm_factory/adapter_package.py",
@@ -324,9 +364,39 @@
       "sha256": "ea8cf5c0b17e31aec8c8a6ce4468ac0a4a8e92af589e76a0ac907b217589397e"
     },
     {
+      "path": "edge_llm_factory/build_ceval_kd_source.py",
+      "bytes": 48666,
+      "sha256": "9e4bc917e8634dcb8b05a77d43915a12f7e2c9176f8592864a0e452523f1e917"
+    },
+    {
+      "path": "edge_llm_factory/build_frozen_math_eval.py",
+      "bytes": 9002,
+      "sha256": "26fd975f8708724a1ad66c3b048abb1a074e8f81944f42e8f45beffd604debdf"
+    },
+    {
+      "path": "edge_llm_factory/build_frozen_nlr_eval.py",
+      "bytes": 26259,
+      "sha256": "ddccd8e68f2939c92de58293a58a8b4fbdfb7c9f62c39e818a538161149c539e"
+    },
+    {
       "path": "edge_llm_factory/build_imatrix.py",
       "bytes": 5482,
       "sha256": "2f4b7b3508f299e5d3ed82e907e8663af8cfec087c2c2c4075490bbfe443d4c5"
+    },
+    {
+      "path": "edge_llm_factory/build_joint_scene_dataset.py",
+      "bytes": 10713,
+      "sha256": "f04d035cc60c10406fbbc808166476df756517fe1803ce1bb7d93cbf76fcf94a"
+    },
+    {
+      "path": "edge_llm_factory/build_unified_traffic_general_dataset.py",
+      "bytes": 23945,
+      "sha256": "28778891739f429729563e143b5e95d3ab8a3c331a301d0abc16dd19184e747a"
+    },
+    {
+      "path": "edge_llm_factory/build_unified_traffic_general_dataset_v2.py",
+      "bytes": 44159,
+      "sha256": "53a2623cc8294c9287f65f059545afd47f24f8c4b335e3aec00c503ea8a29db4"
     },
     {
       "path": "edge_llm_factory/contracts.py",
@@ -334,14 +404,54 @@
       "sha256": "3caa7da094a4068cba48d2fa54b1258330e34ba4f15fba9225451619cd057dc3"
     },
     {
+      "path": "edge_llm_factory/distributed_update_evidence.py",
+      "bytes": 65725,
+      "sha256": "92fa1a9d4fde92e00bf7ed40e20c3c954ec4f054e40bd37c6d87c0369e594519"
+    },
+    {
+      "path": "edge_llm_factory/dual_promotion_gate.py",
+      "bytes": 51538,
+      "sha256": "412fc637f85674a27c29999fe8e79d756becc4f54d04a1169b92f4816ecd309f"
+    },
+    {
       "path": "edge_llm_factory/evaluate_action_tokens.py",
-      "bytes": 9219,
-      "sha256": "897d7046cc7266b637e850391d221950f219807423a0ce7cb034c66a0a2b174c"
+      "bytes": 24710,
+      "sha256": "6ba062730e6ad51d62b52de6e76b5a8c44185b5bda27148c51785b6d015bd1f2"
+    },
+    {
+      "path": "edge_llm_factory/evaluate_general_adapter.py",
+      "bytes": 33197,
+      "sha256": "a4557fe7a08fa0d967bb9c1ed09c85edd17840e399063e9bc2995d87d3af31e9"
+    },
+    {
+      "path": "edge_llm_factory/evaluate_unified_general_adapter.py",
+      "bytes": 35953,
+      "sha256": "8f231b593b157c8552ed110f6f634554d86a777797894aaf063048e12ce42483"
+    },
+    {
+      "path": "edge_llm_factory/evaluate_unified_general_teacher.py",
+      "bytes": 13806,
+      "sha256": "ef2facf2518141770ef2b8191fec2e51de6bbb9de0da326a43cbea18d7a01eed"
     },
     {
       "path": "edge_llm_factory/export_gguf.py",
       "bytes": 7114,
       "sha256": "b30ef7b55fa790682651f8cd49add6b29964a0ea6ccedfd11e067911dbc48487"
+    },
+    {
+      "path": "edge_llm_factory/focus_general_kd_dataset.py",
+      "bytes": 23408,
+      "sha256": "0ce2936b2fe4a695cb9b119489b774c3c6687fb720c8a03f9fb7c21d561fdd6c"
+    },
+    {
+      "path": "edge_llm_factory/gate_joint_scene_adapter.py",
+      "bytes": 17058,
+      "sha256": "1915667ced962c86f481d5d68026baec16f8b9d913e9a0cb0ba02c262a47d501"
+    },
+    {
+      "path": "edge_llm_factory/gate_unified_general_paired.py",
+      "bytes": 34493,
+      "sha256": "b76a42cbfe1db579fdad891decb2b628da057cef8589c8e22ecc3bf2bb88f926"
     },
     {
       "path": "edge_llm_factory/general_calibration.py",
@@ -350,8 +460,8 @@
     },
     {
       "path": "edge_llm_factory/general_kd_data.py",
-      "bytes": 20095,
-      "sha256": "46f8986aecf837bc7c1ef386bbd031988ba4a62e049ecf14f5024cfa2a26f6ef"
+      "bytes": 21565,
+      "sha256": "d86f3c63d26ba052bb868d354a9f74ac9bffbf55a8dd49d76671fdcbf0fefc24"
     },
     {
       "path": "edge_llm_factory/general_kd_eval.py",
@@ -380,28 +490,58 @@
     },
     {
       "path": "edge_llm_factory/providers.py",
-      "bytes": 17412,
-      "sha256": "360f3fbdb3b1b4fb0fea33a04325f52bb43b9e5ba49de782a52e21966cd23fa3"
+      "bytes": 25526,
+      "sha256": "88c8d697631074b881cd212194dd7520555c645f5b5120334f562b2ec606b0af"
+    },
+    {
+      "path": "edge_llm_factory/q5_joint_release.py",
+      "bytes": 29786,
+      "sha256": "dcd56cf1e0ad89ec90859bc77652c93bad2d17add15c3e555f4b53c3736edf51"
+    },
+    {
+      "path": "edge_llm_factory/q5_static_joint_release.py",
+      "bytes": 52341,
+      "sha256": "8bcac80a03362d59a8c1bd701ba654d521863687126462b43e6db6ed1ebc21e1"
+    },
+    {
+      "path": "edge_llm_factory/q6_multiscene_release.py",
+      "bytes": 25293,
+      "sha256": "f2865a1eadf875580327f3778ebccb32084d8b31e71919ac362b19202e829371"
+    },
+    {
+      "path": "edge_llm_factory/record_u2_bf16_execution_receipt.py",
+      "bytes": 64088,
+      "sha256": "937ba3433804402a6e4d35e3b57d5419d19f323a8db9f3e0599143aa79b2cebd"
+    },
+    {
+      "path": "edge_llm_factory/record_u2_candidate_artifact.py",
+      "bytes": 25633,
+      "sha256": "4205672456a49caa351ad249705032d114b47e8ea3fbb76a0507f53b1ecb8cf8"
     },
     {
       "path": "edge_llm_factory/release_runtime.py",
-      "bytes": 4206,
-      "sha256": "de4ade5f71e1eebc6d621591c49ac10ad762e740a9cbedbcfabecf8ccb5adad5"
+      "bytes": 5889,
+      "sha256": "9c961712e84670c07bb25ceb9a47afb78a12e1b298d70e068c6d8ea0cc26e18b"
     },
     {
       "path": "edge_llm_factory/release_store.py",
-      "bytes": 16020,
-      "sha256": "31e573c62f55ddb8ebf9fdf40b1bcdaf27b31d46d746a1fbf5410363245f7df9"
+      "bytes": 29567,
+      "sha256": "59d69e6f4affc49bd2f6d0ec791a0a9f56e723e3d0d91fdb509dbd7c073dd8d4"
     },
     {
       "path": "edge_llm_factory/runtime.py",
-      "bytes": 10155,
-      "sha256": "f7c89ce7edb4c667f21ab77f8d929c2d496c4e7cdcd5caad0d55600ab8af3a07"
+      "bytes": 12325,
+      "sha256": "d857ed1ac02c1c4d040be3ced5cd531d73ec38014a50a922807a23ec9ac11472"
     },
     {
       "path": "edge_llm_factory/serve_release.py",
-      "bytes": 11476,
-      "sha256": "3e112344ed7a2acc7e2f6c44cd03d2d43413d9c56022d57a2e1b53de9d57881c"
+      "bytes": 78582,
+      "sha256": "ad821d9ca372600de15fd341ce45430179a113ce956d54bc9d324c71be01338f"
+    },
+    {
+      "path": "edge_llm_factory/summarize_ceval_specialty_eval.py",
+      "bytes": 60305,
+      "sha256": "a84e5f9f800b6b3dbbcb2e430bb469d3fc4bf49b0f49eee1521bb7275e456cdc"
     },
     {
       "path": "edge_llm_factory/text_base.py",
@@ -410,13 +550,33 @@
     },
     {
       "path": "edge_llm_factory/train_general_kd.py",
-      "bytes": 20546,
-      "sha256": "57c2722d40bc0d3746534c773ad57862f400eada4d75031e655de6ed8f0c1a5a"
+      "bytes": 23716,
+      "sha256": "fae5f03381adafb02f5d413207ba5bcb068b3bf73c0b427c6d208fe99be7d7d4"
+    },
+    {
+      "path": "edge_llm_factory/train_joint_scene_adapter.py",
+      "bytes": 5807,
+      "sha256": "bd6dfda57f84de35e79cfc64572f14033f44a1aaa8c372c64a077051727a9506"
     },
     {
       "path": "edge_llm_factory/train_sft.py",
       "bytes": 14944,
       "sha256": "394ec667cd70d076bd357443876f833e3e257519a42b59bb72ebcbd93c4ce19a"
+    },
+    {
+      "path": "edge_llm_factory/train_unified_traffic_general.py",
+      "bytes": 26037,
+      "sha256": "fb16b59db319fa6d51bf29cc0707cb2699dc0acdb4a87fc1f2c726a962567ef9"
+    },
+    {
+      "path": "edge_llm_factory/train_unified_traffic_general_u2.py",
+      "bytes": 38387,
+      "sha256": "1c1fad3ab277d0ff2c0ca47d3b36c5cd1d426fe61ac1077799a36b390a0a23fe"
+    },
+    {
+      "path": "edge_llm_factory/update_loop_evidence.py",
+      "bytes": 43374,
+      "sha256": "b0712b249dabaef0c55f5fe53c53ac19f3ed156a775a76e8c3a7cd4d80288985"
     },
     {
       "path": "model_bundle/APACHE-2.0.txt",
@@ -530,13 +690,18 @@
     },
     {
       "path": "scenes/freeway_traffic/README.md",
-      "bytes": 20906,
-      "sha256": "692743852490b4a063d506d55ab79882891bda01805cad550df4d299b6943ff4"
+      "bytes": 27541,
+      "sha256": "1a040afe8d57f3b2df37b56a051171e239c3e89a5bd5f9cd500579398a10e881"
+    },
+    {
+      "path": "scenes/freeway_traffic/aggregate_four_route_e2e_evidence.py",
+      "bytes": 26349,
+      "sha256": "73cac7aa65508f6295b7175e8c4e8771964f7b9c44cbc24cf17813b26946966a"
     },
     {
       "path": "scenes/freeway_traffic/asset_catalog.json",
-      "bytes": 3641,
-      "sha256": "12262bc4c96556dad5775d522529ca55fa534be896b5ef99fd2bd9f3747e11f8"
+      "bytes": 3674,
+      "sha256": "e9d008da507f1ec235952f5f66e4da68d536a5e2fbbcff54b59c46af915b430b"
     },
     {
       "path": "scenes/freeway_traffic/assets/data/PEMS08.csv",
@@ -684,6 +849,11 @@
       "sha256": "f25899d9eec52934c4ea66b686253f90ef90f9c9650c8a29fc39511c80fc3dbf"
     },
     {
+      "path": "scenes/freeway_traffic/assets/models/traffic_global_utility_v1.json",
+      "bytes": 1003,
+      "sha256": "ed614c9090780805287598252e9afe52e8bee333131e0ee2f8ea0213d7398ffb"
+    },
+    {
       "path": "scenes/freeway_traffic/assets/models/traffic_region_topology_metis4.json",
       "bytes": 2597,
       "sha256": "df12ac50b8c4803f4bbd0f916c8881ecb23186994176d9c5ad81cb90869004d2"
@@ -700,8 +870,13 @@
     },
     {
       "path": "scenes/freeway_traffic/benchmark_real_current_state_e2e.py",
-      "bytes": 73087,
-      "sha256": "88831440d6f637b85885519ba55bf756d3a9a427049e2754aec660ce600d84c7"
+      "bytes": 96210,
+      "sha256": "c9a29ea456c2f9a3dec79b78b97576b3942c8c88fc49459f11078617d163660b"
+    },
+    {
+      "path": "scenes/freeway_traffic/benchmark_weak_network_retention.py",
+      "bytes": 60978,
+      "sha256": "00f830b59ada630115434756b31cc1d2e1f25c2b1d6bcff2170e58610e67b080"
     },
     {
       "path": "scenes/freeway_traffic/configurations/PEMS08_astgcn.conf",
@@ -709,9 +884,14 @@
       "sha256": "d36e6b581192b1f3bff7435bded5a88d8caa39385ca5b2e4b599e4283721a16b"
     },
     {
+      "path": "scenes/freeway_traffic/create_weak_network_experiment_plan.py",
+      "bytes": 4812,
+      "sha256": "d4bf06cf40136275f170832c392aadb3075062b514307ec2242dd2b15b9fd17f"
+    },
+    {
       "path": "scenes/freeway_traffic/deploy_node.py",
-      "bytes": 11734,
-      "sha256": "528ed363b507298e19b103a020528725b5c5c1efc1bf6cff4069ab4b708c41aa"
+      "bytes": 27136,
+      "sha256": "1dac0bb99c6c51229d0d754d6024ac609a5f0ff35e861f700d7d28dd6a40ec4f"
     },
     {
       "path": "scenes/freeway_traffic/deployment/cloud_service.json",
@@ -750,8 +930,8 @@
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/edge_service.json",
-      "bytes": 1761,
-      "sha256": "dd15c052fda2badcf017710ea7f5839953365b6b028645f7b46ca917234d4913"
+      "bytes": 1762,
+      "sha256": "dd30037199dec480d3a4e2408e3cd19a81e3ccb161308ed314537d480c71d8d5"
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/edge_service_qwen9b.json",
@@ -760,8 +940,13 @@
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/scene_plugins_cloud.json",
-      "bytes": 879,
-      "sha256": "884c0c512af4fcaa5bfce46aeb8d9b92201f749258ab50adb99e458cd3650e7c"
+      "bytes": 1026,
+      "sha256": "e458c49cd3f9e0951d5774e92143fd08c4ab637ed61478e9ca9bfffc41dc782b"
+    },
+    {
+      "path": "scenes/freeway_traffic/deployment/full/scene_plugins_cloud_global_objective_active.json",
+      "bytes": 1026,
+      "sha256": "ad755469e2e4a0471f1fadf6e14315a99bcd42dd9122dbb3ffcb47d28701b03a"
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/scene_plugins_edge.json",
@@ -784,19 +969,24 @@
       "sha256": "52bfdad734dd26b11fb87ea8e5882d282b3b83c9a13551990751d2e494ef5e3a"
     },
     {
+      "path": "scenes/freeway_traffic/extract_global_objective_evidence.py",
+      "bytes": 23849,
+      "sha256": "db802fe5a1e7040093682c22e2774375e204dc4ed86653614c3a1524c8414184"
+    },
+    {
       "path": "scenes/freeway_traffic/freeway_traffic_full/__init__.py",
       "bytes": 172,
       "sha256": "aa1718bf560ea44a3d08fd0e9a233b3bc0fde9d2c8b6eccbf3f331e82cc52966"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_full/edge_llm.py",
-      "bytes": 25186,
-      "sha256": "02d69fb6ba9798591558778f4f4306920d6997cda6f7fb2f829c185b71747166"
+      "bytes": 27439,
+      "sha256": "aab6979fef1d8b5ab414232bfd549e15a9f15ea16c63537bb8fd441f799017d3"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_full/plugin_impl.py",
-      "bytes": 89056,
-      "sha256": "dc978c830f85e697dd07ebad49a16a835371ee1b003d8b3d3de3163eb3854666"
+      "bytes": 92298,
+      "sha256": "ca4104c4ada683232f2ed7c764f5e0d6b4a98966f3f94b97bd13761609345466"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_scene/__init__.py",
@@ -805,8 +995,8 @@
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_scene/data_schema.json",
-      "bytes": 3321,
-      "sha256": "406f8dfe63bcd7ff25e0042ce0d13d6abcf330f3803a80ccaf0e79e7b76d1ab7"
+      "bytes": 3942,
+      "sha256": "56e30bd75e84afcd750df1ad69a16dcd6945bffe9526a7aceec06677f9959ad8"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_scene/plugin.py",
@@ -820,8 +1010,8 @@
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_scene/smoke_test.py",
-      "bytes": 6830,
-      "sha256": "c534eb585ac9f17aa6b97a292a495c54f5ce4bcde00e3f7b8d37118adea9ebf7"
+      "bytes": 6966,
+      "sha256": "cb4ffeff64eb15886e5b399d2a053eec832aa3eb095ec9a19ed3c2da43eb8fb7"
     },
     {
       "path": "scenes/freeway_traffic/install_full_assets.py",
@@ -864,6 +1054,11 @@
       "sha256": "d98e6da6ef416f86087e3935608fc79e4e5010a0347e9887c167e3af2aa3b462"
     },
     {
+      "path": "scenes/freeway_traffic/prepare_metis_partition_data.py",
+      "bytes": 6086,
+      "sha256": "b55c205f8d1149a909e976ad0a80e8c5b725b9c916069a43e176fea29f2d66e9"
+    },
+    {
       "path": "scenes/freeway_traffic/pyproject.toml",
       "bytes": 557,
       "sha256": "7bfbd91a48ed147e3fa7f803519ae0125daa8011a68877a13208a2f7c68a61b7"
@@ -877,6 +1072,11 @@
       "path": "scenes/freeway_traffic/run_full_acceptance.py",
       "bytes": 4386,
       "sha256": "b179d54c51e551f601d113a37722e81f04982cab4637f1623cae062c01487fea"
+    },
+    {
+      "path": "scenes/freeway_traffic/run_partitioned_current_state_edges.py",
+      "bytes": 38312,
+      "sha256": "569cfccc52f59d33179287ed0d662741ac263ae8799a92be3dcfcf8928b315c2"
     },
     {
       "path": "scenes/freeway_traffic/samples/edge_a_event.json",
@@ -899,14 +1099,29 @@
       "sha256": "31bf9880840a619df23c94cc51704670d1afe8d6abcac0746b4c64cdb0c76588"
     },
     {
+      "path": "scenes/freeway_traffic/tests/test_aggregate_four_route_e2e_evidence.py",
+      "bytes": 19789,
+      "sha256": "c280d97c38c9dd79ad6f9cec3a1067d8d65fb38d687eec6b169e3c03b8412758"
+    },
+    {
       "path": "scenes/freeway_traffic/tests/test_current_state_perception.py",
-      "bytes": 12246,
-      "sha256": "36df5f5538b6eb7a00c384eaa176f103e436260f7be0174fd27d0b68d73ad533"
+      "bytes": 15842,
+      "sha256": "699514bd5dbd5e737d90d0f24bf47cbae36ae2f45387a9c0e418f21ec5290b0b"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_current_state_qwen_contract.py",
-      "bytes": 27036,
-      "sha256": "4d43a025b7ce160eae86266f4b37de0a0219825c65ac007e33c6d9d671f5d5c7"
+      "bytes": 28301,
+      "sha256": "e263bcba0aaedfbf763b681df810abd5826bf0a529636e39804fc5c68db083dc"
+    },
+    {
+      "path": "scenes/freeway_traffic/tests/test_deploy_node.py",
+      "bytes": 19357,
+      "sha256": "2a46fe08755b83658ae6da243850b4cfac7a5d4a5f8484db92c891387ae46698"
+    },
+    {
+      "path": "scenes/freeway_traffic/tests/test_e2e_route_metrics.py",
+      "bytes": 11776,
+      "sha256": "d97fb340a6a4effa70a66a371317a6465bd4497e53cad955cbde87d72243be5d"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_full_deployment_config.py",
@@ -914,9 +1129,34 @@
       "sha256": "89652db4356e60912a36cba8db4fd0df9d8afde83f7be8dfcd133d5eb9abf8e5"
     },
     {
+      "path": "scenes/freeway_traffic/tests/test_global_objective.py",
+      "bytes": 12332,
+      "sha256": "ef444d31342c94ba4e8938071ebd61a13ca545ab3e19a6a769ff0df5c11bd24f"
+    },
+    {
+      "path": "scenes/freeway_traffic/tests/test_global_objective_evidence.py",
+      "bytes": 10120,
+      "sha256": "8502c691b83fede128768cb784e872b638a008a40d8728c00852ef833cf560a2"
+    },
+    {
+      "path": "scenes/freeway_traffic/tests/test_measure_current_edge_llm_targets.py",
+      "bytes": 11807,
+      "sha256": "0c216e25bb16ac0cd0eda14afe358a68c4b0f8e19bbc09cf18ddaaf93c78f7ed"
+    },
+    {
+      "path": "scenes/freeway_traffic/tests/test_partitioned_edge_services.py",
+      "bytes": 6206,
+      "sha256": "7edd2704824d0e8ed613caa8031b45c3b3da8e2cbfb5e8853a3ab78da927ed84"
+    },
+    {
       "path": "scenes/freeway_traffic/tests/test_traffic_semantics_and_edge_llm.py",
-      "bytes": 25443,
-      "sha256": "565f78bb1c0993d52a6c47edbc5bb5cce451fe19d68bf34cfbb02de39eb5bf58"
+      "bytes": 29739,
+      "sha256": "3c0ba669ffa6ce3435aa764072263132056b9549c0466a603d7dbbef1e7a331c"
+    },
+    {
+      "path": "scenes/freeway_traffic/tests/test_weak_network_retention.py",
+      "bytes": 16549,
+      "sha256": "1f2e58b327273d53ed86e9ff600e67472d3a1811d2e30c95c856e9b657252b6a"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/__init__.py",
@@ -950,8 +1190,8 @@
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/benchmark_llama_cpp_action_streaming.py",
-      "bytes": 14801,
-      "sha256": "8fa415ab5b2bae059da79ac72c5037d58d640abf0f72344f8b64a7699c58b254"
+      "bytes": 16423,
+      "sha256": "4f795667f7db4657ad6bfbb23774d349f967eee75ed424c7985109216d42afaf"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/benchmark_measured_architectures.py",
@@ -1075,8 +1315,8 @@
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/current_state_perception_runtime.py",
-      "bytes": 14764,
-      "sha256": "967ba1599b0a24b12485576763a6a008d361f8ea9a203b79da2a90f14a8e5d6b"
+      "bytes": 23504,
+      "sha256": "31a85b74d07f54a0131d1cda8151923b18417980e3d8d79694a4591033196f1e"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/decision_utils.py",
@@ -1095,8 +1335,8 @@
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/edge_qwen_action_infer.py",
-      "bytes": 6275,
-      "sha256": "48a5d95137a0ac572036a0fadda5c9ea6e5432f6269e81cb245010192cca8aa0"
+      "bytes": 6575,
+      "sha256": "f406c5f8b370e38cd36f816502eab48e6153bbc339e7750715c859a750e5fd70"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/edge_student.py",
@@ -1115,13 +1355,13 @@
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/eval_general_capability_retention.py",
-      "bytes": 17300,
-      "sha256": "215230bc42fd36c4a037647eb5ed73fff07a7cefd46e1d09d87272d9c2a557b5"
+      "bytes": 35051,
+      "sha256": "7edc9528578987427f44bd0b425d98939fac406cbf69fe1aa23ad49e94742f0b"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/eval_llm_sft_student.py",
-      "bytes": 15059,
-      "sha256": "e765de38d8b9e182895e8bc930d29aeeb0ad9a4fa282b020c0a332ece65f8998"
+      "bytes": 21145,
+      "sha256": "607822d8a19418978cef96c0f0178652ed722c67f0fd4ba9b1c29dc185e5b9bf"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/eval_policy_sync.py",
@@ -1160,8 +1400,8 @@
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/evaluate_llama_cpp_action_tokens.py",
-      "bytes": 6729,
-      "sha256": "d270e3b9fe0d960291d4cf42efb98fc156cc9acc7b023342d0f5d09d46b30512"
+      "bytes": 8189,
+      "sha256": "cfe55b3e2594ba704832cb50a903afdab34974eccbf88112f4c7a1f72f402dae"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/evaluate_risk_channel_ablation.py",
@@ -1184,6 +1424,11 @@
       "sha256": "2792b4f554971ac5f34522a69843a1e44e2eee81dab6b79bdcb24c1be3257a2c"
     },
     {
+      "path": "scenes/freeway_traffic/traffic_system/global_objective.py",
+      "bytes": 32586,
+      "sha256": "e0f6fbd615b8f75177b9c979e7d0a6e8fb33db180339de0b8257923efff20012"
+    },
+    {
       "path": "scenes/freeway_traffic/traffic_system/graph_partition.py",
       "bytes": 17720,
       "sha256": "9896499827dc2501463d8fb6d2115c00fd07b8b17b3494faed36e5f6894f4e67"
@@ -1192,6 +1437,16 @@
       "path": "scenes/freeway_traffic/traffic_system/infer_joint_risk_astgcn.py",
       "bytes": 14127,
       "sha256": "352ed27c38fb877f2eba264ccbbe099b3bd4b34dd44ecb8e0eb39fc4a6cb8539"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/measure_current_edge_llm_memory.py",
+      "bytes": 12252,
+      "sha256": "80d7d4394c82692555d045a1087804a10cdd710702faf338c22376a49858fa15"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/measure_current_edge_llm_targets.py",
+      "bytes": 23862,
+      "sha256": "8e5abef4882578d0136392c3c1c429ba8bc28e0f51f85b1128cba3f8d8926a25"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/merge_llm_lora.py",
@@ -1205,8 +1460,8 @@
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/network_fault_proxy.py",
-      "bytes": 6137,
-      "sha256": "5c4be9ed1c0ce8b386dd12a975341f2ac8302e5b03a0b6179372391eb94bb39a"
+      "bytes": 14811,
+      "sha256": "49de2209a80ef2ee612d96776a8e33995a9cf7cfc22b5e9e2dc32962989024c2"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/policy_store.py",
@@ -1262,6 +1517,11 @@
       "path": "scenes/freeway_traffic/traffic_system/summarize_selective_defer_benchmark.py",
       "bytes": 10553,
       "sha256": "aa5d37836a0db2e79147b83dc7a8e2d70adde379820253a2188ebee4c226e9f2"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/summarize_unified_traffic_bf16_regression.py",
+      "bytes": 36243,
+      "sha256": "75ee4929fe75f2f1c2facfb8541f6e91518db66da71651920196cdcd5ecaa569"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/sync_edge_policy.py",
@@ -1342,6 +1602,566 @@
       "path": "scenes/freeway_traffic/verify_real_two_edge.py",
       "bytes": 4116,
       "sha256": "ec45bcdd6c9ad2976271c5c416420c284dfd478266faad545b969d6ad16b52fe"
+    },
+    {
+      "path": "scenes/industrial_anomaly/README.md",
+      "bytes": 6475,
+      "sha256": "f200b4fc5bc58a4baf0ab2fcaf55f69b3467ba046e1ca0f3d00bc20474ef8c81"
+    },
+    {
+      "path": "scenes/industrial_anomaly/benchmark_industrial_action_runtime.py",
+      "bytes": 13848,
+      "sha256": "24d02cc6651b462a4c7055eb34542a1b84fab26df4e9217185d71399fde3c245"
+    },
+    {
+      "path": "scenes/industrial_anomaly/benchmark_industrial_closed_loop.py",
+      "bytes": 31049,
+      "sha256": "e0fd263fff83d05706ff3d7ffb3e6fe2eeea6593a7b6a40798a20edaef4dd911"
+    },
+    {
+      "path": "scenes/industrial_anomaly/benchmark_industrial_cloud9b.py",
+      "bytes": 10724,
+      "sha256": "7878f6181b91d6d669c734073e375b66eaf134d9d3620987def3af89e7f6996a"
+    },
+    {
+      "path": "scenes/industrial_anomaly/benchmark_multi_adapter_isolation.py",
+      "bytes": 7244,
+      "sha256": "9a0d42d0c506e86c0bc631c09c24a41bb98adb1d48963c39167ceb7f33928581"
+    },
+    {
+      "path": "scenes/industrial_anomaly/benchmark_multi_adapter_stability.py",
+      "bytes": 25597,
+      "sha256": "7a5ca2831994b96a475d2abb591772a6780bec0646676cd0f2d6145f4429ca74"
+    },
+    {
+      "path": "scenes/industrial_anomaly/build_industrial_margin_distillation_dataset.py",
+      "bytes": 9799,
+      "sha256": "ccc03fdce7572cd96ae1a89a815ab88b0828e5e0bbd76d5baf618243af0d5a3b"
+    },
+    {
+      "path": "scenes/industrial_anomaly/build_industrial_rule_distillation_dataset.py",
+      "bytes": 11671,
+      "sha256": "e137f9d50f62eaa2a4f97a642cc50f69d80e2987222de485b3c648e8c124ae49"
+    },
+    {
+      "path": "scenes/industrial_anomaly/demo_dual_scene.py",
+      "bytes": 6214,
+      "sha256": "219f9832aaff61c33bf6b7e4fab1fb0ef78097687db595e9b1ee8fcf0d9fbc7e"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/benchmark_cloud_service.json",
+      "bytes": 698,
+      "sha256": "bfa2ac52d995bbefb3a0e0983a09df083ebdb5179ce736eea28757ad11705f53"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/benchmark_edge_llm_runtime.json",
+      "bytes": 458,
+      "sha256": "12cba3c00a8d02dc06b9527efd011d3c0ff9ffd25d6f0acb24ba72b58124bc78"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/benchmark_edge_service.json",
+      "bytes": 1897,
+      "sha256": "a92c23102aff317e3572231b7cf3eca6bc6fca2d7e553e5acdf693c70b99e5fd"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/benchmark_scene_plugins_cloud.json",
+      "bytes": 386,
+      "sha256": "a3cf6b7e69c9a3595ed3e25371650237bf7faa5226d0197e3b61daad2becfd7e"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/benchmark_scene_plugins_edge.json",
+      "bytes": 536,
+      "sha256": "3a33e52f6be9b66a147dbe3af6d595265a14805d11b8b16904e3d5f41710954e"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/benchmark_traffic_llm_runtime.json",
+      "bytes": 454,
+      "sha256": "1540a7d64adac7fae59e63fa8167e19d89bf060367a5156396e6eed9027576e1"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/cloud_service_traffic_industrial.json",
+      "bytes": 629,
+      "sha256": "691d9b1e386a1e7af93f4e3a4b56946497844568a65576f4c1f344295b196188"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/cloud_service_traffic_industrial_formal.json",
+      "bytes": 768,
+      "sha256": "651920c2119d34076812587ac399b0490679d2da96d9ff8da95227bf446b2063"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/cloud_service_traffic_industrial_gate.json",
+      "bytes": 670,
+      "sha256": "5ee9aee8796c702f6de8c57ebddc173ecdc83567fb5a36de226e15c2b43ff6f2"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial.json",
+      "bytes": 465,
+      "sha256": "7726ba48581efe3f05a17d7b81a747daedc6dab5edc9ae02e41140efc9ac0305"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_nano222.json",
+      "bytes": 515,
+      "sha256": "1c22f46f5634717b4f5a3bb4935625d03397ea60da5fc78a70bbf54127251b5a"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_q4km_f16_nano222.json",
+      "bytes": 517,
+      "sha256": "24f93294919047008ee5def5e9ccd558d1613daa1946badca12bd6320e34bbd3"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_q4km_nano222.json",
+      "bytes": 517,
+      "sha256": "d3fa2726b9192f0eea3cb826a76d3a8055a5f945c44d43617f8960418ab1b12d"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_q5km_nano222.json",
+      "bytes": 517,
+      "sha256": "1540f61f852452d5f326126ff7ecaa745987fe17345d11ac3c7d2108b56ab947"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_q6_nano222.json",
+      "bytes": 515,
+      "sha256": "d260ece1ef5e36dd73f47eb2bbfa00ff34e39dc391843323070e779f531c9641"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter.json",
+      "bytes": 464,
+      "sha256": "015ec4e5e07bae343a48a88086dbdeed4bc55a821a2cff78753b13b07b75f6cd"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_nano222.json",
+      "bytes": 514,
+      "sha256": "91d6dba3869eeb061caf8c95f86d7fa92a9f2c7da24598151d6dc3f368cd9b74"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_q4km_f16_nano222.json",
+      "bytes": 516,
+      "sha256": "139e9c51f3965d1593a0d66c9cc47e0902dc58ac9a75b5ddb672cffc1491ea30"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_q4km_nano222.json",
+      "bytes": 516,
+      "sha256": "7086ad3c73cf206e464179d9a156707297aab800746749cd6464802f4c13c5b0"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_q5km_nano222.json",
+      "bytes": 516,
+      "sha256": "52819c5b36e95eb8e9a085b0abf414acea18a4b05d77be9c5fa4b68042d0ad49"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_q6_nano222.json",
+      "bytes": 514,
+      "sha256": "3e915eca53ce1812143911a29dca09cc0a016270aaa0cd6999a1999f3751a023"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_llm_startup_probes_nano222.json",
+      "bytes": 3184,
+      "sha256": "1f65883746e5ac5c459ebab787e6d8a50f086b4c00f717e17319e747de137113"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial.json",
+      "bytes": 1791,
+      "sha256": "e9f404839bc6cbd925fd915fce935f6a25b8d107e6ff659d34a79d525a76e276"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_formal.json",
+      "bytes": 1778,
+      "sha256": "ac8f245a981ee3e2b3033a0c4516057a0c1fe6d073cd1e6a25aa351bdcb0bfac"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_nano222.json",
+      "bytes": 2037,
+      "sha256": "73064c133b1610a98e611c05d4581803863b68a84f8afe8ca4bd00d7042bd80c"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_q4km_f16_sidecar_nano222.json",
+      "bytes": 1921,
+      "sha256": "6fa3a52afc42141c80db7062069491dd274e74c0d286fe09f087a8edc66e1233"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_q4km_nano222.json",
+      "bytes": 2018,
+      "sha256": "84333c9011acc0608c7ae9e14e3e21aca3afea36c2d99f5fb6568841f0f0f2c9"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_q5km_nano222.json",
+      "bytes": 2042,
+      "sha256": "747ef94fc1653e318cb3d912b6c07ba6cd8e00361074be35585150e7539e6288"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_q6_nano222.json",
+      "bytes": 2040,
+      "sha256": "34aae90b08a3dd59a7e6c7125ca522ab8e4985ba940ad4c7e649697b35c7966c"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_candidate/candidate_identity.json",
+      "bytes": 2110,
+      "sha256": "0e80ed0d5beeb33fe84b0e3df1fd5c38bd970f36153493909e6bc6388bd75237"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_candidate/edge_llm_runtime_industrial_template.json",
+      "bytes": 485,
+      "sha256": "6780f86ef1f7fb927fef812059ac9192f0d9b728ee387ccca83787cbe32f9125"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_candidate/edge_llm_runtime_traffic_template.json",
+      "bytes": 484,
+      "sha256": "212c975f7efbbdf786563b54941bcbcc3d883bc11c056b948ee216ea07f8981a"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_candidate/edge_service.json",
+      "bytes": 1967,
+      "sha256": "884e79d9f0d9a44a89ec272f91e93d87c5d9fd977a078830008a5762d5ea764c"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_candidate/runtime_output_industrial.json",
+      "bytes": 355,
+      "sha256": "d3eaff5aaa358a391ca74c43c48eba6e95ef4c9ab4285e11a3192caef4b7950a"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_candidate/runtime_output_traffic.json",
+      "bytes": 346,
+      "sha256": "8ea7648f70b26c33ab00de592775b1dc15ff638fdc16e6e6cf5c3ead583193fa"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_candidate/scene_plugins_edge.json",
+      "bytes": 2267,
+      "sha256": "f5c62366a6e1a521e1532cf6cbf401f4c7243125731b38565bde08558a795564"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_candidate/startup_probes.json",
+      "bytes": 965,
+      "sha256": "1986a6f0df8c890acb5168de9307df77147f88697fd90ab69365c65164b0f23f"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/RUNBOOK.md",
+      "bytes": 3719,
+      "sha256": "351d2a4bacb4975cb4e28d61c211a2c56e5fc65e6810588a9463637cac0b19e8"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/SHA256SUMS.txt",
+      "bytes": 831,
+      "sha256": "a190d96d898d746d14973e3d0c339cdcc624910a11805b9620a2f0919ac1caa7"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/candidate_identity.json",
+      "bytes": 2046,
+      "sha256": "2bc232e14c72a4fc034c19fa1c86267d25e7f905769e5e7d82ec47b5104f0e55"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/edge_llm_runtime_industrial_template.json",
+      "bytes": 502,
+      "sha256": "f4ec37e898989782a862ce86632a56d3e45a2ea8eae5f098b55fcd658a042174"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/edge_llm_runtime_traffic_template.json",
+      "bytes": 501,
+      "sha256": "09c6ddbd92158ca2acbaafdc986a3d41b0257d4989f6a75677706da4e9b023f1"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/edge_service.json",
+      "bytes": 1994,
+      "sha256": "c4a5ba7565cb367e7b9e265719e65ef60152aba2d4a97502a71dfc460ad81143"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/runtime_output_industrial.json",
+      "bytes": 435,
+      "sha256": "adb9b13b6be1f5e83262e795f3786e79fb8b7ff4f77d077cd8835f49efdba68d"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/runtime_output_traffic.json",
+      "bytes": 423,
+      "sha256": "0a4b7ea7095a5da523cf4c47d65e756c6a8142084f42637af19ca4756b32b434"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/scene_plugins_edge.json",
+      "bytes": 2290,
+      "sha256": "51fdee727161ed17912b022ee4605e284c54d54af055db838a16a9dd89464134"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/startup_probes.json",
+      "bytes": 789,
+      "sha256": "5731b80f9db8fd01ef2fb118f809e210987bc6536a7605119c88041cd4041816"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/RUNBOOK.md",
+      "bytes": 2298,
+      "sha256": "f7a6835cdad65a84df8aba3b3cedb2328dc98ca5adddc1e208787d325b7fc38c"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/SHA256SUMS.txt",
+      "bytes": 922,
+      "sha256": "68c2c5d035967cf0b2d50cb4fc81736396f2087ad3823bdad0c8641c252df097"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/candidate_identity.json",
+      "bytes": 2046,
+      "sha256": "cddb84c3db109f3984005168bf04393866273cc5c7d45a58e708d76518414586"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/edge_llm_runtime_industrial_template.json",
+      "bytes": 502,
+      "sha256": "f4ec37e898989782a862ce86632a56d3e45a2ea8eae5f098b55fcd658a042174"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/edge_llm_runtime_traffic_template.json",
+      "bytes": 501,
+      "sha256": "09c6ddbd92158ca2acbaafdc986a3d41b0257d4989f6a75677706da4e9b023f1"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/edge_service.json",
+      "bytes": 2018,
+      "sha256": "633ef8d655b0bb89a46d331fe244af60f2dfdeb666d030aeff2c9abab779f9d8"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/runtime_output_industrial.json",
+      "bytes": 441,
+      "sha256": "a139f0e3ce992df5702860a88ba10642e3013fa7563c37a75c020c1a9723734c"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/runtime_output_traffic.json",
+      "bytes": 429,
+      "sha256": "d8d616bc10098f3e7f74a50077c68ce1adb8a3c7f7b3a3c04717ef16354aaa9d"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/scene_plugins_edge.json",
+      "bytes": 2305,
+      "sha256": "8a640662ae2cb42e562879da22a27a2443ad069fa4ad1b7012b045806b75b788"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/startup_probes.json",
+      "bytes": 789,
+      "sha256": "da6335e6f804440157a3585048583d097de0f720a13ad78745e6b3a50e87a55c"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/traffic_smoke_event.json",
+      "bytes": 1827,
+      "sha256": "8098387feb85eee91a52bae73a2645ea2400e67e6a1d4b5646ae53b6471f73f4"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/RUNBOOK.md",
+      "bytes": 2910,
+      "sha256": "72335b438189491762d66b449b6706c1fe03c95e612a5ebab1706cd60a6aa0f4"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/SHA256SUMS.txt",
+      "bytes": 922,
+      "sha256": "369b2205a30a6a75c3a240a3f97e3211ab85e7dcc1818ed9513e1de746721d83"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/candidate_identity.json",
+      "bytes": 2747,
+      "sha256": "0633ed51b82ee25e07bbc62ba6c214407295cbad76cc7b4dfd0374f57f9ad278"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/edge_llm_runtime_industrial_template.json",
+      "bytes": 502,
+      "sha256": "cbe3d5e4e78798fcc980dbe0f6f06421cf91030dcb98072bceb2e71e975d6f22"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/edge_llm_runtime_traffic_template.json",
+      "bytes": 501,
+      "sha256": "09c6ddbd92158ca2acbaafdc986a3d41b0257d4989f6a75677706da4e9b023f1"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/edge_service.json",
+      "bytes": 2018,
+      "sha256": "be5b8dfc248e0a5e5158b4107627d3a7b377a69039fc9ac09afd72a5b1b6111a"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/runtime_output_industrial.json",
+      "bytes": 441,
+      "sha256": "e3b5df65aefe97971c4ff87ef17d71bb984132e75f2a63eaf59b84e5b3293e70"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/runtime_output_traffic.json",
+      "bytes": 429,
+      "sha256": "ca29ef28a9462cfcca1fd7a0b57cac6cc77d6e270b2b401ef2439ccc7a876f58"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/scene_plugins_edge.json",
+      "bytes": 2363,
+      "sha256": "1d770bf1e97b49996214a744fd4ece2fb9bfcd8b58be004f4c538089df22c64e"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/startup_probes.json",
+      "bytes": 789,
+      "sha256": "da6335e6f804440157a3585048583d097de0f720a13ad78745e6b3a50e87a55c"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/traffic_smoke_event.json",
+      "bytes": 1827,
+      "sha256": "8098387feb85eee91a52bae73a2645ea2400e67e6a1d4b5646ae53b6471f73f4"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/README.md",
+      "bytes": 2577,
+      "sha256": "871847af2ac195d63c3daa3b0476fdbcccb07a80077a9869526cc02fbb182783"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/SHA256SUMS.txt",
+      "bytes": 935,
+      "sha256": "ad1fc7b8d474d18c8c863f503380e8e83cf599077637790dafca414e57960734"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/cloud-edge-edge-18101-joint-static-q5-v1.service",
+      "bytes": 2460,
+      "sha256": "f68c0addbd1978d95aaf1be3d118bf277e0d63df158cc07a011e8d45fe493a28"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/edge_llm_runtime_industrial_template.json",
+      "bytes": 501,
+      "sha256": "a76a9312830aa88581f0a4d6978cf2f57ef5346cc410b929edf96ee13c5cef2f"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/edge_llm_runtime_traffic_template.json",
+      "bytes": 501,
+      "sha256": "a76a9312830aa88581f0a4d6978cf2f57ef5346cc410b929edf96ee13c5cef2f"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/edge_service.json",
+      "bytes": 1992,
+      "sha256": "91e6c35954f2bb993d1dc66b8db56398a2cd47ae7ae3645cee08f021800eaf41"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/restore_q6.sh",
+      "bytes": 203,
+      "sha256": "b4ed7e00df7cf365f964941dbc48eb7a77faf91b1e35dcb98ca12dc79cc73097"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/runtime_output_industrial.json",
+      "bytes": 435,
+      "sha256": "6660f55d2ee6ab375c1eabcabcc441ee9da376e06d4973680cda148938aeca23"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/runtime_output_traffic.json",
+      "bytes": 423,
+      "sha256": "d7fed338f6600fa09d82e3ada8cacc9e6800441f63912e739d003d449565e10b"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/scene_plugins_edge.json",
+      "bytes": 2347,
+      "sha256": "5f1fbbebec368c743c4a044e9956472919cb550e9a001d975deacceb61269b80"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/startup_probes.json",
+      "bytes": 789,
+      "sha256": "da6335e6f804440157a3585048583d097de0f720a13ad78745e6b3a50e87a55c"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_cloud_traffic_industrial.json",
+      "bytes": 1333,
+      "sha256": "ec22b0f8e0f52fefe8506e640e803a0f2330b0d90be52b9f8eda613fb179b8a6"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_cloud_traffic_industrial_formal.json",
+      "bytes": 1186,
+      "sha256": "286cb75d88652ecd4729efcc2e22d2fccca82aafa78a77861bb5c4327ecb51a5"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial.json",
+      "bytes": 2120,
+      "sha256": "d898ce2ccbd596aed2d3b386d0b931a45ee3618b1c25a149f23743d263c7a5cd"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_nano222.json",
+      "bytes": 2136,
+      "sha256": "ca319d004371b80b8b8ead3345ddf50ba40e39f745f99ffc64b91fa9579f41a6"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_q4km_f16_sidecar_nano222.json",
+      "bytes": 2154,
+      "sha256": "d62ee7baddb8f49199160b93cf5901e92d519e31fd8d5208db7bd95f9a94e490"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_q4km_nano222.json",
+      "bytes": 2146,
+      "sha256": "584b8b3340781bf8112f488f43887b61624f51515df672bb9489974786f0f362"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_q5km_nano222.json",
+      "bytes": 2146,
+      "sha256": "b55e4762960f3f6f59e6019eb9153b1000759922e04a7c2f4383c67fdeba5110"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_q6_nano222.json",
+      "bytes": 2142,
+      "sha256": "a19d22ca7353b737f65828fdad22188a5f6aea9dcc915308897015e961e4fbe0"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_industrial.json",
+      "bytes": 386,
+      "sha256": "a3cf6b7e69c9a3595ed3e25371650237bf7faa5226d0197e3b61daad2becfd7e"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/scene_plugins_sidecar_traffic_industrial.json",
+      "bytes": 603,
+      "sha256": "2198b7db011a193f61687ab51df9da17c7e67a387e2b90add9fd9e689038702b"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/sidecar_cloud_service_traffic_industrial.json",
+      "bytes": 665,
+      "sha256": "3c59f07eb0c2644e9c8764f8f519659bd474cbd406f60abaa3bdee2f13b99471"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/sidecar_edge_service_traffic_industrial.json",
+      "bytes": 1845,
+      "sha256": "5d89a4db5e4414ab861957af3427e1a21a42e736d01c9f7b1c1c0760236e43ee"
+    },
+    {
+      "path": "scenes/industrial_anomaly/evidence/current_release_full_matrix_summary.json",
+      "bytes": 3076,
+      "sha256": "ca79c86c78be90e37588e11e71db423a8b88ffea47a3709fd685664f3ed3784d"
+    },
+    {
+      "path": "scenes/industrial_anomaly/industrial_anomaly/__init__.py",
+      "bytes": 136,
+      "sha256": "ea395615668856d7d6d9f1621a2fac369dffefa10d51ca0337897e35fb1e8b32"
+    },
+    {
+      "path": "scenes/industrial_anomaly/industrial_anomaly/action_codec.py",
+      "bytes": 1945,
+      "sha256": "36898f72bfe25e26313893f562de12b5e3ff5fcfc40782f46a0f4739b1e01c84"
+    },
+    {
+      "path": "scenes/industrial_anomaly/industrial_anomaly/data_schema.json",
+      "bytes": 1881,
+      "sha256": "273974d19b2606c49f0f5de85fbe894deda021ddb5945b8b956b0a9238f9dfae"
+    },
+    {
+      "path": "scenes/industrial_anomaly/industrial_anomaly/plugin.py",
+      "bytes": 34523,
+      "sha256": "8f08289946d53987487e34c7861fc5ba2c18aa1526784cccf25f4ff2dbe901ea"
+    },
+    {
+      "path": "scenes/industrial_anomaly/industrial_anomaly/review_bands.json",
+      "bytes": 1987,
+      "sha256": "ff95475e9294440e6f871a40682e827582114d7589553cb6385794598624d7b7"
+    },
+    {
+      "path": "scenes/industrial_anomaly/pyproject.toml",
+      "bytes": 447,
+      "sha256": "42d914f0290512a87021f3bca280e94ff0fe1abf540eee086600a54529fef254"
+    },
+    {
+      "path": "scenes/industrial_anomaly/samples/infrared_event.json",
+      "bytes": 876,
+      "sha256": "54f46bbab69f30263f187188e09a8baacb49023ebdbfa0f2975224a999f60698"
+    },
+    {
+      "path": "scenes/industrial_anomaly/samples/rgb_event.json",
+      "bytes": 844,
+      "sha256": "5e9164e9253e2335e8480b01c2cf7ccd068fdf959cd3b46c31c5eee186fc9643"
+    },
+    {
+      "path": "scenes/industrial_anomaly/summarize_industrial_full_metrics.py",
+      "bytes": 13467,
+      "sha256": "7d85f12b02890d733d92c83f310b261ceac027b6746639c542469029e473e50c"
+    },
+    {
+      "path": "scenes/industrial_anomaly/summarize_industrial_selective_benchmark.py",
+      "bytes": 4223,
+      "sha256": "2de80746161cd39786fbc157072635433ac3156363f8cdf9fdc4c058da336300"
     },
     {
       "path": "scenes/jetson_infra_trt_runtime_cublas/CMakeLists.txt",
@@ -1594,6 +2414,16 @@
       "sha256": "01dccd2d5d626541dcef303648850164595a3971cf3acb293d384a88e7e3fc18"
     },
     {
+      "path": "schemas/competition_targets_manifest.example.json",
+      "bytes": 6719,
+      "sha256": "7167b1d0a309f7d97363e636fefab54f38e2126a61d5f09cd5dedc92cacad8dd"
+    },
+    {
+      "path": "schemas/competition_targets_manifest.schema.json",
+      "bytes": 4675,
+      "sha256": "8ccdc2b3db3310f2535588663b49d2a3807c491167281ed75b3b936e80e0026c"
+    },
+    {
       "path": "schemas/decision_envelope.schema.json",
       "bytes": 1785,
       "sha256": "4cd5d52c28d047b4886c1c0375dceaa723ff63f39619319987b762b5948617c6"
@@ -1630,13 +2460,33 @@
     },
     {
       "path": "schemas/edge_llm_runtime.schema.json",
-      "bytes": 2002,
-      "sha256": "dec5194df7fd5fe206b435a78dcfd05df288254e182385fd4c6a6a9eb5659157"
+      "bytes": 4121,
+      "sha256": "13d5f906af4821b51b89ec7a65bc6dab00c0fff9d4a6b7cc698a0feb3022f032"
+    },
+    {
+      "path": "schemas/edge_llm_runtime_disabled.schema.json",
+      "bytes": 2140,
+      "sha256": "aecf5d7afbe6dc912690e9791684dcdef43f7fb102f64e1ad8997510614cf740"
+    },
+    {
+      "path": "schemas/edge_llm_runtime_output.schema.json",
+      "bytes": 1347,
+      "sha256": "1c120890724ea47667426fca245c35030c84fc5fa48d702f82d39d40f4e5203e"
     },
     {
       "path": "schemas/edge_llm_text_snapshot.schema.json",
       "bytes": 4220,
       "sha256": "52f369b70226a0a0d23d2d9755a42561db8c918efd37b1dbb52c5cbaf7cc51e1"
+    },
+    {
+      "path": "schemas/four_route_e2e_experiment_plan.example.json",
+      "bytes": 2394,
+      "sha256": "e76bbdc6fdb4753bafaadb11570a59196e028b801f30a271bbdeb0d81ccc6a4a"
+    },
+    {
+      "path": "schemas/four_route_e2e_experiment_plan.schema.json",
+      "bytes": 2883,
+      "sha256": "e33249d47d90a0c3c4b0f2bb5848a50d4a782e6a3ce02fbacd73473c1c03740d"
     },
     {
       "path": "schemas/framework_service_config.schema.json",
@@ -1654,9 +2504,34 @@
       "sha256": "91d681aa9eccbe791174dce006763369617bcd9625141f55a3e399cccf08ff65"
     },
     {
+      "path": "schemas/traffic_global_objective_sample_plan.example.json",
+      "bytes": 675,
+      "sha256": "e1def85028aa90789469dc07b68a87426efce973c6f72e865111a17225e84b91"
+    },
+    {
+      "path": "schemas/traffic_global_objective_sample_plan.schema.json",
+      "bytes": 1574,
+      "sha256": "4e5113108e4c1e245a979d9960b1687d9c1affe420fb042ae1d46f61ddc4480a"
+    },
+    {
+      "path": "schemas/weak_network_evidence.schema.json",
+      "bytes": 7270,
+      "sha256": "65cb48fbd33d4db7d39cc4f550b21dbcb9249362182d59323c92a842f37dfbc9"
+    },
+    {
+      "path": "schemas/weak_network_experiment_plan.example.json",
+      "bytes": 1142,
+      "sha256": "5c0e7f2a2e17ab7bf41a0815aaada8a1e5aba7d6a4eb3643680ec1cc02436a86"
+    },
+    {
+      "path": "schemas/weak_network_experiment_plan.schema.json",
+      "bytes": 2777,
+      "sha256": "7537bf1865e7ef9e4e9eeda329b74fe0220a07f15b9fe4b40ba7cba13b3c78c3"
+    },
+    {
       "path": "scripts/bootstrap_traffic_node.sh",
-      "bytes": 2469,
-      "sha256": "1d49462bba162bbd4405c9e403b7d3a4682871ba3749fa83865e61f154a73928"
+      "bytes": 2558,
+      "sha256": "761a85755ca3429dac5c0df631f09c7643b7c867484334ad37afc7ee45ceb8c1"
     },
     {
       "path": "scripts/build_llama_cpp_jetson.sh",
@@ -1669,19 +2544,64 @@
       "sha256": "85c7d7fc5f054c4846885317e3ecae0247c1488dbde58954318ec53033ce65de"
     },
     {
+      "path": "scripts/evaluate_competition_targets.py",
+      "bytes": 125898,
+      "sha256": "7400c0e19b394d879d76d1e30ba47693108f09721c4131d02836f38203f7f89d"
+    },
+    {
       "path": "scripts/install_traffic_systemd.sh",
       "bytes": 2063,
       "sha256": "704b8a94e8e3e8bde363a747554f33da8128ffdc9563d078ffc548b30e075934"
     },
     {
+      "path": "scripts/measure_distributed_model_update_loop.py",
+      "bytes": 398,
+      "sha256": "b39a38a0fb949edb09557ff9d14cf8a823b693e2961e4bb5f09101a8f132cbe0"
+    },
+    {
+      "path": "scripts/measure_model_update_loop.py",
+      "bytes": 376,
+      "sha256": "e14443f080c7a289f1c907be2874b15fc98746770822f7bd58d6bf588c56dbf0"
+    },
+    {
+      "path": "tests/test_action_token_constraints.py",
+      "bytes": 6967,
+      "sha256": "aa6b143906a29590bc2bb80c3492599ecbea554b16ee9007568385f986e42557"
+    },
+    {
       "path": "tests/test_aggregation_finality.py",
-      "bytes": 28942,
-      "sha256": "edee877652a0637da9fb2740f62144de3b285e91de385e77d6161e979f0ff90c"
+      "bytes": 31476,
+      "sha256": "2f4cc1b76e3ca4355851a0bfeb091e876aa9bc86835182381bc1319986625cc6"
     },
     {
       "path": "tests/test_async_summary_delivery.py",
-      "bytes": 95270,
-      "sha256": "8e21be30dffc0e40ca6dca5ee85038fdf1b386bed9d155317cc6168a6e4eecdf"
+      "bytes": 101459,
+      "sha256": "906238eea19aac33bd10bbb1b828c996e6872303906166f8cd6a84847bd1648d"
+    },
+    {
+      "path": "tests/test_build_ceval_kd_source.py",
+      "bytes": 13950,
+      "sha256": "213140a406760ecd0fca303c4be7906939f9e96abf1040b9a84e660b0176727f"
+    },
+    {
+      "path": "tests/test_build_frozen_math_eval.py",
+      "bytes": 2596,
+      "sha256": "fe4899bdb267fb819c8c5a1982757a5194cd5b87ab79301301ca3f8188e39309"
+    },
+    {
+      "path": "tests/test_build_frozen_nlr_eval.py",
+      "bytes": 17176,
+      "sha256": "e3e7a6ce511cfd37e563132dfd9ec4f20248771e1de23fb77b7e68e9b0b63c51"
+    },
+    {
+      "path": "tests/test_competition_target_evaluator.py",
+      "bytes": 69156,
+      "sha256": "8e735b506808924ff932c2e642fa903e109750fbf82b7b91d6cbc747368ee133"
+    },
+    {
+      "path": "tests/test_distributed_update_evidence.py",
+      "bytes": 10357,
+      "sha256": "fc9b4767c592ef85b3fa13b6767aec4c89f279455deeb7543dc3bd0225aade8d"
     },
     {
       "path": "tests/test_durable_handoff.py",
@@ -1689,9 +2609,84 @@
       "sha256": "10fccf3ae6ff4c985750e60c2d361974b16a8f7dee89b4dbb5a4e1e9f976e7ae"
     },
     {
+      "path": "tests/test_edge_llm_dual_promotion_gate.py",
+      "bytes": 24809,
+      "sha256": "dd7109a7cb30aa08eadb75a879c0327602a392c8ac68481455f67331a5b08414"
+    },
+    {
+      "path": "tests/test_edge_llm_factory_cli.py",
+      "bytes": 1846,
+      "sha256": "4963c1afb0b16b5460f4f2b2babea862f93fb4902ed97b9a017551c15e29754f"
+    },
+    {
+      "path": "tests/test_edge_llm_release_lifecycle.py",
+      "bytes": 38490,
+      "sha256": "5a74a8de485cbe00095922741e3c51d8205aed1bdcd2f3ffca6e54763f10bb32"
+    },
+    {
+      "path": "tests/test_edge_llm_startup_gate.py",
+      "bytes": 14854,
+      "sha256": "626026198d664b0927f1cbb8f364a0a173d7b2efc6e970dcc2b65ffa3552e1b7"
+    },
+    {
       "path": "tests/test_edge_response_profile.py",
-      "bytes": 4828,
-      "sha256": "1089d27f07ed679498a5db8acd876b68b9cc663cdd0cadccdadf70e625ec64e2"
+      "bytes": 5966,
+      "sha256": "b2fb6c01855b530bdf87ae57e1f1dffd8d87f3042894452fcabce6d8d2daee6d"
+    },
+    {
+      "path": "tests/test_focus_general_kd_dataset.py",
+      "bytes": 16394,
+      "sha256": "9cf4cd03b2c1121380a41b1c3130c5a4dd5050d33412ff1e75c469919bcb4a04"
+    },
+    {
+      "path": "tests/test_general_adapter_evaluation.py",
+      "bytes": 12962,
+      "sha256": "4e011c80e83a2bc20c70cfd79cab601c9e39fb5f1f99258f8e2e469fb08df8ca"
+    },
+    {
+      "path": "tests/test_general_capability_retention_math_scoring.py",
+      "bytes": 1626,
+      "sha256": "6fd68b502477acbb555b864f85fb12e5142b059279de734af0480751de35940a"
+    },
+    {
+      "path": "tests/test_general_kd_data.py",
+      "bytes": 1426,
+      "sha256": "fa9c6888ea519cd8e99e122e2b2f134d1b52c90f41744ac27d622a926362c8a9"
+    },
+    {
+      "path": "tests/test_industrial_anomaly_scene.py",
+      "bytes": 26113,
+      "sha256": "2860631a8cf1e02b322af15f317aa29062db157eededfc27a618c160b368944f"
+    },
+    {
+      "path": "tests/test_industrial_benchmark.py",
+      "bytes": 11845,
+      "sha256": "78e8913a5ae27db67972f9cce03b445dd547a319395bd8e7fd6835f740c4c168"
+    },
+    {
+      "path": "tests/test_industrial_joint_static_candidate.py",
+      "bytes": 5373,
+      "sha256": "e8b6f4bec8d975b7be8a78470c4c31d9f74fb0cef722d51d46beb034628c7af1"
+    },
+    {
+      "path": "tests/test_industrial_joint_static_formal.py",
+      "bytes": 3367,
+      "sha256": "acdbc2805850b69151862c5b4227801df15301cbcc3ede4b684981820bb881de"
+    },
+    {
+      "path": "tests/test_industrial_rule_distillation.py",
+      "bytes": 3507,
+      "sha256": "f6b0358bc9ca13e5f717b0d6a4896927bfc24b94cec0ed007e4a58a5ab3423cb"
+    },
+    {
+      "path": "tests/test_joint_scene_adapter.py",
+      "bytes": 23444,
+      "sha256": "51f9561817fc9e736c55ef574f1819435ea211bc3ea28aa376d000d7ca2e50f6"
+    },
+    {
+      "path": "tests/test_model_update_evidence_runner.py",
+      "bytes": 7455,
+      "sha256": "7c207ac44c3777e4643e3e7e1144ae3969168308540d9e52f5dc8e790c6c3865"
     },
     {
       "path": "tests/test_monitoring_deferred.py",
@@ -1699,14 +2694,44 @@
       "sha256": "66c44e01912973cf602258692d176998d3e611256a85b91c19075897291a1557"
     },
     {
+      "path": "tests/test_multi_adapter_stability_benchmark.py",
+      "bytes": 7453,
+      "sha256": "05bbe6b40d7593f9d362165e552bf44886a00caea9cf6d9e5486506155e86f93"
+    },
+    {
       "path": "tests/test_pems08_e2e_benchmark.py",
-      "bytes": 24003,
-      "sha256": "a8b7d54ebe0ba9104a620ed6fe148b7886bd9903858aa7c074fce54242ede749"
+      "bytes": 24821,
+      "sha256": "9689127ee670c63be53ac842b02347797d220556fb2558f3b17e4c8164cae17e"
     },
     {
       "path": "tests/test_protocol_compatibility.py",
       "bytes": 14606,
       "sha256": "b85af74f2bd22b07a107ac22b7ea71d2c191b9871c4dc5151e86ed90851613ea"
+    },
+    {
+      "path": "tests/test_q5_joint_release_packager.py",
+      "bytes": 16756,
+      "sha256": "ee2fe5b6027bd26d61133360bdbca108d0292818036afa619ec100451d201483"
+    },
+    {
+      "path": "tests/test_q5_static_joint_release_packager.py",
+      "bytes": 9709,
+      "sha256": "8f220dcfb5d29723a906f97da60723c96edab36f9be36fb4c626b02801fc1390"
+    },
+    {
+      "path": "tests/test_q6_multiscene_release_packager.py",
+      "bytes": 14181,
+      "sha256": "5b15d253a9619a271cbc9dd12b7c914c26579da5c2dbbe1a70c2e1f21da4b582"
+    },
+    {
+      "path": "tests/test_record_u2_bf16_execution_receipt.py",
+      "bytes": 40662,
+      "sha256": "ba12c25e9fa238215ee39d2de37665e6f8f13eec197f8d3dbee9f79f3bcda957"
+    },
+    {
+      "path": "tests/test_record_u2_candidate_artifact.py",
+      "bytes": 13773,
+      "sha256": "f8df52a3bb682127a817f8b90e1222df3cea05362ff29de9bc40f95a807d1cae"
     },
     {
       "path": "tests/test_reliability_semantics.py",
@@ -1720,13 +2745,73 @@
     },
     {
       "path": "tests/test_scheduler_risk_routing.py",
-      "bytes": 5461,
-      "sha256": "a2777a14087f10ff13bfe0548417e4396117171d52216959c044ebb0a697b78d"
+      "bytes": 6836,
+      "sha256": "f53f029fb6bc0cde2655e891ae3881b1b482c02ec179ae4132c4d10b7b0002d6"
+    },
+    {
+      "path": "tests/test_summarize_ceval_specialty_eval.py",
+      "bytes": 33330,
+      "sha256": "e859982acce2e45657a558ebc242843d82ebe5ca65c441fc724d6a4ccd5396ba"
+    },
+    {
+      "path": "tests/test_task_lora_routing.py",
+      "bytes": 7290,
+      "sha256": "4635754adc9f4660bae308613ea958aa0a1fc8aa09ac6c2af31d4b36912a1691"
+    },
+    {
+      "path": "tests/test_traffic_bf16_external_path_contract.py",
+      "bytes": 8421,
+      "sha256": "0e35e9bb72b1f7e2e9b0f095bf5b591128e779c07cf81d6b24fc06d18e3c5124"
+    },
+    {
+      "path": "tests/test_train_general_kd_resume_adapter.py",
+      "bytes": 2115,
+      "sha256": "114edfdd66250bb4a00a554ea5a93fbeb3651cbdc5f112c8830175c779e7fa4a"
     },
     {
       "path": "tests/test_transport_deadline.py",
       "bytes": 15984,
       "sha256": "868416ac77f09c03b349595959e4dd0259a61f6a87c57476023d3680165ffa63"
+    },
+    {
+      "path": "tests/test_u2_unified_dataset_builder.py",
+      "bytes": 8047,
+      "sha256": "a8878a2708b95c5b55a2e978e0c84679ecb801d37cdab3be7291f0abd780fde4"
+    },
+    {
+      "path": "tests/test_unified_general_adapter_evaluation.py",
+      "bytes": 18329,
+      "sha256": "23ddcd8ab96a62fad5a70351c8a105200def6416384ef07c413c844bc285bb4d"
+    },
+    {
+      "path": "tests/test_unified_general_paired_gate.py",
+      "bytes": 24407,
+      "sha256": "4a82144f0c8cb6abc6359f0593e1a9e03bdda0ebb681ec2684f384fbd31911e2"
+    },
+    {
+      "path": "tests/test_unified_general_teacher_evaluation.py",
+      "bytes": 17594,
+      "sha256": "37c7ea92f4d258bdca01d4d245f2f7015937889e09a60aa44fd91528a5a6c9cd"
+    },
+    {
+      "path": "tests/test_unified_traffic_bf16_regression_gate.py",
+      "bytes": 17955,
+      "sha256": "a7e03de4b5704f9a8f329019d65b0e72ffc01fe458a4654756dd3659c019f6b9"
+    },
+    {
+      "path": "tests/test_unified_traffic_general.py",
+      "bytes": 19688,
+      "sha256": "828ac2acb9d8ef08bf71ee056c457dd653bd0f5e9798a4e430ec95c9f09530fe"
+    },
+    {
+      "path": "tests/test_unified_u2_trainer.py",
+      "bytes": 12996,
+      "sha256": "9936aa37b1b27b549c5fbb55f603055af21da3b758c6ffebc072dcaa3341758f"
+    },
+    {
+      "path": "tests/test_unified_u2_training_evidence.py",
+      "bytes": 933,
+      "sha256": "ccff552f583682d18be4363a8080780101766d49b5b876e9c300cbf92869b6b9"
     },
     {
       "path": "tests/test_validation_hot_path.py",

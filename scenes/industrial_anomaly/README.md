@@ -59,13 +59,14 @@ python scenes/industrial_anomaly/demo_dual_scene.py \
 脚本会先后发送工业 RGB/红外和交通两个成员，打印两组本地 `provisional` 与云端
 `final`。每次运行生成新的 `event_id/sample_id`，不会与 Outbox 幂等记录冲突。
 
-当前推荐候选是同一个静态融合 Q5_K_M 模型同时服务交通和工业，不加载运行时 LoRA。
+当前正式版本是同一个静态融合 Q5_K_M 模型同时服务交通和工业，不加载运行时 LoRA。
 插件在完成 Schema 校验后，为交通 16 位输入加 `T` 前缀、为工业 16 位输入加 `I`
 前缀，形成严格 17-token 输入；模型仍只返回一个动作 token。`llama-server` 的
 `/lora-adapters` 在启动、请求和结束后都必须为 `[]`，请求体也不得携带 LoRA 字段。
 这样既避免模型猜场景，也避免双 Adapter 交替带来的调度和内存峰值。
 
-推荐部署模板位于 `deployment/joint_static_candidate_v3/`。该候选绑定：
+正式配置位于 `deployment/joint_static_formal_v1/`，候选生成模板位于
+`deployment/joint_static_candidate_v3/`。该 release 绑定：
 
 - release `traffic-industrial-joint-static-v2-q5km`；
 - 静态 Q5 SHA-256 `308daa980c7ca295e18bd76e8dcf6dc1ed725ded32ada535a0c5c1910c695ce2`；
@@ -75,8 +76,9 @@ python scenes/industrial_anomaly/demo_dual_scene.py \
 - 统一边缘接口旁路已验证交通、工业 RGB 和红外，工业被选模型平均时延
   `132.36455 ms`。
 
-旁路验证只证明边缘 provisional 路径；在正式云端 `18100` 未开放前，不声明
-authoritative final，也不据此自动切换正式服务。
+正式云端 `0.0.0.0:18100` 与 Nano222 边缘 `18101/18190` 已切换并托管。当前 release
+完整工业弱网、冲突和并发矩阵的可提交摘要位于
+`evidence/current_release_full_matrix_summary.json`；摘要用 SHA-256 绑定逐事件原始报告。
 
 工业模型的输入是由插件从 `score/review_low/review_high` 提取的 16-token 相对阈值距离，
 输出为单 token：`A=normal`、`B=review`、`C=anomaly`。它学习的是既有 review-band
@@ -86,7 +88,7 @@ authoritative final，也不据此自动切换正式服务。
 - `shadow`：模型只旁路记录，不改变决策；
 - `corroborate`：模型与规则一致时记录为学习模型路径，不一致、超时或运行失败时安全
   回退到确定性规则；
-- `selective`：`normal/anomaly` 直接走确定性快速路径，仅 `review` 调用工业 LoRA；
+- `selective`：`normal/anomaly` 直接走确定性快速路径，仅 `review` 调用共享静态 Q5；
   模型调用预算固定不超过 180 ms，超时、运行失败或规则分歧时仍回退到 `review`。
 
 因此接入 LoRA 不改变工业的安全动作边界，也不改变公共 Outbox、云端跨模态协调和

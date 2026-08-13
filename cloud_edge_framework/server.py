@@ -3,13 +3,14 @@
 import argparse
 import json
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlsplit
 
 from cloud_edge_framework.contracts import ContractError, EVIDENCE_LEVELS, RISK_LEVELS, SCHEMA_VERSION
 from cloud_edge_framework.feedback import DecisionFeedbackStore
+from cloud_edge_framework.http_api import FrameworkThreadingHTTPServer
 from cloud_edge_framework.plugin_manager import PluginRuntimeManager
 from cloud_edge_framework.performance import PerformanceProfileStore
 from cloud_edge_framework.registry import PluginLoadError
@@ -283,12 +284,10 @@ def main() -> None:
         performance_profile_path,
         feedback_path,
     )
-    server = ThreadingHTTPServer(
+    server = FrameworkThreadingHTTPServer(
         (args.host, args.port),
         build_handler(service, args.max_body_bytes, args.access_log),
     )
-    server.daemon_threads = True
-    server.request_queue_size = 128
     print("Cloud-edge component runtime listening on http://{}:{}".format(args.host, args.port))
     print("Scenes: {}".format(", ".join(service.manager.snapshot().registry.scenes())))
     try:

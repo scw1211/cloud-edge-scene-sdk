@@ -1,6 +1,6 @@
 {
   "schema_version": "competition-final-evidence/v1",
-  "observed_at": "2026-08-13",
+  "observed_at": "2026-08-14",
   "active_release": {
     "release_id": "traffic-industrial-joint-static-v2-q5km",
     "revision": 3,
@@ -34,26 +34,33 @@
     },
     "two_scene_mean_e2e": {
       "status": "passed_with_scope_qualifications",
-      "traffic_event_business_completion_mean_ms": 174.240621,
-      "traffic_window_business_completion_mean_ms": 212.514133,
-      "industrial_score_input_to_provisional_mean_ms": 111.077345,
+      "traffic_event_business_completion_mean_ms": 178.132534,
+      "traffic_window_business_completion_mean_ms": 213.954806,
+      "industrial_score_input_to_provisional_mean_ms": 163.330968,
       "industrial_perception_model_executed": false
     },
     "weak_network_current_release": {
-      "status": "incomplete",
+      "status": "passed",
       "profiles_exercised": [
         "normal",
         "mild",
         "severe",
         "outage"
       ],
-      "terminal_failure": "concurrency_8_edge_http_connection_reset",
+      "mild_local_success_rate": 1.0,
+      "severe_local_success_rate": 1.0,
+      "outage_local_success_rate": 1.0,
+      "outage_recovered_final_count": 20,
+      "outage_expected_final_count": 20,
+      "concurrency_8_local_success_rate": 1.0,
       "service_restarts": 0,
       "oom_observed": false
     },
     "conflict_consistency": {
-      "status": "passed_historical_not_current_release_bound",
-      "natural_conflict_rate": 0.044776,
+      "status": "passed_current_release",
+      "traffic_natural_conflict_rate": 0.0,
+      "industrial_controlled_conflicts": 30,
+      "industrial_controlled_resolutions": 30,
       "resolution_success_rate": 1.0,
       "injected_cases": 48,
       "injected_successes": 48
@@ -112,16 +119,16 @@
       "sha256": "3d24ef0be460022353e0d73eae5cabfd13a1c3fc7b56824836d226b46b2a9d66"
     },
     {
-      "name": "industrial_formal_180",
-      "sha256": "c260da971fe5be5b64fe1d7b7bbd88d67a4c6a0342b864962bb6f21307779333"
+      "name": "industrial_current_release_full_matrix",
+      "sha256": "1d84cab258e8c9e7f6907c8a3de9b4c8c71b91bce8cfc75587261d2db5e89f8a"
     },
     {
-      "name": "traffic_formal_100_windows",
-      "sha256": "2d138097e7f846fa297d6f4d7a742c2fa27f03254c07419f382838c6daa84988"
+      "name": "industrial_primary_fail_closed_summary",
+      "sha256": "a540be9e4e0e16c750f1b8eef0ba7ea56708f016b43add7e1c7497b61785f26d"
     },
     {
-      "name": "current_weak_network_proxy_raw",
-      "sha256": "66de734596134f7b49533ae9c22b86dfd707f4d1b4cc9d8cb1e48f5e06b0caaf"
+      "name": "traffic_current_release_100_windows",
+      "sha256": "400bf4d758eef7a71c5dc338eb54f5bbc8d7688ae091869f06ab63ad25a9fce4"
     },
     {
       "name": "general_reasoning_development_gate_failed",

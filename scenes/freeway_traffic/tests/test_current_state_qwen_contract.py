@@ -100,7 +100,7 @@ class CurrentStateQwenContractTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _decoder_controller():
+    def _decoder_controller(*, joint: bool = False):
         base = read_json_object(
             TRAFFIC_ROOT / "assets" / "edge_llm" / "base_manifest.json"
         )
@@ -130,9 +130,16 @@ class CurrentStateQwenContractTests(unittest.TestCase):
                 }
 
         controller = TrafficEdgeLLMController(
-            Path("release.json"), Path("runtime.json"), mode="primary"
+            Path("release.json"),
+            Path("runtime.json"),
+            mode="primary",
+            edge_llm_prompt_prefix="T" if joint else None,
         )
-        controller.context_encoder = "freeway-routing-context-decimal@v2"
+        controller.context_encoder = (
+            "scene-prefixed-decimal17@v1"
+            if joint
+            else "freeway-routing-context-decimal@v2"
+        )
         controller.active = SimpleNamespace(
             release_id="current-state-test",
             revision=1,
@@ -554,6 +561,33 @@ class CurrentStateQwenContractTests(unittest.TestCase):
         self.assertEqual(decision.metadata["edge_decision_path"], "edge_qwen")
         self.assertFalse(decision.metadata["edge_llm_safety_fallback"])
         self.assertFalse(decision.metadata["edge_llm_model_disagreement"])
+        self.assertTrue(
+            decision.metadata["edge_llm_student_advisory_whitelisted"]
+        )
+
+    def test_joint_traffic_contract_whitelists_only_student_advisory(self) -> None:
+        event = self._current_state_event()
+        student = build_decision(
+            event=event,
+            decision="congestion_warning",
+            actions=[self._advisory()],
+            confidence=0.371,
+            reason="joint Student warning",
+            source="test_student",
+            policy_version="test",
+        )
+
+        controller = self._decoder_controller(joint=True)
+        decoder_event, injected = controller._decoder_event(event, student)
+        decision = controller.decide(event, student, "test")
+
+        self.assertTrue(injected)
+        self.assertEqual(
+            {value["action_type"] for value in decoder_event["candidate_actions"]},
+            {"traffic_advisory"},
+        )
+        self.assertEqual(decision.metadata["edge_decision_path"], "edge_qwen")
+        self.assertFalse(decision.metadata["edge_llm_safety_fallback"])
         self.assertTrue(
             decision.metadata["edge_llm_student_advisory_whitelisted"]
         )

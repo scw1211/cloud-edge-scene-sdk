@@ -26,6 +26,7 @@ from benchmark_weak_network_retention import (  # noqa: E402
 from traffic_system.network_fault_proxy import (  # noqa: E402
     CONTROL_PROFILE_PATH,
     CONTROL_STATUS_PATH,
+    FaultProxyHTTPServer,
     FaultState,
     build_handler,
 )
@@ -103,7 +104,7 @@ class FaultProxyTests(unittest.TestCase):
         backend_thread = threading.Thread(target=backend.serve_forever, daemon=True)
         backend_thread.start()
         state = FaultState("normal", seed=7, log_path=None)
-        proxy = ThreadingHTTPServer(
+        proxy = FaultProxyHTTPServer(
             ("127.0.0.1", 0),
             build_handler(
                 state,
@@ -115,6 +116,7 @@ class FaultProxyTests(unittest.TestCase):
         )
         proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
         proxy_thread.start()
+        self.assertEqual(128, type(proxy).request_queue_size)
         proxy_url = "http://127.0.0.1:{}".format(proxy.server_port)
         try:
             status, result = _post_json(

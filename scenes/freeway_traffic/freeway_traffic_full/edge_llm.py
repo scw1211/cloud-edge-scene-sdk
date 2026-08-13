@@ -412,8 +412,15 @@ class TrafficEdgeLLMController:
         the original SemanticEvent remain unchanged.
         """
         value = event.to_dict(include_scene_payload=False)
-        current_state = bool(
+        current_state_encoder = bool(
             self.context_encoder == TRAFFIC_CONTEXT_ENCODER_V2
+            or (
+                self.context_encoder == TRAFFIC_JOINT_CONTEXT_ENCODER
+                and self.edge_llm_prompt_prefix == "T"
+            )
+        )
+        current_state = bool(
+            current_state_encoder
             and (
                 str(event.scene_payload.get("perception_mode", "")).lower()
                 == "current_state"

@@ -22,6 +22,14 @@ PROFILES = {
     "outage": {"delay_ms": 0.0, "jitter_ms": 0.0, "loss_rate": 1.0},
 }
 
+
+class FaultProxyHTTPServer(ThreadingHTTPServer):
+    """Fault proxy whose backlog is configured before ``listen()``."""
+
+    daemon_threads = True
+    request_queue_size = 128
+
+
 CONTROL_STATUS_PATH = "/__fault__/status"
 CONTROL_PROFILE_PATH = "/__fault__/profile"
 FORWARDED_REQUEST_HEADERS = (
@@ -365,7 +373,7 @@ def main() -> None:
         args.backend_timeout,
         args.control_token,
     )
-    server = ThreadingHTTPServer((args.host, args.port), handler)
+    server = FaultProxyHTTPServer((args.host, args.port), handler)
     print(
         "Fault proxy {} listening on {}:{} -> {}".format(
             args.profile, args.host, args.port, args.backend

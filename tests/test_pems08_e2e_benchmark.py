@@ -8,7 +8,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from cloud_edge_framework.http_api import build_role_handler
+from cloud_edge_framework.http_api import build_role_handler, create_http_server
 from scenes.freeway_traffic import benchmark_real_current_state_e2e as benchmark
 
 
@@ -213,6 +213,16 @@ class Pems08E2EBenchmarkTests(unittest.TestCase):
     def test_role_handler_uses_http_11(self):
         handler = build_role_handler(_ConcurrentRoleService(), 4096, False)
         self.assertEqual(handler.protocol_version, "HTTP/1.1")
+
+    def test_role_server_configures_backlog_before_listen(self):
+        server = create_http_server(
+            _ConcurrentRoleService(), "127.0.0.1", 0, 4096, False
+        )
+        try:
+            self.assertEqual(128, type(server).request_queue_size)
+            self.assertTrue(type(server).daemon_threads)
+        finally:
+            server.server_close()
 
     def test_four_partition_connections_are_parallel_and_reused(self):
         service = _ConcurrentRoleService()

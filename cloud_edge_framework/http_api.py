@@ -14,6 +14,13 @@ from cloud_edge_framework.reliability import IdempotencyConflictError
 _KEEP_ALIVE_IDLE_TIMEOUT_SECONDS = 30.0
 
 
+class FrameworkThreadingHTTPServer(ThreadingHTTPServer):
+    """Threaded server whose backlog is configured before ``listen()``."""
+
+    daemon_threads = True
+    request_queue_size = 128
+
+
 class ApiNotFoundError(LookupError):
     pass
 
@@ -167,10 +174,8 @@ def build_role_handler(service: Any, max_body_bytes: int, access_log: bool):
 
 
 def create_http_server(service: Any, host: str, port: int, max_body_bytes: int, access_log: bool):
-    server = ThreadingHTTPServer(
+    server = FrameworkThreadingHTTPServer(
         (host, int(port)),
         build_role_handler(service, int(max_body_bytes), bool(access_log)),
     )
-    server.daemon_threads = True
-    server.request_queue_size = 128
     return server
