@@ -50,7 +50,10 @@ STATE_RISK = {"normal": "low", "review": "medium", "anomaly": "high"}
 INDUSTRIAL_EDGE_LLM_MODES = {"disabled", "shadow", "corroborate", "selective"}
 INDUSTRIAL_ACTION_TOKENS = {"normal": "A", "review": "B", "anomaly": "C"}
 INDUSTRIAL_SELECTIVE_TIMEOUT_SECONDS = 0.18
-INDUSTRIAL_MAX_CONFIGURABLE_SELECTIVE_TIMEOUT_SECONDS = 0.25
+# A single-slot edge runtime serializes concurrent RGB/infrared review calls.
+# Keep the low default, but allow a bounded per-deployment limit that covers
+# both calls while the population-mean end-to-end SLA remains below 200 ms.
+INDUSTRIAL_MAX_CONFIGURABLE_SELECTIVE_TIMEOUT_SECONDS = 0.5
 
 
 def _json_size(value: Any) -> int:

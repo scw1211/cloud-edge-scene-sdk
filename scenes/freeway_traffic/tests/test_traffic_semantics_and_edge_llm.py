@@ -1,8 +1,10 @@
 """Traffic semantic separation and selective Edge-Qwen routing regressions."""
 
 from dataclasses import replace
+import json
 from pathlib import Path
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -221,6 +223,38 @@ class TrafficJointPromptContractTests(unittest.TestCase):
         self.assertEqual(prompt[0], "T")
         self.assertTrue(prompt[1:].isdigit())
         self.assertIs(controller.active, active)
+
+    def test_joint_runtime_reuses_routing_context_v2_gain_profile(self):
+        active = self._active(
+            17, None, context_encoder="scene-prefixed-decimal17@v1"
+        )
+        profile = {
+            "schema_version": 1,
+            "baseline": "current_state_student",
+            "accepted_strata": {
+                "normal|no_action|congestion_warning|3|0": {
+                    "validation_gain": 0.2
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory(prefix="joint-gain-profile-") as directory:
+            path = Path(directory) / "profile.json"
+            path.write_text(json.dumps(profile), encoding="utf-8")
+            controller = TrafficEdgeLLMController(
+                Path("release.json"),
+                Path("runtime.json"),
+                mode="selective",
+                gain_profile_path=path,
+                edge_llm_prompt_prefix="T",
+            )
+            with patch(
+                "freeway_traffic_full.edge_llm.load_active_edge_llm",
+                return_value=active,
+            ):
+                controller.warmup()
+
+        self.assertEqual(controller.gain_profile, profile)
+        self.assertIsNone(controller.gain_profile_inactive_reason)
 
     def test_legacy_runtime_keeps_decimal16_and_request_lora(self):
         controller = TrafficEdgeLLMController(

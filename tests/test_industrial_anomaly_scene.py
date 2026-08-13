@@ -391,7 +391,7 @@ class IndustrialAnomalyPluginTests(unittest.TestCase):
             "model": "joint-static-industrial-test",
             "provider": "llama_cpp",
             "schema_version": "edge-llm-runtime/v1",
-            "timeout_seconds": 0.25,
+            "timeout_seconds": 0.5,
         }
         with tempfile.TemporaryDirectory(prefix="industrial-joint-runtime-") as directory:
             path = Path(directory) / "runtime.json"
@@ -400,14 +400,14 @@ class IndustrialAnomalyPluginTests(unittest.TestCase):
                 edge_llm_runtime_config_path=path,
                 edge_llm_mode="selective",
                 edge_llm_prompt_prefix="I",
-                edge_llm_selective_timeout_limit_seconds=0.25,
+                edge_llm_selective_timeout_limit_seconds=0.5,
             )
             try:
                 plugin.warmup()
                 self.assertIsNotNone(plugin._edge_llm_client)
                 self.assertEqual(
                     plugin.health()["edge_qwen_selective_timeout_limit_seconds"],
-                    0.25,
+                    0.5,
                 )
             finally:
                 plugin.close()
@@ -416,7 +416,7 @@ class IndustrialAnomalyPluginTests(unittest.TestCase):
                 edge_llm_runtime_config_path=path,
                 edge_llm_mode="selective",
                 edge_llm_prompt_prefix="I",
-                edge_llm_selective_timeout_limit_seconds=0.251,
+                edge_llm_selective_timeout_limit_seconds=0.501,
             )
 
     def test_release_disabled_runtime_keeps_deterministic_industrial_path(self):

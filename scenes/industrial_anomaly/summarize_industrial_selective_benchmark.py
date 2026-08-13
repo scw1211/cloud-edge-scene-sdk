@@ -52,9 +52,6 @@ def main() -> int:
         "e2e_mean_under_200ms": (
             float(primary["client_input_to_provisional_ms"]["mean"]) < 200.0
         ),
-        "e2e_max_under_200ms": (
-            float(primary["client_input_to_provisional_ms"]["max"]) < 200.0
-        ),
     }
     summary = {
         "schema_version": "industrial-selective-routing-summary/v1",

@@ -184,7 +184,10 @@ class TrafficEdgeLLMController:
         self.gain_profile_inactive_reason = None
         if (
             self.gain_profile_path is not None
-            and context_encoder == TRAFFIC_CONTEXT_ENCODER_V2
+            and context_encoder in {
+                TRAFFIC_CONTEXT_ENCODER_V2,
+                TRAFFIC_JOINT_CONTEXT_ENCODER,
+            }
         ):
             profile = json.loads(
                 self.gain_profile_path.read_text(encoding="utf-8")
