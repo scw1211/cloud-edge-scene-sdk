@@ -16,7 +16,9 @@ from datetime import datetime, timezone
 import hashlib
 from http.client import HTTPConnection, HTTPSConnection, HTTPException
 import json
+import math
 from pathlib import Path
+import random
 import statistics
 import sys
 import threading
@@ -31,7 +33,20 @@ DECIDE_PATH = "/api/v1/collaboration/decide"
 REVIEW_PATH = "/api/v1/collaboration/reviews/{}"
 AGGREGATION_PATH = "/api/v1/collaboration/aggregations/{}"
 METRICS_PATH = "/api/v1/framework/metrics"
-NON_AUTHORITATIVE_REVIEW_STAGES = {"partial_final", "local_only_timeout"}
+AUTHORITATIVE_REVIEW_STAGES = {
+    "lightweight_final",
+    "large_model_review",
+    "large_model_correction",
+}
+DURABLE_PROVISIONAL_STAGES = {"handoff_durable", "outbox_durable"}
+BUSINESS_POLICY_ROUTES = (
+    "edge_only",
+    "local_autonomy",
+    "cloud_async",
+    "cloud_sync",
+)
+ROUTE_BOOTSTRAP_SEED = 20260808
+ROUTE_BOOTSTRAP_ITERATIONS = 2000
 
 
 class _PersistentJsonConnection:
@@ -280,6 +295,15 @@ def parse_args() -> argparse.Namespace:
         "--output",
         default="results/framework/pems08_current_state_e2e_latest.json",
     )
+    parser.add_argument(
+        "--route-manifest",
+        default=None,
+        help=(
+            "optional preregistered JSON weight plan with a routes object containing exactly "
+            "edge_only/local_autonomy/cloud_async/cloud_sync; when supplied, "
+            "the weighted business-E2E gate fails closed on a missing or failed route"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -336,12 +360,16 @@ def _post_compact(
 ) -> Dict[str, Any]:
     event_id = str(envelope["id"])
     headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Idempotency-Key": event_id,
-            "X-Trace-Id": "trace_" + event_id,
-            "Prefer": "return=minimal",
-        }
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Idempotency-Key": event_id,
+        "X-Trace-Id": "trace_" + event_id,
+        # Keep response transport independent from the business authorization
+        # route.  A policy-selected cloud_sync event still completes at its
+        # authoritative final, but the HTTP request returns its provisional
+        # immediately so socket blocking is not mistaken for business latency.
+        "Prefer": "return=minimal, respond-async",
+    }
     dispatch_ms = (time.perf_counter() - sample_t0) * 1000.0
     request_started = time.perf_counter()
     try:
@@ -403,11 +431,15 @@ def _wait_reviews(
 
 
 def _authoritative_review(review: Mapping[str, Any]) -> bool:
+    final = review.get("final_decision")
+    final = dict(final) if isinstance(final, dict) else {}
+    authorization = _action_authorization(final)
     return bool(
         str(review.get("state", "")) == "completed"
         and str(review.get("completion_stage", ""))
-        not in NON_AUTHORITATIVE_REVIEW_STAGES
-        and isinstance(review.get("final_decision"), dict)
+        in AUTHORITATIVE_REVIEW_STAGES
+        and str(final.get("status", "")) == "final"
+        and authorization.get("cloud_confirmed") is True
     )
 
 
@@ -484,6 +516,315 @@ def _summary(values: Iterable[float]) -> Dict[str, Any]:
         "p95": round(_percentile(data, 95), 6),
         "p99": round(_percentile(data, 99), 6),
         "max": round(max(data), 6),
+    }
+
+
+def _grouped_bootstrap_ci(
+    rows: Sequence[Mapping[str, Any]],
+    value_field: str,
+    group_field: str = "sample_id",
+    iterations: int = ROUTE_BOOTSTRAP_ITERATIONS,
+    seed: int = ROUTE_BOOTSTRAP_SEED,
+) -> Dict[str, Any]:
+    """Return a deterministic sample-cluster bootstrap interval.
+
+    METIS partition events from one sample are correlated, so the resampling
+    unit is ``sample_id`` rather than an individual event. Rows whose metric is
+    ``None`` remain in their cluster but do not contribute a numeric value.
+    This lets callers bootstrap successful latency values without pretending a
+    failed route has a zero-millisecond latency; failures stay in the separate
+    success-rate statistic.
+    """
+    count = int(iterations)
+    if count <= 0:
+        raise ValueError("bootstrap iterations must be positive")
+    groups: Dict[str, List[Mapping[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if group_field not in row:
+            raise ValueError("bootstrap row is missing {}".format(group_field))
+        groups[str(row[group_field])].append(row)
+    group_ids = sorted(groups)
+    point_values = [
+        float(row[value_field])
+        for row in rows
+        if row.get(value_field) is not None
+    ]
+    if not group_ids or not point_values:
+        return {
+            "estimate": None,
+            "lower": None,
+            "upper": None,
+            "confidence_level": 0.95,
+            "iterations": count,
+            "valid_replicates": 0,
+            "group_count": len(group_ids),
+            "seed": int(seed),
+        }
+
+    generator = random.Random(int(seed))
+    estimates: List[float] = []
+    for _ in range(count):
+        sampled_values: List[float] = []
+        for _ in group_ids:
+            sampled_group = groups[generator.choice(group_ids)]
+            sampled_values.extend(
+                float(row[value_field])
+                for row in sampled_group
+                if row.get(value_field) is not None
+            )
+        if sampled_values:
+            estimates.append(statistics.fmean(sampled_values))
+    if not estimates:
+        lower = upper = None
+    else:
+        lower = round(_percentile(estimates, 2.5), 6)
+        upper = round(_percentile(estimates, 97.5), 6)
+    return {
+        "estimate": round(statistics.fmean(point_values), 6),
+        "lower": lower,
+        "upper": upper,
+        "confidence_level": 0.95,
+        "iterations": count,
+        "valid_replicates": len(estimates),
+        "group_count": len(group_ids),
+        "seed": int(seed),
+    }
+
+
+def _route_business_summary(
+    rows: Sequence[Mapping[str, Any]],
+    iterations: int = ROUTE_BOOTSTRAP_ITERATIONS,
+    seed: int = ROUTE_BOOTSTRAP_SEED,
+) -> Dict[str, Dict[str, Any]]:
+    """Summarize fixed-population business completion by policy route."""
+    grouped: Dict[str, List[Mapping[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[str(row.get("policy_route", "unknown"))].append(row)
+    routes = list(BUSINESS_POLICY_ROUTES)
+    routes.extend(sorted(set(grouped) - set(routes)))
+    result: Dict[str, Dict[str, Any]] = {}
+    for route_index, route in enumerate(routes):
+        route_rows = grouped.get(route, [])
+        success_rows = [
+            row
+            for row in route_rows
+            if bool(row.get("route_success"))
+            and row.get("business_completion_ms") is not None
+        ]
+        success_count = len(success_rows)
+        failure_count = len(route_rows) - success_count
+        success_values = [
+            float(row["business_completion_ms"]) for row in success_rows
+        ]
+        latency_rows = [
+            dict(
+                row,
+                _successful_business_latency=(
+                    float(row["business_completion_ms"])
+                    if bool(row.get("route_success"))
+                    and row.get("business_completion_ms") is not None
+                    else None
+                ),
+            )
+            for row in route_rows
+        ]
+        # The Boolean field is converted by the generic bootstrap helper. Its
+        # denominator includes every row, including failed/missing finality.
+        success_rate_rows = [
+            dict(row, _route_success_value=1.0 if row.get("route_success") else 0.0)
+            for row in route_rows
+        ]
+        route_seed = int(seed) + route_index
+        result[route] = {
+            "event_count": len(route_rows),
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "success_rate": (
+                round(success_count / len(route_rows), 6) if route_rows else None
+            ),
+            "business_completion_ms": _summary(success_values),
+            "business_completion_mean_95ci": _grouped_bootstrap_ci(
+                latency_rows,
+                "_successful_business_latency",
+                iterations=iterations,
+                seed=route_seed,
+            ),
+            "success_rate_95ci": _grouped_bootstrap_ci(
+                success_rate_rows,
+                "_route_success_value",
+                iterations=iterations,
+                seed=route_seed,
+            ),
+            "business_endpoints": _counts(
+                row.get("business_endpoint", "unknown") for row in route_rows
+            ),
+            "delivery_routes": _counts(
+                row.get("delivery_route", "unknown") for row in route_rows
+            ),
+        }
+    return result
+
+
+def _validate_route_manifest(value: Mapping[str, Any]) -> Dict[str, float]:
+    """Validate a caller-supplied four-route population weighting."""
+    if not isinstance(value, Mapping):
+        raise ValueError("route manifest must be a JSON object")
+    schema_version = value.get("schema_version", 1)
+    if schema_version != 1:
+        raise ValueError("route manifest schema_version must be 1")
+    if not str(value.get("weight_plan_id", "")).strip():
+        raise ValueError("route manifest weight_plan_id must not be empty")
+    locked_at_raw = str(value.get("locked_at", "")).strip()
+    if not locked_at_raw:
+        raise ValueError("route manifest locked_at must not be empty")
+    try:
+        locked_at = datetime.fromisoformat(locked_at_raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("route manifest locked_at must be RFC3339") from exc
+    if locked_at.tzinfo is None or locked_at.utcoffset() is None:
+        raise ValueError("route manifest locked_at must include a timezone")
+    if locked_at > datetime.now(timezone.utc):
+        raise ValueError("route manifest must be locked before the benchmark starts")
+    plan_sha256 = str(value.get("plan_sha256", "")).lower()
+    if len(plan_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in plan_sha256
+    ):
+        raise ValueError("route manifest plan_sha256 must bind the preregistered plan")
+    raw_weights = value.get("routes")
+    if not isinstance(raw_weights, Mapping):
+        raise ValueError("route manifest routes must be an object")
+    expected = set(BUSINESS_POLICY_ROUTES)
+    observed = {str(key) for key in raw_weights}
+    if observed != expected:
+        raise ValueError(
+            "route manifest weights must contain exactly {}; missing={}, extra={}".format(
+                list(BUSINESS_POLICY_ROUTES),
+                sorted(expected - observed),
+                sorted(observed - expected),
+            )
+        )
+    weights: Dict[str, float] = {}
+    for route in BUSINESS_POLICY_ROUTES:
+        raw = raw_weights[route]
+        if isinstance(raw, bool):
+            raise ValueError("route weight {} must be numeric".format(route))
+        try:
+            weight = float(raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("route weight {} must be numeric".format(route)) from exc
+        if not math.isfinite(weight) or weight <= 0.0:
+            raise ValueError("route weight {} must be finite and positive".format(route))
+        weights[route] = weight
+    total = sum(weights.values())
+    if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1e-9):
+        raise ValueError("route weights must sum to 1.0, got {:.12g}".format(total))
+    return weights
+
+
+def _weighted_business_e2e(
+    route_summary: Mapping[str, Mapping[str, Any]],
+    weights: Mapping[str, float],
+    expected_event_count: Optional[int] = None,
+    observed_event_count: Optional[int] = None,
+    rows: Optional[Sequence[Mapping[str, Any]]] = None,
+    iterations: int = ROUTE_BOOTSTRAP_ITERATIONS,
+    seed: int = ROUTE_BOOTSTRAP_SEED,
+) -> Dict[str, Any]:
+    """Apply declared weights only when all four natural route strata pass."""
+    invalid_reasons: List[str] = []
+    if expected_event_count is not None:
+        expected = int(expected_event_count)
+        observed = int(observed_event_count or 0)
+        if observed != expected:
+            invalid_reasons.append(
+                "population:observed_events={}/{}".format(observed, expected)
+            )
+    route_means: Dict[str, Optional[float]] = {}
+    for route in BUSINESS_POLICY_ROUTES:
+        summary = route_summary.get(route, {})
+        event_count = int(summary.get("event_count", 0) or 0)
+        success_count = int(summary.get("success_count", 0) or 0)
+        failure_count = int(summary.get("failure_count", 0) or 0)
+        latency = summary.get("business_completion_ms", {})
+        latency = dict(latency) if isinstance(latency, Mapping) else {}
+        mean = latency.get("mean")
+        route_means[route] = float(mean) if mean is not None else None
+        if event_count == 0:
+            invalid_reasons.append("{}:no_observed_events".format(route))
+        if success_count == 0:
+            invalid_reasons.append("{}:no_successful_events".format(route))
+        if failure_count > 0:
+            invalid_reasons.append(
+                "{}:failed_events={}".format(route, failure_count)
+            )
+        if mean is None:
+            invalid_reasons.append("{}:missing_business_mean".format(route))
+    valid = not invalid_reasons
+    weighted = (
+        sum(
+            float(weights[route]) * float(route_means[route])
+            for route in BUSINESS_POLICY_ROUTES
+        )
+        if valid
+        else None
+    )
+    bootstrap_interval = None
+    if valid and rows is not None:
+        route_group_means: Dict[str, List[float]] = {}
+        for route in BUSINESS_POLICY_ROUTES:
+            grouped: Dict[str, List[float]] = defaultdict(list)
+            for row in rows:
+                if str(row.get("policy_route")) != route:
+                    continue
+                grouped[str(row["sample_id"])].append(
+                    float(row["business_completion_ms"])
+                )
+            route_group_means[route] = [
+                statistics.fmean(values)
+                for _group, values in sorted(grouped.items())
+            ]
+        generator = random.Random(int(seed))
+        estimates: List[float] = []
+        for _ in range(int(iterations)):
+            estimate = 0.0
+            for route in BUSINESS_POLICY_ROUTES:
+                values = route_group_means[route]
+                sampled = [
+                    values[generator.randrange(len(values))] for _ in values
+                ]
+                estimate += float(weights[route]) * statistics.fmean(sampled)
+            estimates.append(estimate)
+        bootstrap_interval = {
+            "lower": round(_percentile(estimates, 2.5), 6),
+            "upper": round(_percentile(estimates, 97.5), 6),
+            "confidence_level": 0.95,
+            "iterations": int(iterations),
+            "seed": int(seed),
+            "resampling_unit": "sample_id_within_policy_route",
+        }
+    target_passed = bool(
+        valid
+        and weighted is not None
+        and weighted < 200.0
+        and bootstrap_interval is not None
+        and bootstrap_interval["upper"] < 200.0
+    )
+    return {
+        "valid": valid,
+        "target_passed": target_passed,
+        "weighted_business_e2e_ms": (
+            round(weighted, 6) if weighted is not None else None
+        ),
+        "weighted_business_e2e_mean_95ci": bootstrap_interval,
+        "weights": {
+            route: float(weights[route]) for route in BUSINESS_POLICY_ROUTES
+        },
+        "route_means_ms": route_means,
+        "invalid_reasons": invalid_reasons,
+        "gate_semantics": (
+            "all four policy routes must be naturally observed and every event "
+            "must reach its declared business endpoint"
+        ),
     }
 
 
@@ -636,6 +977,27 @@ def _record_event(
     )
     local_auth = _action_authorization(local)
     compact_auth = _action_authorization(compact_final)
+    compact_metadata = compact_final.get("metadata", {})
+    compact_metadata = (
+        dict(compact_metadata) if isinstance(compact_metadata, dict) else {}
+    )
+    schedule = response.get("schedule", {})
+    schedule = dict(schedule) if isinstance(schedule, dict) else {}
+    data_plane = response.get("data_plane", {})
+    data_plane = dict(data_plane) if isinstance(data_plane, dict) else {}
+    delivery_route = str(schedule.get("route", "unknown"))
+    policy_route = str(
+        data_plane.get("scheduler_selected_route", delivery_route)
+    )
+    policy_wait = bool(
+        data_plane.get(
+            "scheduler_selected_wait",
+            schedule.get("waits_for_cloud", False),
+        )
+    )
+    provisional_first_override = bool(
+        data_plane.get("provisional_first_override", False)
+    )
     # Fail closed if the lifecycle row is missing or incomplete: a compact
     # provisional response can already carry deferred high-consequence actions.
     # Either source saying "deferred" means business completion must wait for
@@ -649,6 +1011,74 @@ def _record_event(
                 action_type = str(value)
                 if action_type and action_type not in deferred:
                     deferred.append(action_type)
+    response_auth = compact_auth or local_auth
+    immediate_raw = response_auth.get("immediate_action_types", [])
+    immediate = (
+        [str(value) for value in immediate_raw]
+        if isinstance(immediate_raw, list)
+        else []
+    )
+    authorization_decision = compact_final if compact_auth else local
+    raw_response_actions = authorization_decision.get("actions", [])
+    response_actions = []
+    response_actions_valid = isinstance(raw_response_actions, list)
+    for action in raw_response_actions if isinstance(raw_response_actions, list) else []:
+        if not isinstance(action, dict):
+            response_actions_valid = False
+            continue
+        action_type = str(action.get("action_type", "")).strip()
+        parameters = action.get("parameters", {})
+        if not action_type or not isinstance(parameters, dict):
+            response_actions_valid = False
+            continue
+        response_actions.append(
+            {
+                "action_type": action_type,
+                "requires_cloud_confirmation": (
+                    parameters.get("requires_cloud_confirmation") is True
+                ),
+            }
+        )
+    authorization_stages_valid = bool(
+        response_actions_valid
+        and set(action["action_type"] for action in response_actions)
+        == set(deferred).union(immediate)
+        and all(
+            (
+                action["action_type"] in deferred
+                and action["action_type"] not in immediate
+            )
+            if action["requires_cloud_confirmation"]
+            else (
+                action["action_type"] in immediate
+                and action["action_type"] not in deferred
+            )
+            for action in response_actions
+        )
+    )
+    response_auth_present = bool(compact_auth or local_auth)
+    response_auth_valid = bool(
+        response_auth_present
+        and isinstance(response_auth.get("deferred_action_types", []), list)
+        and isinstance(immediate_raw, list)
+        and not set(deferred).intersection(immediate)
+        and authorization_stages_valid
+        and (
+            (bool(deferred) and response_auth.get("all_actions_authorized") is False)
+            or (
+                not deferred
+                and response_auth.get("all_actions_authorized") is True
+            )
+        )
+    )
+    summary_delivery = response.get("summary_delivery", {})
+    summary_delivery = (
+        dict(summary_delivery) if isinstance(summary_delivery, dict) else {}
+    )
+    summary_delivery_required = summary_delivery.get("required") is True
+    summary_persistence_stage = str(
+        summary_delivery.get("persistence_stage", "unknown")
+    )
     completed_at_ms = review.get("completed_at_ms") if authoritative else None
     final_exact_ms: Optional[float]
     if not authoritative:
@@ -661,14 +1091,46 @@ def _record_event(
     response_at_ms = float(post["response_at_ms"])
     final_status = str(compact_final.get("status", ""))
     cloud_confirmed_in_response = bool(compact_auth.get("cloud_confirmed", False))
-    if deferred and not (final_status == "final" and cloud_confirmed_in_response):
+    local_autonomy = bool(
+        compact_metadata.get(
+            "local_autonomy",
+            local_metadata.get("local_autonomy", False),
+        )
+    )
+    if policy_route == "cloud_sync":
         business_completion_ms = (
             max(response_at_ms, float(final_exact_ms))
-            if final_exact_ms is not None
+            if policy_wait and final_exact_ms is not None
             else None
         )
+        business_endpoint = (
+            "authoritative_final"
+            if final_exact_ms is not None
+            else "missing_authoritative_final"
+        )
+    elif policy_route in {"edge_only", "local_autonomy", "cloud_async"}:
+        provisional_safe = bool(
+            policy_wait is False
+            and final_status == "provisional"
+            and response_auth_valid
+            and not cloud_confirmed_in_response
+            and summary_delivery_required
+            and summary_persistence_stage in DURABLE_PROVISIONAL_STAGES
+            and (policy_route != "local_autonomy" or local_autonomy)
+        )
+        business_completion_ms = response_at_ms if provisional_safe else None
+        business_endpoint = (
+            "provisional_response_and_durable_summary"
+            if provisional_safe
+            else "missing_safe_provisional_response"
+        )
     else:
-        business_completion_ms = response_at_ms
+        business_completion_ms = None
+        business_endpoint = "unknown_policy_route"
+    if policy_route not in {"cloud_sync", "edge_only", "local_autonomy", "cloud_async"}:
+        route_success = False
+    else:
+        route_success = business_completion_ms is not None
 
     edge_llm_selected = bool(local_metadata.get("edge_llm_selected", False))
     edge_llm_accepted = (
@@ -689,14 +1151,6 @@ def _record_event(
         decision_stratum = "qwen_selected_fallback"
     else:
         decision_stratum = "student"
-    schedule = response.get("schedule", {})
-    schedule = dict(schedule) if isinstance(schedule, dict) else {}
-    summary_delivery = response.get("summary_delivery", {})
-    summary_delivery = (
-        dict(summary_delivery) if isinstance(summary_delivery, dict) else {}
-    )
-    data_plane = response.get("data_plane", {})
-    data_plane = dict(data_plane) if isinstance(data_plane, dict) else {}
     accounting = response.get("closed_loop_accounting", {})
     accounting = dict(accounting) if isinstance(accounting, dict) else {}
     pipeline = accounting.get("pipeline_stage_ms", {})
@@ -738,6 +1192,8 @@ def _record_event(
             if business_completion_ms is not None
             else None
         ),
+        "business_endpoint": business_endpoint,
+        "route_success": route_success,
         "global_final_ms": (
             round(float(final_exact_ms), 6) if final_exact_ms is not None else None
         ),
@@ -746,7 +1202,16 @@ def _record_event(
         "review_authoritative": authoritative,
         "review_completion_mode": str(review.get("completion_mode", "")),
         "review_completion_stage": str(review.get("completion_stage", "")),
-        "schedule_route": str(schedule.get("route", "unknown")),
+        "review_final_status": str(final.get("status", "")),
+        "review_cloud_confirmed": bool(
+            _action_authorization(final).get("cloud_confirmed", False)
+        ),
+        "policy_route": policy_route,
+        "delivery_route": delivery_route,
+        "policy_wait": policy_wait,
+        "provisional_first_override": provisional_first_override,
+        "schedule_route": delivery_route,
+        "schedule_route_semantics": "delivery_route_compatibility_alias",
         "schedule_reason": str(schedule.get("reason", "")),
         "schedule_waits_for_cloud": bool(schedule.get("waits_for_cloud", False)),
         "schedule_critical": bool(schedule.get("critical", False)),
@@ -820,11 +1285,18 @@ def _record_event(
         ),
         "edge_llm_runtime_error": local_metadata.get("edge_llm_runtime_error"),
         "deferred_action_types": [str(value) for value in deferred],
-        "cloud_confirmed_in_response": cloud_confirmed_in_response,
-        "summary_delivery_mode": str(summary_delivery.get("mode", "unknown")),
-        "summary_persistence_stage": str(
-            summary_delivery.get("persistence_stage", "unknown")
+        "immediate_action_types": immediate,
+        "response_actions": response_actions,
+        "action_authorization_present": response_auth_present,
+        "action_authorization_valid": response_auth_valid,
+        "local_actions_authorized": bool(
+            response_auth.get("all_actions_authorized", False)
         ),
+        "local_autonomy": local_autonomy,
+        "cloud_confirmed_in_response": cloud_confirmed_in_response,
+        "summary_delivery_required": summary_delivery_required,
+        "summary_delivery_mode": str(summary_delivery.get("mode", "unknown")),
+        "summary_persistence_stage": summary_persistence_stage,
         "ordinary_summary_fast_path": bool(summary_delivery.get("fast_path", False)),
         "decision_delivery_path": (
             "local_decision_async_summary"
@@ -903,10 +1375,15 @@ def _stratum_summary(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
             6,
         ),
         "success_rate": round(len(completed_business) / max(1, len(rows)), 6),
+        "route_success_count": sum(bool(row.get("route_success")) for row in rows),
+        "route_failure_count": sum(not bool(row.get("route_success")) for row in rows),
         "qwen_selected": sum(bool(row.get("edge_llm_selected")) for row in rows),
         "qwen_accepted": sum(bool(row.get("edge_llm_accepted")) for row in rows),
+        "policy_routes": _counts(row.get("policy_route") for row in rows),
+        "delivery_routes": _counts(row.get("delivery_route") for row in rows),
         "schedule_routes": _counts(row.get("schedule_route") for row in rows),
         "executed_routes": _counts(row.get("executed_route") for row in rows),
+        "business_endpoints": _counts(row.get("business_endpoint") for row in rows),
         "decision_delivery_paths": _counts(
             row.get("decision_delivery_path") for row in rows
         ),
@@ -1225,6 +1702,24 @@ def main() -> None:
         raise ValueError("Qwen minimum counts must not be negative")
 
     project_root = Path(args.project_root).resolve()
+    route_manifest_record: Optional[Dict[str, Any]] = None
+    route_manifest_weights: Optional[Dict[str, float]] = None
+    if args.route_manifest:
+        route_manifest_path = _project_path(project_root, args.route_manifest)
+        route_manifest_value = json.loads(
+            route_manifest_path.read_text(encoding="utf-8")
+        )
+        route_manifest_weights = _validate_route_manifest(route_manifest_value)
+        route_manifest_record = {
+            "path": str(route_manifest_path),
+            "sha256": _sha256(route_manifest_path),
+            "bytes": route_manifest_path.stat().st_size,
+            "schema_version": int(route_manifest_value.get("schema_version", 1)),
+            "weight_plan_id": str(route_manifest_value["weight_plan_id"]),
+            "locked_at": str(route_manifest_value["locked_at"]),
+            "plan_sha256": str(route_manifest_value["plan_sha256"]).lower(),
+            "routes": dict(route_manifest_weights),
+        }
     scene_root = project_root / "scenes" / "freeway_traffic"
     sys.path.insert(0, str(project_root))
     sys.path.insert(0, str(scene_root))
@@ -1314,6 +1809,7 @@ def main() -> None:
         initial_cloud_metrics = _get_json(
             args.cloud_url, METRICS_PATH, args.request_timeout_seconds
         )
+        measured_started_at_utc = datetime.now(timezone.utc).isoformat()
         measured_started = time.perf_counter()
         submissions = []
         for index, sample_id in enumerate(sample_ids, start=1):
@@ -1378,6 +1874,21 @@ def main() -> None:
     )
 
     rows = [row for sample in samples for row in sample["events"]]
+    expected_event_count = sum(
+        int(submission["partition_count"]) for submission in submissions
+    )
+    business_route_summary = _route_business_summary(rows)
+    weighted_business_e2e = (
+        _weighted_business_e2e(
+            business_route_summary,
+            route_manifest_weights,
+            expected_event_count=expected_event_count,
+            observed_event_count=len(rows),
+            rows=rows,
+        )
+        if route_manifest_weights is not None
+        else None
+    )
     strata: Dict[str, List[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
         route = "sync" if row["schedule_waits_for_cloud"] else "async"
@@ -1412,9 +1923,6 @@ def main() -> None:
         for row in rows
         if row.get("global_final_ms") is not None
     ]
-    expected_event_count = sum(
-        int(submission["partition_count"]) for submission in submissions
-    )
     sla = _latency_sla_report(
         sample_local,
         sample_business,
@@ -1507,6 +2015,7 @@ def main() -> None:
         "schema_version": 2,
         "task": "pems08_current_state_deployed_e2e",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "measurement_started_at_utc": measured_started_at_utc,
         "experiment_id": experiment_id,
         "measurement_scope": {
             "start": (
@@ -1597,7 +2106,22 @@ def main() -> None:
                 row["legacy_congestion_level"] for row in rows
             ),
             "event_upload_levels": _counts(row["upload_level"] for row in rows),
+            "policy_routes": _counts(row["policy_route"] for row in rows),
+            "delivery_routes": _counts(row["delivery_route"] for row in rows),
             "schedule_routes": _counts(row["schedule_route"] for row in rows),
+            "policy_wait_count": sum(bool(row["policy_wait"]) for row in rows),
+            "provisional_first_override_count": sum(
+                bool(row["provisional_first_override"]) for row in rows
+            ),
+            "business_endpoints": _counts(
+                row["business_endpoint"] for row in rows
+            ),
+            "route_success_count": sum(
+                bool(row["route_success"]) for row in rows
+            ),
+            "route_failure_count": sum(
+                not bool(row["route_success"]) for row in rows
+            ),
             "executed_routes": _counts(row["executed_route"] for row in rows),
             "decision_strata": _counts(row["decision_stratum"] for row in rows),
             "qwen_selected_count": len(qwen_rows),
@@ -1694,6 +2218,27 @@ def main() -> None:
                 if row["edge_llm_latency_ms"] > 0.0
             ),
         },
+        "business_routes": {
+            "route_semantics": {
+                "policy_route": (
+                    "the scheduler-selected business policy before any "
+                    "provisional-first delivery override"
+                ),
+                "delivery_route": (
+                    "the response delivery path after any provisional-first override"
+                ),
+                "schedule_route": "compatibility alias of delivery_route",
+            },
+            "bootstrap": {
+                "resampling_unit": "sample_id",
+                "confidence_level": 0.95,
+                "iterations": ROUTE_BOOTSTRAP_ITERATIONS,
+                "seed": ROUTE_BOOTSTRAP_SEED,
+            },
+            "by_policy_route": business_route_summary,
+            "manifest": route_manifest_record,
+            "weighted_gate": weighted_business_e2e,
+        },
         "sla": sla,
         "communication": {
             "nominal_raw_input_bytes_per_sample": raw_window_bytes,
@@ -1783,6 +2328,7 @@ def main() -> None:
                 "execution": result["execution"],
                 "latency_ms": result["latency_ms"],
                 "sla": result["sla"],
+                "business_routes": result["business_routes"],
                 "strata": result["strata"],
             },
             ensure_ascii=False,
@@ -1828,6 +2374,22 @@ def main() -> None:
             raise RuntimeError(
                 "natural conflict metrics are incomplete: {}".format(consistency)
             )
+    if weighted_business_e2e is not None and not weighted_business_e2e["valid"]:
+        raise RuntimeError(
+            "route-manifest weighted business-E2E gate is invalid: {}".format(
+                weighted_business_e2e["invalid_reasons"]
+            )
+        )
+    if (
+        weighted_business_e2e is not None
+        and weighted_business_e2e["valid"]
+        and not weighted_business_e2e["target_passed"]
+    ):
+        raise RuntimeError(
+            "route-manifest weighted business-E2E target was not met: {}".format(
+                weighted_business_e2e
+            )
+        )
 
 
 if __name__ == "__main__":

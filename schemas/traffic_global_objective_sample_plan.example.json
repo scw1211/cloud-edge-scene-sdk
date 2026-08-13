@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "traffic-global-objective-heldout-v1",
+  "locked_at": "2026-08-09T08:00:00+08:00",
+  "scene": "freeway_traffic",
+  "expected": {
+    "git_commit": "replace-with-tested-commit",
+    "dataset_id": "pems08-current-state-heldout-v1",
+    "model_ids": ["replace-with-cloud-coordinator-id"],
+    "hardware_id": "replace-with-cloud-server-id",
+    "objective_id": "traffic_candidate_global_utility_v1",
+    "objective_definition_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "expected_sample_count": 10,
+  "sample_ids": [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
+  "slow_threshold_ms": 200.0
+}

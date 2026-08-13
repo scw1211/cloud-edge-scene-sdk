@@ -115,6 +115,9 @@ class EdgeResponseProfileTest(unittest.TestCase):
                 self.assertTrue(replay["idempotency_replay"])
                 self.assertEqual(len(runtime.calls), 1)
                 self.assertEqual(runtime.calls[0]["response_detail"], "compact")
+                self.assertFalse(
+                    runtime.calls[0]["return_provisional_immediately"]
+                )
 
                 with self.assertRaises(IdempotencyConflictError):
                     service.decide(
@@ -122,6 +125,31 @@ class EdgeResponseProfileTest(unittest.TestCase):
                         {
                             "idempotency-key": "request-1",
                             "x-response-detail": "full",
+                        },
+                    )
+            finally:
+                service.idempotency.close()
+
+    def test_respond_async_is_forwarded_and_part_of_idempotency_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            service, runtime = _service(Path(directory) / "idempotency.sqlite3")
+            payload = {"event": {"id": "event-async"}}
+            headers = {
+                "idempotency-key": "request-async",
+                "prefer": "return=minimal, respond-async",
+            }
+            try:
+                service.decide(payload, headers)
+
+                self.assertTrue(
+                    runtime.calls[0]["return_provisional_immediately"]
+                )
+                with self.assertRaises(IdempotencyConflictError):
+                    service.decide(
+                        payload,
+                        {
+                            "idempotency-key": "request-async",
+                            "prefer": "return=minimal",
                         },
                     )
             finally:

@@ -12,11 +12,14 @@ import time
 from typing import Any, Dict, List, Mapping, Optional
 import urllib.request
 
+from edge_llm_factory.action_constraints import action_token_constraint_evidence
 from traffic_system.decision_utils import read_jsonl
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VALID_TOKEN = re.compile(r"^[A-F]$")
+TRAFFIC_ACTION_TOKENS = tuple("ABCDEF")
+TRAFFIC_RESERVED_TOKENS = tuple("GH")
 
 
 def resolve_path(value: str) -> Path:
@@ -33,6 +36,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--timeout_seconds", type=float, default=2.0)
+    parser.add_argument(
+        "--constrain_action_tokens",
+        action="store_true",
+        help="通过 llama.cpp GBNF 在采样前只允许 A-F；默认关闭以保留历史口径。",
+    )
     return parser.parse_args()
 
 
@@ -57,19 +65,33 @@ def _target(row: Mapping[str, Any]) -> str:
     return value
 
 
-def request_token(host: str, prompt: str, timeout_seconds: float) -> Dict[str, Any]:
+def request_token(
+    host: str,
+    prompt: str,
+    timeout_seconds: float,
+    constrain_action_tokens: bool = False,
+) -> Dict[str, Any]:
+    constraint = (
+        action_token_constraint_evidence(
+            TRAFFIC_ACTION_TOKENS,
+            reserved_tokens=TRAFFIC_RESERVED_TOKENS,
+        )
+        if constrain_action_tokens
+        else None
+    )
+    payload = {
+        "prompt": prompt,
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "n_predict": 1,
+        "stream": False,
+        "cache_prompt": False,
+    }
+    if constraint is not None:
+        payload["grammar"] = constraint["grammar"]
     request = urllib.request.Request(
         host.rstrip("/") + "/completion",
-        data=json.dumps(
-            {
-                "prompt": prompt,
-                "temperature": 0.0,
-                "top_p": 1.0,
-                "n_predict": 1,
-                "stream": False,
-                "cache_prompt": False,
-            }
-        ).encode("utf-8"),
+        data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
@@ -77,8 +99,9 @@ def request_token(host: str, prompt: str, timeout_seconds: float) -> Dict[str, A
     with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
         payload = json.loads(response.read().decode("utf-8"))
     elapsed_ms = (time.perf_counter() - started) * 1000.0
-    raw = str(payload.get("content", "")).strip().upper()
-    token = raw if VALID_TOKEN.fullmatch(raw) else None
+    raw = str(payload.get("content", "")).strip()
+    candidate = raw if constrain_action_tokens else raw.upper()
+    token = candidate if VALID_TOKEN.fullmatch(candidate) else None
     timings = payload.get("timings", {})
     return {
         "parsed": token,
@@ -86,6 +109,7 @@ def request_token(host: str, prompt: str, timeout_seconds: float) -> Dict[str, A
         "latency_ms": round(elapsed_ms, 4),
         "prompt_tokens": int(timings.get("prompt_n", 0) or 0),
         "predicted_tokens": int(timings.get("predicted_n", 0) or 0),
+        "decoding_constraint": constraint,
     }
 
 
@@ -114,11 +138,21 @@ def main() -> None:
         resolve_path(args.reference_json) if args.reference_json else None
     )
     for index in range(max(0, args.warmup)):
-        request_token(args.host, _prompt(rows[index % len(rows)]), args.timeout_seconds)
+        request_token(
+            args.host,
+            _prompt(rows[index % len(rows)]),
+            args.timeout_seconds,
+            args.constrain_action_tokens,
+        )
 
     examples: List[Dict[str, Any]] = []
     for row in rows:
-        result = request_token(args.host, _prompt(row), args.timeout_seconds)
+        result = request_token(
+            args.host,
+            _prompt(row),
+            args.timeout_seconds,
+            args.constrain_action_tokens,
+        )
         event_id = str(row["event_id"])
         target = _target(row)
         examples.append(
@@ -144,6 +178,20 @@ def main() -> None:
         "host": args.host,
         "test_jsonl": str(resolve_path(args.test_jsonl)),
         "count": len(examples),
+        "decoding_constraint": (
+            action_token_constraint_evidence(
+                TRAFFIC_ACTION_TOKENS,
+                reserved_tokens=TRAFFIC_RESERVED_TOKENS,
+            )
+            if args.constrain_action_tokens
+            else {
+                "enabled": False,
+                "backend": "unconstrained_greedy",
+                "allowed_tokens": None,
+                "post_hoc_remapping": True,
+                "historical_case_normalization_retained": True,
+            }
+        ),
         "valid_output_rate": round(
             sum(bool(item["valid"]) for item in examples) / len(examples), 6
         ),

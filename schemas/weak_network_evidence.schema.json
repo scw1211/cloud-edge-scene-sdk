@@ -1,0 +1,232 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloud-edge.local/schemas/weak-network-evidence-v2.json",
+  "title": "交通弱网基本业务保持率原始取证",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "evidence_schema_version",
+    "provenance",
+    "experiment_plan",
+    "formal_eligible",
+    "configuration",
+    "measurement_status",
+    "status",
+    "normal_baseline",
+    "profiles",
+    "aggregate",
+    "recovery",
+    "attempted_real_event_count"
+  ],
+  "properties": {
+    "evidence_schema_version": {"const": "2.0"},
+    "provenance": {"type": "object"},
+    "experiment_plan": {"type": "object"},
+    "formal_eligible": {"type": "boolean"},
+    "configuration": {"type": "object"},
+    "measurement_status": {"type": "string"},
+    "status": {"type": "string"},
+    "passed": {"type": "boolean"},
+    "normal_baseline": {"$ref": "#/$defs/profile"},
+    "profiles": {
+      "type": "array",
+      "minItems": 3,
+      "items": {"$ref": "#/$defs/profile"}
+    },
+    "aggregate": {"type": "object"},
+    "recovery": {"$ref": "#/$defs/recovery"},
+    "attempted_real_event_count": {"type": "integer", "minimum": 1}
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "profile_id",
+        "fault_parameters",
+        "business_attempts",
+        "business_successes",
+        "samples",
+        "events",
+        "outbox_before_profile"
+      ],
+      "properties": {
+        "profile_id": {"enum": ["normal", "mild", "severe", "outage"]},
+        "fault_parameters": {"type": "object"},
+        "business_attempts": {"type": "integer", "minimum": 1},
+        "business_successes": {"type": "integer", "minimum": 0},
+        "samples": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "sample_id",
+              "business_attempts",
+              "business_successes"
+            ],
+            "properties": {
+              "sample_id": {"type": "integer", "minimum": 0},
+              "business_attempts": {"type": "integer", "minimum": 1},
+              "business_successes": {"type": "integer", "minimum": 0}
+            }
+          }
+        },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/event"}
+        },
+        "outbox_before_profile": {"$ref": "#/$defs/outboxSnapshots"},
+        "outbox_after_profile": {"$ref": "#/$defs/outboxSnapshots"},
+        "authoritative_reviews_after_profile": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "event_id",
+        "sample_id",
+        "profile",
+        "success",
+        "business_observation"
+      ],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1},
+        "sample_id": {"type": "integer", "minimum": 0},
+        "profile": {"enum": ["normal", "mild", "severe", "outage"]},
+        "success": {"type": "boolean"},
+        "business_observation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "response",
+            "review",
+            "authoritative_observed_ms",
+            "deadline_ms"
+          ],
+          "properties": {
+            "response": {"$ref": "#/$defs/response"},
+            "review": {"type": "object"},
+            "authoritative_observed_ms": {
+              "type": ["number", "null"],
+              "minimum": 0
+            },
+            "deadline_ms": {"type": "number", "exclusiveMinimum": 0}
+          }
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "route",
+        "policy_route",
+        "policy_waits_for_cloud",
+        "input_to_response_ms",
+        "local_actions_authorized",
+        "immediate_action_types",
+        "deferred_action_types",
+        "cloud_confirmed",
+        "local_autonomy",
+        "summary_delivery_required",
+        "summary_persistence_stage"
+      ],
+      "properties": {
+        "status": {"type": "string"},
+        "route": {"type": "string"},
+        "policy_route": {"type": "string"},
+        "policy_waits_for_cloud": {"type": "boolean"},
+        "input_to_response_ms": {"type": "number", "minimum": 0},
+        "local_actions_authorized": {"type": "boolean"},
+        "immediate_action_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "deferred_action_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "cloud_confirmed": {"type": "boolean"},
+        "local_autonomy": {"type": "boolean"},
+        "summary_delivery_required": {"type": "boolean"},
+        "summary_persistence_stage": {"type": "string"}
+      }
+    },
+    "outboxSnapshots": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {"$ref": "#/$defs/outboxSnapshot"}
+    },
+    "outboxSnapshot": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["states", "active", "reconciliation", "durable_handoff"],
+      "properties": {
+        "states": {
+          "type": "object",
+          "required": ["pending", "inflight", "completed"],
+          "properties": {
+            "pending": {"type": "integer", "minimum": 0},
+            "inflight": {"type": "integer", "minimum": 0},
+            "completed": {"type": "integer", "minimum": 0}
+          }
+        },
+        "active": {"type": "integer", "minimum": 0},
+        "reconciliation": {
+          "type": "object",
+          "required": ["active"],
+          "properties": {"active": {"type": "integer", "minimum": 0}}
+        },
+        "durable_handoff": {
+          "type": "object",
+          "required": ["pending", "durable_pending_count"],
+          "properties": {
+            "pending": {"type": "integer", "minimum": 0},
+            "durable_pending_count": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "passed",
+        "outbox_before_recovery",
+        "outbox_snapshots",
+        "review_records",
+        "aggregation_records",
+        "expected_event_ids",
+        "expected_sample_by_event",
+        "manual_flush_used"
+      ],
+      "properties": {
+        "passed": {"type": "boolean"},
+        "outbox_before_recovery": {"$ref": "#/$defs/outboxSnapshots"},
+        "outbox_snapshots": {"$ref": "#/$defs/outboxSnapshots"},
+        "review_records": {"type": "object"},
+        "aggregation_records": {"type": "array"},
+        "expected_event_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "expected_sample_by_event": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "manual_flush_used": {"const": false}
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "replace-weaknet-plan-v1",
+  "created_at": "2026-08-09T09:00:00+08:00",
+  "scene": "freeway_traffic",
+  "git_commit": "0000000000000000000000000000000000000000",
+  "dataset_id": "pems08_metis4:replace-with-partition-manifest-sha256",
+  "model_ids": {
+    "replace": "with hashes emitted by benchmark_weak_network_retention.py"
+  },
+  "hardware_id": "replace-with-exact-test-host-and-four-logical-edge-layout",
+  "seed": 20260809,
+  "profile_order": ["normal", "mild", "severe", "outage", "recovery"],
+  "fault_profiles": {
+    "normal": {"delay_ms": 0.0, "jitter_ms": 0.0, "loss_rate": 0.0},
+    "mild": {"delay_ms": 40.0, "jitter_ms": 10.0, "loss_rate": 0.01},
+    "severe": {"delay_ms": 80.0, "jitter_ms": 30.0, "loss_rate": 0.1},
+    "outage": {"delay_ms": 0.0, "jitter_ms": 0.0, "loss_rate": 1.0}
+  },
+  "sample_ids_by_profile": {
+    "normal": [0, 1, 2, 3, 4],
+    "mild": [5, 6, 7, 8, 9],
+    "severe": [10, 11, 12, 13, 14],
+    "outage": [15, 16, 17, 18, 19]
+  },
+  "business_deadline_ms": 200.0,
+  "aggregation_timeout_ms": 150,
+  "dispatch_lead_ms": 30.0,
+  "split": "test",
+  "top_k": 10
+}

@@ -134,12 +134,28 @@ class _BatchAggregationRegistry:
         return _BatchAggregationPlugin()
 
 
+class _DriftedBatchAggregationPlugin(_BatchAggregationPlugin):
+    def aggregation_spec(self, event: SemanticEvent) -> dict:
+        value = super().aggregation_spec(event)
+        value["key"] = "different-sample"
+        return value
+
+
+class _DriftedBatchAggregationRegistry:
+    def get(self, scene: str) -> _DriftedBatchAggregationPlugin:
+        if scene != "aggregation_test":
+            raise KeyError(scene)
+        return _DriftedBatchAggregationPlugin()
+
+
 class _BatchCloudRuntime:
     def __init__(self) -> None:
         self.coordinate_calls = 0
+        self.last_events = []
 
     def coordinate(self, events) -> dict:
         self.coordinate_calls += 1
+        self.last_events = list(events)
         decisions = []
         for event in events:
             decisions.append(
@@ -243,6 +259,19 @@ class AggregationFinalityTest(unittest.TestCase):
             self.assertEqual(flushed["attempted"], 1)
             self.assertEqual(flushed["completed"], 1)
             self.assertEqual(cloud_runtime.coordinate_calls, 1)
+            self.assertEqual(len(cloud_runtime.last_events), 4)
+            for event in cloud_runtime.last_events:
+                trusted = event.metadata["aggregation"]
+                self.assertEqual(trusted["authority"], "cloud_aggregation_lease")
+                self.assertEqual(trusted["member"], event.edge_id)
+                self.assertEqual(trusted["expected_members"], EXPECTED_MEMBERS)
+                self.assertEqual(trusted["received_members"], EXPECTED_MEMBERS)
+                self.assertEqual(trusted["missing_members"], [])
+                self.assertEqual(
+                    trusted["completion_reason"], "all_expected_members"
+                )
+                self.assertTrue(trusted["evidence_complete"])
+                self.assertEqual(trusted["finality"], "final")
             group_id = first_result["items"][0]["group_id"]
             result = service.aggregation_results_batch(
                 {
@@ -260,6 +289,32 @@ class AggregationFinalityTest(unittest.TestCase):
             )
             self.assertTrue(group["aggregation"]["evidence_complete"])
             self.assertEqual(len(group["coordination"]["decisions"]), 4)
+        finally:
+            service.aggregator.close()
+
+    def test_worker_rejects_plugin_contract_drift_before_coordination(self) -> None:
+        service = object.__new__(CloudApiService)
+        service.aggregator = MultiEdgeEventAggregator()
+        cloud_runtime = _BatchCloudRuntime()
+        service.manager = _BatchManager(cloud_runtime)
+        service.metrics = FrameworkMetrics("test-cloud")
+        try:
+            submitted = service.aggregate_batch(
+                {"events": [_event(index).to_dict() for index in range(4)]},
+                {},
+            )
+            group_id = submitted["items"][0]["group_id"]
+            service.manager.snapshot.registry = _DriftedBatchAggregationRegistry()
+
+            flushed = service.flush_aggregations(64)
+
+            self.assertEqual(flushed["attempted"], 1)
+            self.assertEqual(flushed["completed"], 0)
+            self.assertEqual(len(flushed["errors"]), 1)
+            self.assertEqual(cloud_runtime.coordinate_calls, 0)
+            state = service.aggregator.get(group_id)
+            self.assertEqual(state["state"], "waiting")
+            self.assertIn("disagrees with durable aggregation state", state["last_error"])
         finally:
             service.aggregator.close()
 

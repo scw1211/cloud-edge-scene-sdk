@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "discover_entry_points": false,
+  "plugins": [
+    {
+      "spec": "freeway_traffic_full.plugin_impl:TrafficPlugin",
+      "enabled": true,
+      "options": {
+        "cloud_model_path": "scenes/freeway_traffic/assets/models/cloud_coordinator_topology_fused.joblib",
+        "current_state_cloud_model_path": "scenes/freeway_traffic/assets/models/cloud_coordinator_current_state_future_v1.joblib",
+        "feature_codec_path": "scenes/freeway_traffic/assets/models/traffic_tree_feature_codec_topology_v1.npz",
+        "current_state_feature_codec_path": "scenes/freeway_traffic/assets/models/traffic_tree_feature_codec_current_state_v1.npz",
+        "topology_path": "scenes/freeway_traffic/assets/models/traffic_region_topology_metis4.json",
+        "global_objective_path": "scenes/freeway_traffic/assets/models/traffic_global_utility_v1.json",
+        "global_optimizer_mode": "shadow",
+        "cloud_llm_min_expected_gain": 0.05,
+        "policy_version": "traffic-1.11.0"
+      }
+    },
+    {
+      "spec": "industrial_anomaly.plugin:IndustrialAnomalyPlugin",
+      "enabled": true,
+      "options": {
+        "thresholds_path": "scenes/industrial_anomaly/industrial_anomaly/review_bands.json",
+        "aggregation_timeout_ms": 150,
+        "policy_version": "industrial-1.1.0"
+      }
+    }
+  ]
+}

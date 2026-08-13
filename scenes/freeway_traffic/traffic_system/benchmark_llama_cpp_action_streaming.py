@@ -23,7 +23,14 @@ from traffic_system.benchmark_utils import (  # noqa: E402
     stop_server,
     wait_until_ready,
 )
+from edge_llm_factory.action_constraints import (  # noqa: E402
+    action_token_constraint_evidence,
+)
 from traffic_system.decision_utils import read_jsonl, save_json  # noqa: E402
+
+
+TRAFFIC_ACTION_TOKENS = tuple("ABCDEF")
+TRAFFIC_RESERVED_TOKENS = tuple("GH")
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,7 +46,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--threads_batch", type=int, default=4)
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--ubatch_size", type=int, default=64)
-    parser.add_argument("--cache_reuse", type=int, default=1)
     parser.add_argument("--gpu_layers", type=int, default=0)
     parser.add_argument("--poll", type=int, default=50)
     parser.add_argument("--priority", type=int, default=0)
@@ -67,6 +73,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--startup_timeout", type=int, default=60)
     parser.add_argument("--request_timeout", type=int, default=60)
     parser.add_argument("--sample_interval_ms", type=float, default=10.0)
+    parser.add_argument(
+        "--constrain_action_tokens",
+        action="store_true",
+        help="通过 llama.cpp GBNF 在采样前只允许 A-F；默认关闭以保留历史口径。",
+    )
     return parser.parse_args()
 
 
@@ -123,6 +134,7 @@ def run_one(
     prefill_no_think: bool,
     prompt_format: str,
     stream: bool = True,
+    constrain_action_tokens: bool = False,
 ) -> Dict[str, Any]:
     payload = {
         "prompt": build_prompt(row, prefill_no_think, prompt_format),
@@ -132,6 +144,13 @@ def run_one(
         "stream": stream,
         "cache_prompt": False,
     }
+    constraint = None
+    if mode == "action_token" and constrain_action_tokens:
+        constraint = action_token_constraint_evidence(
+            TRAFFIC_ACTION_TOKENS,
+            reserved_tokens=TRAFFIC_RESERVED_TOKENS,
+        )
+        payload["grammar"] = constraint["grammar"]
     request = urllib.request.Request(
         base_url + "/completion",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -166,7 +185,13 @@ def run_one(
                     final_chunk = chunk
     finished = time.perf_counter()
     output = "".join(parts).strip()
-    match = re.search(r"[A-F]", output.upper()) if mode == "action_token" else None
+    if mode == "action_token" and constrain_action_tokens:
+        # The constrained protocol accepts only the complete generated token;
+        # it never extracts or remaps a character from a malformed response.
+        match = re.fullmatch(r"[A-F]", output)
+    else:
+        # Retained only for historical, unconstrained benchmark comparability.
+        match = re.search(r"[A-F]", output.upper()) if mode == "action_token" else None
     prediction = match.group(0) if match else None
     target = str(row.get("target", "")) if mode == "action_token" else None
     timings = final_chunk.get("timings", {})
@@ -182,6 +207,7 @@ def run_one(
         "valid": prediction is not None if mode == "action_token" else None,
         "correct": prediction == target if mode == "action_token" else None,
         "raw_output": output,
+        "decoding_constraint": constraint,
     }
 
 
@@ -221,12 +247,11 @@ def main() -> None:
         "--parallel",
         "1",
         "--no-cache-prompt" if args.no_cache_prompt else "--cache-prompt",
-        "--cache-reuse",
-        str(args.cache_reuse),
         "--cache-ram",
         "0",
         "--ctx-checkpoints",
         "0",
+        "--no-cache-idle-slots",
         "--reasoning",
         "off",
         "--reasoning-budget",
@@ -282,6 +307,7 @@ def main() -> None:
                     args.prefill_no_think,
                     args.prompt_format,
                     not args.non_stream,
+                    args.constrain_action_tokens,
                 )
                 for index in range(args.warmup)
             ]
@@ -302,6 +328,7 @@ def main() -> None:
                     args.prefill_no_think,
                     args.prompt_format,
                     not args.non_stream,
+                    args.constrain_action_tokens,
                 )
                 for row in rows
             ]
@@ -344,6 +371,20 @@ def main() -> None:
         "warmup_jsonl": args.warmup_jsonl or args.test_jsonl,
         "prompt_format": args.prompt_format,
         "stream": not args.non_stream,
+        "decoding_constraint": (
+            action_token_constraint_evidence(
+                TRAFFIC_ACTION_TOKENS,
+                reserved_tokens=TRAFFIC_RESERVED_TOKENS,
+            )
+            if args.constrain_action_tokens
+            else {
+                "enabled": False,
+                "backend": "unconstrained_greedy",
+                "allowed_tokens": None,
+                "post_hoc_remapping": True,
+                "historical_parser_retained": True,
+            }
+        ),
         "command": command,
         "startup_ms": startup_ms,
         "warmup_runs": args.warmup,

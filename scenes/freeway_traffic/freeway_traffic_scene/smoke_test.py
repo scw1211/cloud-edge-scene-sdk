@@ -141,8 +141,16 @@ def main():
         cloud_queue_ms=1,
         cloud_compute_ms=2,
     )
-    first = edge_a.process(_load("edge_a_event.json"), network)
-    second = edge_b.process(_load("edge_b_event.json"), network)
+    first = edge_a.process(
+        _load("edge_a_event.json"),
+        network,
+        return_provisional_immediately=True,
+    )
+    second = edge_b.process(
+        _load("edge_b_event.json"),
+        network,
+        return_provisional_immediately=True,
+    )
     first_submission = edge_a.flush_pending(waiting_poll_seconds=0.001)
     second_submission = edge_b.flush_pending(waiting_poll_seconds=0.001)
     first_delivery = edge_a.flush_pending(waiting_poll_seconds=0.001)

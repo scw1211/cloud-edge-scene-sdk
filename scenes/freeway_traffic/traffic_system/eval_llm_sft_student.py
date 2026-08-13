@@ -1,12 +1,13 @@
 """用途：评估 SFT 后 Qwen Student 的动作准确率、风险准确率和节点 F1。"""
 
 import argparse
+import hashlib
 import json
 import re
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import torch
 
@@ -42,13 +43,143 @@ def parse_args() -> argparse.Namespace:
         default="tokenizer_chat",
     )
     parser.add_argument("--bf16", action="store_true")
-    parser.add_argument("--trust_remote_code", action="store_true", default=True)
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        default=False,
+        help="Deprecated compatibility flag; frozen traffic evaluation rejects remote code.",
+    )
     return parser.parse_args()
 
 
 def resolve_path(path: str) -> Path:
-    raw = Path(path)
-    return raw if raw.is_absolute() else PROJECT_ROOT / raw
+    raw = Path(path).expanduser()
+    return (raw if raw.is_absolute() else PROJECT_ROOT / raw).resolve()
+
+
+def report_path(path: str) -> str:
+    """Return a backward-compatible project path or a canonical external path."""
+    resolved = resolve_path(path)
+    try:
+        return str(resolved.relative_to(PROJECT_ROOT.resolve()))
+    except ValueError:
+        return str(resolved)
+
+
+def require_new_output_path(path: str) -> Path:
+    output_path = resolve_path(path)
+    if output_path.exists() or output_path.is_symlink():
+        raise FileExistsError(f"拒绝覆盖已有评估结果: {output_path}")
+    return output_path
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file_obj:
+        for block in iter(lambda: file_obj.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def file_identity(path: Path, label: str) -> Dict[str, Any]:
+    resolved = path.expanduser().resolve()
+    if not resolved.is_file():
+        raise ValueError(f"{label}不存在或不是普通文件: {resolved}")
+    return {
+        "path": str(resolved),
+        "bytes": resolved.stat().st_size,
+        "sha256": sha256_file(resolved),
+    }
+
+
+def text_snapshot_file_identities(
+    snapshot_directory: Path, snapshot_manifest: Path
+) -> Dict[str, Dict[str, Any]]:
+    try:
+        manifest = json.loads(snapshot_manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"text_snapshot_manifest.json无法读取: {exc}") from exc
+    if not isinstance(manifest, Mapping) or not isinstance(manifest.get("files"), list):
+        raise ValueError("text_snapshot_manifest.json.files必须是非空数组")
+    rows = manifest["files"]
+    if not rows:
+        raise ValueError("text_snapshot_manifest.json.files必须是非空数组")
+    snapshot_directory = snapshot_directory.resolve()
+    identities: Dict[str, Dict[str, Any]] = {}
+    for index, row in enumerate(rows):
+        if not isinstance(row, Mapping):
+            raise ValueError(f"text_snapshot_manifest.json.files[{index}]必须是对象")
+        relative_name = row.get("path")
+        if not isinstance(relative_name, str) or not relative_name.strip():
+            raise ValueError(
+                f"text_snapshot_manifest.json.files[{index}].path必须是非空相对路径"
+            )
+        relative = Path(relative_name)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError(
+                f"text_snapshot_manifest.json.files[{index}].path必须留在快照目录内"
+            )
+        normalized_name = relative.as_posix()
+        if normalized_name in identities:
+            raise ValueError(f"文本快照清单文件重复: {normalized_name}")
+        snapshot_file = snapshot_directory / relative
+        if snapshot_file.is_symlink():
+            raise ValueError(f"文本快照文件不得是符号链接: {normalized_name}")
+        try:
+            snapshot_file.resolve().relative_to(snapshot_directory)
+        except ValueError as exc:
+            raise ValueError(f"文本快照文件越界: {normalized_name}") from exc
+        current = file_identity(
+            snapshot_file,
+            f"文本快照文件 {normalized_name}",
+        )
+        declared_bytes = row.get("bytes")
+        if isinstance(declared_bytes, bool) or not isinstance(declared_bytes, int):
+            raise ValueError(f"文本快照文件bytes无效: {normalized_name}")
+        declared_sha256 = str(row.get("sha256", "")).strip().lower()
+        if declared_bytes != current["bytes"] or declared_sha256 != current["sha256"]:
+            raise ValueError(f"文本快照文件身份与清单不一致: {normalized_name}")
+        identities[normalized_name] = current
+    return identities
+
+
+def capture_evaluation_artifacts(args: argparse.Namespace) -> Dict[str, Any]:
+    adapter_directory = resolve_path(args.adapter_dir)
+    adapter_model = adapter_directory / "adapter_model.safetensors"
+    raw_base = Path(args.model_name_or_path).expanduser()
+    base_directory = (
+        raw_base.resolve()
+        if raw_base.is_absolute()
+        else (PROJECT_ROOT / raw_base).resolve()
+    )
+    snapshot_manifest = base_directory / "text_snapshot_manifest.json"
+    return {
+        "adapter_model": file_identity(adapter_model, "adapter_model.safetensors"),
+        "adapter_config": file_identity(
+            adapter_directory / "adapter_config.json", "adapter_config.json"
+        ),
+        "base_text_snapshot_manifest": file_identity(
+            snapshot_manifest, "text_snapshot_manifest.json"
+        ),
+        "base_text_snapshot_files": text_snapshot_file_identities(
+            base_directory, snapshot_manifest
+        ),
+        "evaluator": file_identity(Path(__file__), "eval_llm_sft_student.py"),
+    }
+
+
+def require_unchanged_evaluation_artifacts(
+    before: Dict[str, Any], after: Dict[str, Any]
+) -> None:
+    if before != after:
+        changed = sorted(
+            name for name in set(before) | set(after) if before.get(name) != after.get(name)
+        )
+        raise RuntimeError(
+            "评估期间模型或评估器身份发生漂移，拒绝写结果: {}".format(
+                ", ".join(changed)
+            )
+        )
 
 
 def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
@@ -128,15 +259,22 @@ def load_student(args: argparse.Namespace) -> Any:
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    if args.trust_remote_code:
+        raise ValueError("冻结交通评测禁止 trust_remote_code")
+
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path,
-        trust_remote_code=args.trust_remote_code,
+        local_files_only=True,
+        trust_remote_code=False,
         use_fast=True,
     )
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model_kwargs: Dict[str, Any] = {"trust_remote_code": args.trust_remote_code}
+    model_kwargs: Dict[str, Any] = {
+        "local_files_only": True,
+        "trust_remote_code": False,
+    }
     if torch.cuda.is_available():
         model_kwargs["device_map"] = "auto"
         model_kwargs["torch_dtype"] = torch.bfloat16 if args.bf16 else torch.float16
@@ -196,7 +334,7 @@ def generate_one(row: Dict[str, Any], tokenizer: Any, model: Any, args: argparse
     text = tokenizer.decode(generated, skip_special_tokens=True).strip()
     target = target_from_row(row)
     if isinstance(target, str):
-        match = re.search(r"[A-F]", text.upper())
+        match = re.fullmatch(r"[A-F]", text)
         predicted_token = match.group(0) if match else None
         result = {
             "event_id": row.get("event_id"),
@@ -311,6 +449,8 @@ def token_classification_metrics(rows: Sequence[Dict[str, Any]]) -> Dict[str, An
 
 def main() -> None:
     args = parse_args()
+    output_path = require_new_output_path(args.output_json)
+    evaluation_artifacts = capture_evaluation_artifacts(args)
     rows = read_jsonl(resolve_path(args.test_jsonl))
     source_count = len(rows)
     if args.unique_event_ids:
@@ -323,6 +463,10 @@ def main() -> None:
         generate_one(rows[0], tokenizer, model, args)
 
     examples = [generate_one(row, tokenizer, model, args) for row in rows]
+    artifacts_after_inference = capture_evaluation_artifacts(args)
+    require_unchanged_evaluation_artifacts(
+        evaluation_artifacts, artifacts_after_inference
+    )
     count = len(examples)
     risk_values = [item["risk_match"] for item in examples if item["risk_match"] is not None]
     node_values = [item["node_f1"] for item in examples if item["node_f1"] is not None]
@@ -342,14 +486,22 @@ def main() -> None:
     summary = {
         "task": "phase1_qwen_sft_generation_eval",
         "model_name_or_path": args.model_name_or_path,
-        "adapter_dir": str(resolve_path(args.adapter_dir).relative_to(PROJECT_ROOT)),
-        "test_jsonl": str(resolve_path(args.test_jsonl).relative_to(PROJECT_ROOT)),
+        "adapter_dir": report_path(args.adapter_dir),
+        "test_jsonl": report_path(args.test_jsonl),
         "count": count,
         "source_count": source_count,
         "unique_event_ids": bool(args.unique_event_ids),
         "class_scores_included": bool(args.include_class_scores),
         "warmup_runs": max(0, args.warmup),
         "prompt_format": args.prompt_format,
+        "bf16": bool(args.bf16),
+        "max_seq_length": int(args.max_seq_length),
+        "max_new_tokens": int(args.max_new_tokens),
+        "temperature": float(args.temperature),
+        "evaluation_artifacts": {
+            **evaluation_artifacts,
+            "verified_unchanged_during_evaluation": True,
+        },
         "json_valid_rate": round(average([1.0 if item["json_valid"] else 0.0 for item in examples]), 4),
         "decision_accuracy": round(average([1.0 if item["decision_match"] else 0.0 for item in examples]), 4),
         "risk_accuracy": round(average([1.0 if value else 0.0 for value in risk_values]), 4) if risk_values else None,
@@ -361,9 +513,9 @@ def main() -> None:
         "confusion": dict(sorted(confusion.items())),
         "examples": examples,
     }
-    output_path = resolve_path(args.output_json)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    with output_path.open("x", encoding="utf-8") as file_obj:
+        file_obj.write(json.dumps(summary, ensure_ascii=False, indent=2))
     print(json.dumps({key: value for key, value in summary.items() if key != "examples"}, ensure_ascii=False, indent=2))
 
 

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloud-edge.local/schemas/four-route-e2e-experiment-plan-v1.json",
+  "title": "交通场景四路径预注册实验计划",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "aggregation_id",
+    "weight_plan_id",
+    "locked_at",
+    "expected",
+    "routes"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "aggregation_id": {"type": "string", "minLength": 1},
+    "weight_plan_id": {"type": "string", "minLength": 1},
+    "locked_at": {"type": "string", "format": "date-time"},
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_commit",
+        "dataset_id",
+        "data_sha256",
+        "model_ids",
+        "hardware_id"
+      ],
+      "properties": {
+        "git_commit": {"type": "string", "minLength": 1},
+        "dataset_id": {"type": "string", "minLength": 1},
+        "data_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+        "model_ids": {},
+        "hardware_id": {}
+      }
+    },
+    "routes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge_only", "local_autonomy", "cloud_async", "cloud_sync"],
+      "properties": {
+        "edge_only": {"$ref": "#/$defs/route"},
+        "local_autonomy": {"$ref": "#/$defs/route"},
+        "cloud_async": {"$ref": "#/$defs/route"},
+        "cloud_sync": {"$ref": "#/$defs/route"}
+      }
+    }
+  },
+  "$defs": {
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["weight", "experiments"],
+      "properties": {
+        "weight": {"type": "number", "exclusiveMinimum": 0},
+        "experiments": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/experiment"}
+        }
+      }
+    },
+    "experiment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "result_path",
+        "attestation_path",
+        "sample_ids",
+        "partition_ids",
+        "network_profile"
+      ],
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1},
+        "result_path": {"type": "string", "minLength": 1},
+        "attestation_path": {"type": "string", "minLength": 1},
+        "sample_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 0}
+        },
+        "partition_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 0}
+        },
+        "network_profile": {
+          "type": "object",
+          "required": ["profile_id"],
+          "properties": {"profile_id": {"type": "string", "minLength": 1}}
+        }
+      }
+    }
+  }
+}

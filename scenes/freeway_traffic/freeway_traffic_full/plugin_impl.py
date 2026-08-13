@@ -10,6 +10,7 @@ import numpy as np
 
 from cloud_edge_framework.contracts import (
     Action,
+    DecisionEnvelope,
     Evidence,
     EventScope,
     Prediction,
@@ -22,6 +23,7 @@ from cloud_edge_framework.contracts import (
 from cloud_edge_framework.event_envelope import SceneEventEnvelope
 from cloud_edge_framework.plugins.base import ScenePlugin
 from freeway_traffic_full.edge_llm import TrafficEdgeLLMController
+from traffic_system.global_objective import TrafficGlobalObjective
 from traffic_system.scene_event import TRAFFIC_DATA_SCHEMA_ID, TRAFFIC_EVENT_TYPE
 
 
@@ -298,6 +300,9 @@ class TrafficPlugin(ScenePlugin):
         current_state_feature_codec_path: Optional[Path] = None,
         edge_llm_gain_profile_path: Optional[Path] = None,
         current_state_sync_confidence_threshold: float = 0.50,
+        global_objective_path: Optional[Path] = None,
+        global_optimizer_mode: str = "disabled",
+        edge_llm_prompt_prefix: Optional[str] = None,
     ) -> None:
         self.cloud_model_path = Path(cloud_model_path) if cloud_model_path is not None else None
         self.current_state_cloud_model_path = (
@@ -336,6 +341,21 @@ class TrafficPlugin(ScenePlugin):
                 "current_state_sync_confidence_threshold must be in [0, 1]"
             )
         self.policy_version = policy_version
+        self.global_objective_path = (
+            Path(global_objective_path)
+            if global_objective_path is not None
+            else None
+        )
+        self.global_optimizer_mode = str(global_optimizer_mode).strip().lower()
+        if self.global_optimizer_mode not in {"disabled", "shadow", "active"}:
+            raise ValueError(
+                "global_optimizer_mode must be disabled, shadow, or active"
+            )
+        if self.global_optimizer_mode != "disabled" and self.global_objective_path is None:
+            raise ValueError(
+                "enabled traffic global optimizer requires global_objective_path"
+            )
+        self._global_objective: Optional[TrafficGlobalObjective] = None
         self._cloud_model: Optional[Dict[str, Any]] = None
         self._current_state_cloud_model: Optional[Dict[str, Any]] = None
         self._edge_student: Optional[Dict[str, Any]] = None
@@ -358,6 +378,7 @@ class TrafficPlugin(ScenePlugin):
             deadline_probe_interval=edge_llm_deadline_probe_interval,
             runtime_failure_cooldown_seconds=edge_llm_runtime_failure_cooldown_seconds,
             gain_profile_path=edge_llm_gain_profile_path,
+            edge_llm_prompt_prefix=edge_llm_prompt_prefix,
         )
 
     def payload_schema(self) -> Dict[str, Any]:
@@ -371,6 +392,15 @@ class TrafficPlugin(ScenePlugin):
             with schema_path.open("r", encoding="utf-8") as file_obj:
                 self._payload_schema = json.load(file_obj)
         return dict(self._payload_schema)
+
+    def _load_global_objective(self) -> TrafficGlobalObjective:
+        if self.global_objective_path is None:
+            raise ValueError("traffic global objective path is not configured")
+        if self._global_objective is None:
+            self._global_objective = TrafficGlobalObjective.from_path(
+                self.global_objective_path
+            )
+        return self._global_objective
 
     def _load_feature_codec(self) -> Any:
         if self.feature_codec_path is None:
@@ -876,6 +906,10 @@ class TrafficPlugin(ScenePlugin):
             "top_k_risk_nodes": top_nodes,
             "control_capabilities": compact_capabilities,
         }
+        if isinstance(payload.get("current_control_state"), dict):
+            compact_payload["current_control_state"] = dict(
+                payload["current_control_state"]
+            )
         if isinstance(payload.get("neighbor_context"), list):
             compact_payload["neighbor_context"] = payload["neighbor_context"]
         metadata = dict(event.metadata)
@@ -1229,6 +1263,14 @@ class TrafficPlugin(ScenePlugin):
         return rule_teacher_decision(payload, decision_source=source)
 
     def warmup(self) -> None:
+        if self.global_optimizer_mode != "disabled":
+            if self.global_objective_path is None or not self.global_objective_path.is_file():
+                raise FileNotFoundError(
+                    "traffic global objective not found: {}".format(
+                        self.global_objective_path
+                    )
+                )
+            self._load_global_objective()
         if self.edge_student_path is not None:
             if not self.edge_student_path.is_file():
                 raise FileNotFoundError(
@@ -1368,8 +1410,37 @@ class TrafficPlugin(ScenePlugin):
             "current_state_sync_confidence_threshold": (
                 self.current_state_sync_confidence_threshold
             ),
+            "global_optimizer_mode": self.global_optimizer_mode,
+            "global_objective_configured": self.global_objective_path is not None,
+            "global_objective_loaded": self._global_objective is not None,
+            "global_objective_id": self._global_objective.objective_id
+            if self._global_objective is not None
+            else None,
+            "global_objective_sha256": self._global_objective.objective_sha256
+            if self._global_objective is not None
+            else None,
+            "global_objective_definition_sha256": (
+                self._global_objective.definition_file_sha256
+                if self._global_objective is not None
+                else None
+            ),
             "edge_llm": self._edge_llm.health(),
         }
+
+    def optimize_global_plan(
+        self,
+        events: Sequence[SemanticEvent],
+        decisions: Sequence[DecisionEnvelope],
+    ) -> Tuple[Sequence[DecisionEnvelope], Dict[str, Any]]:
+        if self.global_optimizer_mode == "disabled":
+            return list(decisions), {}
+        objective = self._load_global_objective()
+        return objective.optimize(
+            events,
+            decisions,
+            self.action_conflict,
+            self.global_optimizer_mode,
+        )
 
     def _apply_defer_gate(
         self,

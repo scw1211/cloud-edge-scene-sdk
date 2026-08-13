@@ -11,6 +11,8 @@
         "feature_codec_path": "scenes/freeway_traffic/assets/models/traffic_tree_feature_codec_topology_v1.npz",
         "current_state_feature_codec_path": "scenes/freeway_traffic/assets/models/traffic_tree_feature_codec_current_state_v1.npz",
         "topology_path": "scenes/freeway_traffic/assets/models/traffic_region_topology_metis4.json",
+        "global_objective_path": "scenes/freeway_traffic/assets/models/traffic_global_utility_v1.json",
+        "global_optimizer_mode": "shadow",
         "cloud_llm_min_expected_gain": 0.05,
         "policy_version": "traffic-1.11.0"
       }

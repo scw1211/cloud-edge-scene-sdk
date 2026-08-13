@@ -2,6 +2,7 @@
 
 import argparse
 import ast
+import hashlib
 import json
 import os
 import re
@@ -29,6 +30,11 @@ DEFAULT_MODELS = [
     "base_student=qwen3.5:0.8b",
     "traffic_student=qwen35-freeway-action-general-eval",
 ]
+
+NLR_CHOICE_SYSTEM_PROMPT = "回答中文单项选择题。只输出 A、B、C 或 D，不要解释。"
+NLR_CHOICE_SCORING = "fullmatch whitespace plus exactly one A/B/C/D token"
+ATTESTATION_SCHEMA = "edge-llm-ceval-specialty-evaluation-attestation/v1"
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 ALLOWED_IMPORTS = {
     "bisect",
@@ -75,12 +81,46 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--code_timeout", type=float, default=3.0)
     parser.add_argument("--limit_per_category", type=int, default=0)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--evaluation_attestation")
+    parser.add_argument("--expected_evaluation_attestation_sha256")
+    parser.add_argument("--pre_registration")
+    parser.add_argument("--expected_preregistration_sha256")
+    parser.add_argument("--dataset_manifest")
+    parser.add_argument("--final_candidate_selection")
+    parser.add_argument("--expected_final_candidate_selection_sha256")
     return parser.parse_args()
 
 
 def resolve_path(value: str) -> Path:
     path = Path(value)
     return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file_obj:
+        for block in iter(lambda: file_obj.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def read_json_object(path: Path, field: str) -> Dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("Cannot read {} JSON {}: {}".format(field, path, exc)) from exc
+    if not isinstance(value, dict):
+        raise ValueError("{} must contain a JSON object: {}".format(field, path))
+    return value
+
+
+def require_sha256(value: Any, field: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("{} must be a SHA-256 string".format(field))
+    result = value.strip().lower().removeprefix("sha256:")
+    if SHA256_HEX.fullmatch(result) is None:
+        raise ValueError("{} must be a 64-character SHA-256".format(field))
+    return result
 
 
 def parse_models(values: Sequence[str]) -> List[Tuple[str, str]]:
@@ -113,6 +153,208 @@ def select_rows(rows: Sequence[Dict[str, Any]], limit: int) -> List[Dict[str, An
     return selected
 
 
+def nlr_choice_protocol(args: argparse.Namespace) -> Dict[str, Any]:
+    return {
+        "backend": "Ollama",
+        "endpoint": "/api/chat",
+        "stream": False,
+        "think": False,
+        "keep_alive": "30m",
+        "system_prompt": NLR_CHOICE_SYSTEM_PROMPT,
+        "temperature": 0,
+        "top_p": 1,
+        "seed": 42,
+        "num_ctx": int(args.num_ctx),
+        "num_predict": 4,
+        "timeout_seconds": int(args.timeout),
+        "scoring": NLR_CHOICE_SCORING,
+    }
+
+
+def _formal_paths(args: argparse.Namespace) -> Optional[Dict[str, Path]]:
+    option_names = (
+        "evaluation_attestation",
+        "expected_evaluation_attestation_sha256",
+        "pre_registration",
+        "expected_preregistration_sha256",
+        "dataset_manifest",
+        "final_candidate_selection",
+        "expected_final_candidate_selection_sha256",
+    )
+    supplied = [getattr(args, name, None) is not None for name in option_names]
+    if not any(supplied):
+        return None
+    if not all(supplied):
+        missing = [name for name, present in zip(option_names, supplied) if not present]
+        raise ValueError(
+            "Formal C-Eval mode requires all attestation options; missing {}".format(
+                missing
+            )
+        )
+    return {
+        "attestation": resolve_path(args.evaluation_attestation),
+        "pre_registration": resolve_path(args.pre_registration),
+        "dataset_manifest": resolve_path(args.dataset_manifest),
+        "final_candidate_selection": resolve_path(args.final_candidate_selection),
+    }
+
+
+def load_formal_attestation(
+    args: argparse.Namespace,
+    rows: Sequence[Dict[str, Any]],
+    models: Sequence[Tuple[str, str]],
+) -> Optional[Dict[str, Any]]:
+    paths = _formal_paths(args)
+    if paths is None:
+        return None
+    if args.resume:
+        raise ValueError("Formal C-Eval evaluation forbids --resume and result reuse")
+    if int(getattr(args, "limit_per_category", 0)) != 0:
+        raise ValueError("Formal C-Eval evaluation forbids --limit_per_category")
+    if not rows or any(
+        row.get("category") != "natural_language_reasoning" for row in rows
+    ):
+        raise ValueError(
+            "Formal C-Eval attestation mode only supports natural_language_reasoning rows"
+        )
+    for label, path in paths.items():
+        if not path.is_file() or path.is_symlink():
+            raise ValueError("Formal {} must be a regular file: {}".format(label, path))
+
+    actual_attestation_sha = sha256_file(paths["attestation"])
+    expected_attestation_sha = require_sha256(
+        args.expected_evaluation_attestation_sha256,
+        "expected_evaluation_attestation_sha256",
+    )
+    if actual_attestation_sha != expected_attestation_sha:
+        raise ValueError("Evaluation attestation does not match its external SHA-256 anchor")
+    actual_preregistration_sha = sha256_file(paths["pre_registration"])
+    expected_preregistration_sha = require_sha256(
+        args.expected_preregistration_sha256,
+        "expected_preregistration_sha256",
+    )
+    if actual_preregistration_sha != expected_preregistration_sha:
+        raise ValueError("Pre-registration does not match its external SHA-256 anchor")
+
+    dataset_path = resolve_path(args.dataset_jsonl).resolve()
+    actual_dataset_sha = sha256_file(dataset_path)
+    actual_manifest_sha = sha256_file(paths["dataset_manifest"])
+    actual_final_selection_sha = sha256_file(paths["final_candidate_selection"])
+    expected_final_selection_sha = require_sha256(
+        args.expected_final_candidate_selection_sha256,
+        "expected_final_candidate_selection_sha256",
+    )
+    if actual_final_selection_sha != expected_final_selection_sha:
+        raise ValueError(
+            "Final candidate selection does not match its external SHA-256 anchor"
+        )
+    attestation = read_json_object(paths["attestation"], "evaluation_attestation")
+    preregistration = read_json_object(paths["pre_registration"], "pre_registration")
+    if attestation.get("schema_version") != ATTESTATION_SCHEMA:
+        raise ValueError("Unsupported evaluation attestation schema_version")
+    expected_bindings = {
+        "pre_registration_sha256": actual_preregistration_sha,
+        "dataset_sha256": actual_dataset_sha,
+        "dataset_manifest_sha256": actual_manifest_sha,
+        "final_candidate_selection_sha256": actual_final_selection_sha,
+    }
+    for field, expected in expected_bindings.items():
+        observed = require_sha256(attestation.get(field), "attestation." + field)
+        if observed != expected:
+            raise ValueError("Evaluation attestation {} binding mismatch".format(field))
+
+    formal_procedure = preregistration.get("formal_procedure")
+    if not isinstance(formal_procedure, dict):
+        raise ValueError("Pre-registration lacks formal_procedure")
+    if formal_procedure.get("attestation_must_bind_final_selection_sha256") is not True:
+        raise ValueError(
+            "Pre-registration must require attestation binding to final selection"
+        )
+    declared_selection = resolve_path(
+        str(formal_procedure.get("required_final_selection_record", ""))
+    ).resolve()
+    if declared_selection != paths["final_candidate_selection"].resolve():
+        raise ValueError(
+            "Final candidate selection path does not match pre-registration"
+        )
+    declared_anchor = resolve_path(
+        str(
+            formal_procedure.get(
+                "required_final_selection_external_sha256_anchor", ""
+            )
+        )
+    ).resolve()
+    if not declared_anchor.is_file() or declared_anchor.is_symlink():
+        raise ValueError(
+            "Pre-registered final selection external SHA-256 anchor is missing"
+        )
+    anchor_tokens = declared_anchor.read_text(encoding="utf-8").split()
+    if not anchor_tokens:
+        raise ValueError("Final selection external SHA-256 anchor is empty")
+    anchored_final_selection_sha = require_sha256(
+        anchor_tokens[0], "final_selection_external_sha256_anchor"
+    )
+    if anchored_final_selection_sha != expected_final_selection_sha:
+        raise ValueError(
+            "Final selection CLI SHA-256 does not match pre-registered external anchor"
+        )
+
+    protocol = nlr_choice_protocol(args)
+    if attestation.get("evaluation_protocol") != protocol:
+        raise ValueError("Evaluation attestation protocol does not match evaluator runtime")
+    if preregistration.get("evaluation_protocol") != protocol:
+        raise ValueError("Pre-registration protocol does not match evaluator runtime")
+
+    attested_models = attestation.get("models")
+    if not isinstance(attested_models, dict):
+        raise ValueError("Evaluation attestation models must be an object")
+    actual_models = dict(models)
+    if set(attested_models) != set(actual_models):
+        raise ValueError("Evaluation attestation model labels do not match --model")
+    runtime_digests: Dict[str, str] = {}
+    for label, model in models:
+        record = attested_models.get(label)
+        if not isinstance(record, dict) or record.get("model") != model:
+            raise ValueError("Attested model mismatch for {}".format(label))
+        manifest = record.get("ollama_manifest")
+        if not isinstance(manifest, dict):
+            raise ValueError("Attested model {} lacks ollama_manifest".format(label))
+        runtime_digests[label] = require_sha256(
+            manifest.get("sha256"),
+            "attestation.models.{}.ollama_manifest.sha256".format(label),
+        )
+        declared_runtime_digest = require_sha256(
+            record.get("ollama_runtime_digest"),
+            "attestation.models.{}.ollama_runtime_digest".format(label),
+        )
+        if declared_runtime_digest != runtime_digests[label]:
+            raise ValueError(
+                "Attested Ollama runtime digest must equal manifest SHA for {}".format(
+                    label
+                )
+            )
+
+    return {
+        "path": str(paths["attestation"].resolve()),
+        "sha256": actual_attestation_sha,
+        "pre_registration_path": str(paths["pre_registration"].resolve()),
+        "pre_registration_sha256": actual_preregistration_sha,
+        "dataset_manifest_path": str(paths["dataset_manifest"].resolve()),
+        "dataset_manifest_sha256": actual_manifest_sha,
+        "dataset_sha256": actual_dataset_sha,
+        "final_candidate_selection_path": str(
+            paths["final_candidate_selection"].resolve()
+        ),
+        "final_candidate_selection_sha256": actual_final_selection_sha,
+        "final_candidate_selection_external_anchor_path": str(declared_anchor),
+        "final_candidate_selection_external_anchor_sha256": (
+            anchored_final_selection_sha
+        ),
+        "protocol": protocol,
+        "runtime_digests": runtime_digests,
+    }
+
+
 def task_prompt(row: Dict[str, Any]) -> Tuple[str, str, int]:
     category = row["category"]
     if category == "math":
@@ -131,7 +373,7 @@ def task_prompt(row: Dict[str, Any]) -> Tuple[str, str, int]:
         )
     if category == "natural_language_reasoning":
         return (
-            "回答中文单项选择题。只输出 A、B、C 或 D，不要解释。",
+            NLR_CHOICE_SYSTEM_PROMPT,
             str(row["prompt"]),
             4,
         )
@@ -185,6 +427,81 @@ def ollama_chat(
     }
 
 
+def load_ollama_model(host: str, model: str, timeout: int = 30) -> None:
+    """Load *model* without issuing a scored benchmark prompt.
+
+    Formal evaluation uses this load-only request before consulting ``/api/ps``.
+    That makes ``observed_before_sha256`` a genuine pre-inference binding instead
+    of a digest observed after the first scored question.
+    """
+
+    payload = {
+        "model": model,
+        "stream": False,
+        "keep_alive": "30m",
+    }
+    request = urllib.request.Request(
+        host.rstrip("/") + "/api/generate",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        response.read()
+
+
+def ollama_runtime_digest(host: str, model: str, timeout: int = 30) -> str:
+    request = urllib.request.Request(
+        host.rstrip("/") + "/api/ps",
+        headers={"Accept": "application/json"},
+        method="GET",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        value = json.loads(response.read().decode("utf-8"))
+    records = value.get("models") if isinstance(value, dict) else None
+    if not isinstance(records, list):
+        raise RuntimeError("Ollama /api/ps response lacks models array")
+    expected_names = {model}
+    if model.endswith(":latest"):
+        expected_names.add(model[: -len(":latest")])
+    elif ":" not in model.rsplit("/", 1)[-1]:
+        expected_names.add(model + ":latest")
+    matches = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        observed_name = str(record.get("name") or record.get("model") or "")
+        if observed_name not in expected_names:
+            continue
+        matches.append(
+            require_sha256(record.get("digest"), "Ollama /api/ps model digest")
+        )
+    if len(matches) != 1:
+        raise RuntimeError(
+            "Ollama /api/ps must resolve {} to exactly one loaded model; found {}".format(
+                model, len(matches)
+            )
+        )
+    return matches[0]
+
+
+def verify_ollama_runtime_binding(
+    host: str,
+    model: str,
+    expected_digest: str,
+    *,
+    timeout: int = 30,
+) -> str:
+    observed = ollama_runtime_digest(host, model, timeout=timeout)
+    if observed != expected_digest:
+        raise RuntimeError(
+            "Ollama runtime digest mismatch for {}: expected {}, observed {}".format(
+                model, expected_digest, observed
+            )
+        )
+    return observed
+
+
 def unload_model(host: str, model: str) -> None:
     payload = {"model": model, "keep_alive": 0}
     request = urllib.request.Request(
@@ -210,7 +527,30 @@ def normalize_number(value: str) -> Optional[Decimal]:
 
 
 def evaluate_math(text: str, reference: str) -> Dict[str, Any]:
-    final_match = re.search(r"FINAL\s*:\s*([-+$]?[0-9][0-9,]*(?:\.[0-9]+)?)", text, re.I)
+    # Fail closed: the response must end with exactly one numeric answer.
+    # Taking the first number from ``FINAL: 90 - 20 = 70`` or the last number
+    # from a truncated derivation can incorrectly award a point.
+    final_match = re.search(
+        r"FINAL\s*:\s*([-+$]?[0-9][0-9,]*(?:\.[0-9]+)?)\s*$",
+        text,
+        re.I,
+    )
+    predicted_text = final_match.group(1) if final_match else ""
+    prediction = normalize_number(predicted_text)
+    expected = normalize_number(reference)
+    return {
+        "prediction": predicted_text or None,
+        "reference": reference,
+        "correct": prediction is not None and expected is not None and prediction == expected,
+    }
+
+
+def evaluate_math_legacy(text: str, reference: str) -> Dict[str, Any]:
+    """Preserve the historical, permissive scorer used by ordinary runs."""
+
+    final_match = re.search(
+        r"FINAL\s*:\s*([-+$]?[0-9][0-9,]*(?:\.[0-9]+)?)", text, re.I
+    )
     matches = re.findall(r"[-+$]?[0-9][0-9,]*(?:\.[0-9]+)?", text)
     predicted_text = final_match.group(1) if final_match else (matches[-1] if matches else "")
     prediction = normalize_number(predicted_text)
@@ -223,6 +563,22 @@ def evaluate_math(text: str, reference: str) -> Dict[str, Any]:
 
 
 def evaluate_choice(text: str, reference: str) -> Dict[str, Any]:
+    # The prompt contract requires one action token.  Do not award a point by
+    # extracting an A-D character from an explanation or a list of options.
+    match = re.fullmatch(r"\s*([A-D])\s*", text, re.I)
+    prediction = match.group(1) if match else None
+    if prediction is not None:
+        prediction = prediction.upper()
+    return {
+        "prediction": prediction,
+        "reference": reference,
+        "correct": prediction == reference,
+    }
+
+
+def evaluate_choice_legacy(text: str, reference: str) -> Dict[str, Any]:
+    """Preserve the historical first-standalone-letter scorer for ordinary runs."""
+
     match = re.search(r"(?<![A-Z])([A-D])(?![A-Z])", text.upper())
     prediction = match.group(1) if match else None
     return {
@@ -314,17 +670,29 @@ def evaluate_code(text: str, row: Dict[str, Any], timeout: float) -> Dict[str, A
     }
 
 
-def evaluate_response(text: str, row: Dict[str, Any], code_timeout: float) -> Dict[str, Any]:
+def evaluate_response(
+    text: str,
+    row: Dict[str, Any],
+    code_timeout: float,
+    *,
+    strict_choice_protocol: bool = False,
+) -> Dict[str, Any]:
     category = row["category"]
     if category == "math":
-        return evaluate_math(text, str(row["reference_answer"]))
+        scorer = evaluate_math if strict_choice_protocol else evaluate_math_legacy
+        return scorer(text, str(row["reference_answer"]))
     if category == "code":
         return evaluate_code(text, row, code_timeout)
-    return evaluate_choice(text, str(row["reference_answer"]))
+    scorer = evaluate_choice if strict_choice_protocol else evaluate_choice_legacy
+    return scorer(text, str(row["reference_answer"]))
 
 
-def empty_result(args: argparse.Namespace, rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
-    return {
+def empty_result(
+    args: argparse.Namespace,
+    rows: Sequence[Dict[str, Any]],
+    formal: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    result = {
         "task": "general_capability_retention",
         "dataset_jsonl": args.dataset_jsonl,
         "num_ctx": args.num_ctx,
@@ -333,15 +701,44 @@ def empty_result(args: argparse.Namespace, rows: Sequence[Dict[str, Any]]) -> Di
         "models": {},
         "retention": {},
     }
+    if formal is not None:
+        result.update(
+            {
+                "dataset_jsonl": str(resolve_path(args.dataset_jsonl).resolve()),
+                "dataset_sha256": formal["dataset_sha256"],
+                "dataset_manifest_sha256": formal["dataset_manifest_sha256"],
+                "pre_registration_sha256": formal["pre_registration_sha256"],
+                "final_candidate_selection_path": formal[
+                    "final_candidate_selection_path"
+                ],
+                "final_candidate_selection_sha256": formal[
+                    "final_candidate_selection_sha256"
+                ],
+                "evaluation_protocol": dict(formal["protocol"]),
+                "evaluation_attestation_sha256": formal["sha256"],
+                "evaluator_sha256": sha256_file(Path(__file__).resolve()),
+                "formal_execution": {
+                    "resume_allowed": False,
+                    "preexisting_output_allowed": False,
+                    "runtime_model_binding_required": True,
+                },
+            }
+        )
+    return result
 
 
-def load_checkpoint(path: Path, args: argparse.Namespace, rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+def load_checkpoint(
+    path: Path,
+    args: argparse.Namespace,
+    rows: Sequence[Dict[str, Any]],
+    formal: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     if args.resume and path.exists():
         with path.open("r", encoding="utf-8") as file_obj:
             value = json.load(file_obj)
         if isinstance(value, dict):
             return value
-    return empty_result(args, rows)
+    return empty_result(args, rows, formal)
 
 
 def model_summary(samples: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
@@ -408,14 +805,44 @@ def main() -> None:
     rows = select_rows(read_jsonl(resolve_path(args.dataset_jsonl)), args.limit_per_category)
     models = parse_models(args.model)
     output_path = resolve_path(args.output_json)
-    result = load_checkpoint(output_path, args, rows)
+    formal = load_formal_attestation(args, rows, models)
+    if formal is not None and output_path.exists():
+        raise ValueError(
+            "Formal C-Eval evaluation refuses a pre-existing output file: {}".format(
+                output_path
+            )
+        )
+    result = load_checkpoint(output_path, args, rows, formal)
 
     for label, model in models:
         model_result = result["models"].setdefault(label, {"model": model, "samples": []})
         if model_result.get("model") != model:
             raise ValueError("Checkpoint model mismatch for {}".format(label))
+        if formal is not None:
+            expected_digest = formal["runtime_digests"][label]
+            model_result["runtime_binding"] = {
+                "expected_manifest_sha256": expected_digest,
+                "observed_before_sha256": None,
+                "observed_after_sha256": None,
+                "verified": False,
+            }
         completed_ids = {sample["sample_id"] for sample in model_result["samples"]}
         try:
+            if formal is not None:
+                load_ollama_model(
+                    args.host,
+                    model,
+                    timeout=min(args.timeout, 30),
+                )
+                observed = verify_ollama_runtime_binding(
+                    args.host,
+                    model,
+                    expected_digest,
+                    timeout=min(args.timeout, 30),
+                )
+                model_result["runtime_binding"][
+                    "observed_before_sha256"
+                ] = observed
             for index, row in enumerate(rows, start=1):
                 if row["sample_id"] in completed_ids:
                     continue
@@ -429,7 +856,12 @@ def main() -> None:
                     num_predict=num_predict,
                     timeout=args.timeout,
                 )
-                evaluation = evaluate_response(response["text"], row, args.code_timeout)
+                evaluation = evaluate_response(
+                    response["text"],
+                    row,
+                    args.code_timeout,
+                    strict_choice_protocol=formal is not None,
+                )
                 sample = {
                     "sample_id": row["sample_id"],
                     "benchmark": row["benchmark"],
@@ -455,6 +887,16 @@ def main() -> None:
                     ),
                     flush=True,
                 )
+            if formal is not None:
+                observed = verify_ollama_runtime_binding(
+                    args.host,
+                    model,
+                    expected_digest,
+                    timeout=min(args.timeout, 30),
+                )
+                model_result["runtime_binding"]["observed_after_sha256"] = observed
+                model_result["runtime_binding"]["verified"] = True
+                save_json(result, output_path)
         finally:
             unload_model(args.host, model)
 

@@ -32,6 +32,7 @@ class CoordinationResult:
     decisions: List[DecisionEnvelope]
     initial_conflicts: List[ConflictRecord]
     residual_conflicts: List[ConflictRecord]
+    global_optimizations: List[Dict[str, Any]]
     changes: List[Dict[str, Any]]
     rounds: int
 
@@ -44,6 +45,7 @@ class CoordinationResult:
             "residual_conflicts": [conflict.to_dict() for conflict in self.residual_conflicts],
             "initial_conflict_count": initial_count,
             "residual_conflict_count": residual_count,
+            "global_optimizations": list(self.global_optimizations),
             "resolution_success_rate": round(
                 (initial_count - residual_count) / initial_count, 6
             )
@@ -213,6 +215,49 @@ class ConflictCoordinator:
     ) -> CoordinationResult:
         coordinated = list(decisions)
         initial = self.detect(events, coordinated)
+        global_optimizations: List[Dict[str, Any]] = []
+        scene_indices: Dict[str, List[int]] = {}
+        for index, event in enumerate(events):
+            scene_indices.setdefault(event.scene, []).append(index)
+        for scene, indices in sorted(scene_indices.items()):
+            plugin = self.registry.get(scene)
+            scene_events = [events[index] for index in indices]
+            scene_decisions = [coordinated[index] for index in indices]
+            try:
+                optimized, metadata = plugin.optimize_global_plan(
+                    scene_events,
+                    scene_decisions,
+                )
+                optimized = list(optimized)
+                if len(optimized) != len(indices):
+                    raise ValueError("scene global optimization changed decision count")
+                if any(
+                    not isinstance(decision, DecisionEnvelope)
+                    for decision in optimized
+                ):
+                    raise TypeError(
+                        "scene global optimization must return DecisionEnvelope values"
+                    )
+                for event, decision in zip(scene_events, optimized):
+                    if event.event_id not in decision.event_ids:
+                        raise ValueError(
+                            "scene global optimization changed decision identity"
+                        )
+                for index, decision in zip(indices, optimized):
+                    coordinated[index] = decision
+                if metadata:
+                    record = dict(metadata)
+                    record.setdefault("scene", scene)
+                    global_optimizations.append(record)
+            except Exception as exc:  # optional scene optimizer must fail closed
+                global_optimizations.append(
+                    {
+                        "scene": scene,
+                        "applied": False,
+                        "error": "{}: {}".format(type(exc).__name__, exc),
+                        "fallback": "original_scene_decisions",
+                    }
+                )
         changes: List[Dict[str, Any]] = []
         rounds = 0
         for round_index in range(max_rounds):
@@ -275,6 +320,7 @@ class ConflictCoordinator:
             decisions=coordinated,
             initial_conflicts=initial,
             residual_conflicts=residual,
+            global_optimizations=global_optimizations,
             changes=changes,
             rounds=rounds,
         )

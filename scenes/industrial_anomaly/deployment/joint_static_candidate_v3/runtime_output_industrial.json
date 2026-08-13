@@ -1,0 +1,9 @@
+{
+  "schema_version": "edge-llm-runtime-output/v1",
+  "name": "industrial-joint-static-candidate-v3",
+  "template": "edge_llm_runtime_industrial_template.json",
+  "output": "../../../../runtime/traffic_industrial_joint_static_q5km_candidate_v3/edge_llm_runtime_industrial.json",
+  "adapter_mode": "static",
+  "static_deployment_sha256": "308daa980c7ca295e18bd76e8dcf6dc1ed725ded32ada535a0c5c1910c695ce2",
+  "on_missing_adapter": "disable"
+}

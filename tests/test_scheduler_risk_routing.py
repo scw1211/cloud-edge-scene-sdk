@@ -13,6 +13,7 @@ def _event(
     risk_level: str = "low",
     confidence: float = 0.95,
     prediction_set=None,
+    deadline_ms: float = 500.0,
 ) -> SemanticEvent:
     return SemanticEvent.from_dict(
         {
@@ -46,7 +47,7 @@ def _event(
                 "method": "fixture",
             },
             "timing": {
-                "deadline_ms": 500.0,
+                "deadline_ms": deadline_ms,
                 "preprocessing_ms": 1.0,
                 "edge_inference_ms": 2.0,
             },
@@ -142,6 +143,45 @@ class SchedulerRiskRoutingTest(unittest.TestCase):
         )
         self.assertEqual(result.route, "edge_only")
         self.assertFalse(result.critical)
+
+    def test_aggregated_cloud_sync_budgets_submission_and_result_round_trips(self) -> None:
+        mild = NetworkSnapshot(
+            available=True,
+            rtt_ms=50.0,
+            jitter_ms=10.0,
+            loss_rate=0.0,
+            cloud_queue_ms=1.0,
+            cloud_compute_ms=120.0,
+            uplink_mbps=100.0,
+            downlink_mbps=100.0,
+        )
+        result = self.scheduler.schedule(
+            _event(confidence=0.5, deadline_ms=200.0),
+            mild,
+            cloud_round_trips=2,
+        )
+        self.assertEqual("cloud_async", result.route)
+        self.assertEqual(2, result.cloud_round_trips)
+        self.assertGreater(result.predicted_closed_loop_ms, 200.0)
+
+    def test_direct_cloud_decision_keeps_single_round_trip_budget(self) -> None:
+        mild = NetworkSnapshot(
+            available=True,
+            rtt_ms=50.0,
+            jitter_ms=10.0,
+            loss_rate=0.0,
+            cloud_queue_ms=1.0,
+            cloud_compute_ms=120.0,
+            uplink_mbps=100.0,
+            downlink_mbps=100.0,
+        )
+        result = self.scheduler.schedule(
+            _event(confidence=0.5, deadline_ms=200.0),
+            mild,
+            cloud_round_trips=1,
+        )
+        self.assertEqual("cloud_sync", result.route)
+        self.assertEqual(1, result.cloud_round_trips)
 
 
 if __name__ == "__main__":

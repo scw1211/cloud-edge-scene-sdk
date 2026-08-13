@@ -1,0 +1,23 @@
+{
+  "specversion": "1.0",
+  "id": "industrial-demo-001-infrared",
+  "source": "urn:edge:industrial-infrared:tensorrt-patchcore",
+  "type": "com.example.industrial.anomaly-map.v1",
+  "scene": "industrial_anomaly",
+  "edgeid": "industrial-infrared-edge",
+  "subject": "capsule-demo-001",
+  "time": "2026-08-11T10:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://cloud-edge.local/schemas/examples/industrial-anomaly-map-v1.json",
+  "data": {
+    "sample_id": "demo-001",
+    "product": "capsule",
+    "modality": "infra",
+    "score": 0.00802,
+    "raw_uri": "file:///opt/industrial/MulSen_AD/capsule/Infrared/test/demo-001.png",
+    "heatmap_uri": "https://evidence.example.invalid/capsule/Infrared/demo-001.f32",
+    "heatmap_size_bytes": 102400,
+    "inference_ms": 39.8,
+    "model": {"name": "patchcore-infrared-tensorrt", "version": "demo"}
+  }
+}

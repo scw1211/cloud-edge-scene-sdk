@@ -16,6 +16,69 @@
       "pattern": "^https?://"
     },
     "model": {"type": "string"},
+    "lora_adapter": {
+      "description": "Optional llama.cpp LoRA selected for every request made by this scene runtime.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scale"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 16
+        }
+      }
+    },
+    "release_binding": {
+      "description": "Immutable binding emitted by serve-release after the active release passes its startup gate.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_id",
+        "revision",
+        "binding_fingerprint",
+        "deployment_sha256",
+        "runtime_output",
+        "adapter_id",
+        "adapter_sha256"
+      ],
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$"
+        },
+        "revision": {"type": "integer", "minimum": 1},
+        "binding_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "deployment_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "runtime_output": {"type": "string", "minLength": 1, "maxLength": 128},
+        "adapter_id": {
+          "oneOf": [
+            {"type": "integer", "minimum": 0, "maximum": 65535},
+            {"type": "null"}
+          ]
+        },
+        "adapter_sha256": {
+          "oneOf": [
+            {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"adapter_id": {"type": "null"}}},
+          "then": {"properties": {"adapter_sha256": {"type": "null"}}},
+          "else": {"properties": {"adapter_sha256": {"type": "string"}}}
+        }
+      ]
+    },
     "timeout_seconds": {
       "type": "number",
       "minimum": 0.01,
@@ -50,7 +113,7 @@
       "properties": {
         "api_key_env": {
           "type": "string",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          "pattern": "^(?:|[A-Za-z_][A-Za-z0-9_]*)$"
         }
       }
     }
@@ -65,6 +128,16 @@
       "then": {
         "properties": {
           "model": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["lora_adapter"]
+      },
+      "then": {
+        "properties": {
+          "provider": {"const": "llama_cpp"}
         }
       }
     }

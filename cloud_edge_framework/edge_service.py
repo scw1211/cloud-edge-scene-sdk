@@ -211,6 +211,7 @@ class EdgeApiService:
                     "Prefer: return=minimal",
                     "X-Response-Detail: compact",
                 ],
+                "provisional_first": "Prefer: respond-async",
                 "idempotency_identity_includes_profile": True,
             },
             "endpoints": {
@@ -257,6 +258,7 @@ class EdgeApiService:
             if requested_detail == "compact" or "return=minimal" in prefer
             else "full"
         )
+        return_provisional_immediately = "respond-async" in prefer
         if requested_detail not in {"", "compact", "full"}:
             raise ValueError("X-Response-Detail must be compact or full")
         network = self.network_monitor.snapshot()
@@ -272,11 +274,15 @@ class EdgeApiService:
                     ),
                     model_disagreement=bool(payload.get("model_disagreement", False)),
                     response_detail=response_detail,
+                    return_provisional_immediately=return_provisional_immediately,
                 )
 
         idempotency_payload = dict(payload)
         idempotency_payload["event"] = event
         idempotency_payload["_response_detail"] = response_detail
+        idempotency_payload["_return_provisional_immediately"] = (
+            return_provisional_immediately
+        )
         result, replayed = self.idempotency.execute(
             request_key, idempotency_payload, operation
         )

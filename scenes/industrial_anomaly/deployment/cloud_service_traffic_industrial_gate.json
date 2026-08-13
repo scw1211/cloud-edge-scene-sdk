@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "role": "cloud",
+  "plugin_config": "scenes/industrial_anomaly/deployment/scene_plugins_cloud_traffic_industrial_formal.json",
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 19100,
+    "max_body_bytes": 8388608,
+    "access_log": false
+  },
+  "storage": {
+    "feedback": "runtime/traffic_industrial_gate/cloud_feedback.jsonl",
+    "idempotency": "runtime/traffic_industrial_gate/cloud_idempotency.sqlite3",
+    "artifacts": "runtime/traffic_industrial_gate/cloud_artifacts",
+    "aggregations": "runtime/traffic_industrial_gate/cloud_aggregations.sqlite3"
+  },
+  "idempotency": {
+    "ttl_seconds": 86400,
+    "max_entries": 100000
+  }
+}

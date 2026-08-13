@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "role": "cloud",
+  "plugin_config": "scenes/industrial_anomaly/deployment/benchmark_scene_plugins_cloud.json",
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 19500,
+    "max_body_bytes": 8388608,
+    "access_log": false
+  },
+  "storage": {
+    "feedback": "runtime/industrial_selective_compact_20260812/cloud_feedback.jsonl",
+    "idempotency": "runtime/industrial_selective_compact_20260812/cloud_idempotency.sqlite3",
+    "artifacts": "runtime/industrial_selective_compact_20260812/cloud_artifacts",
+    "aggregations": "runtime/industrial_selective_compact_20260812/cloud_aggregations.sqlite3"
+  },
+  "idempotency": {"ttl_seconds": 86400, "max_entries": 100000}
+}

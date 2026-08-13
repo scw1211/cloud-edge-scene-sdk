@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloud-edge.local/schemas/traffic-global-objective-sample-plan-v1.json",
+  "title": "交通全局目标预注册样本计划",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "locked_at",
+    "scene",
+    "expected",
+    "expected_sample_count",
+    "sample_ids",
+    "slow_threshold_ms"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "plan_id": {"type": "string", "minLength": 1},
+    "locked_at": {"type": "string", "format": "date-time"},
+    "scene": {"const": "freeway_traffic"},
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_commit",
+        "dataset_id",
+        "model_ids",
+        "hardware_id",
+        "objective_id",
+        "objective_definition_sha256"
+      ],
+      "properties": {
+        "git_commit": {"type": "string", "minLength": 1},
+        "dataset_id": {"type": "string", "minLength": 1},
+        "model_ids": {},
+        "hardware_id": {},
+        "objective_id": {"type": "string", "minLength": 1},
+        "objective_definition_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        }
+      }
+    },
+    "expected_sample_count": {"type": "integer", "minimum": 1},
+    "sample_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "integer", "minimum": 0}
+    },
+    "slow_threshold_ms": {"type": "number", "exclusiveMinimum": 0}
+  }
+}

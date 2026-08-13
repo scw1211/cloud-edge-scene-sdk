@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -170,6 +171,94 @@ class TrafficConstructorCompatibilityTests(unittest.TestCase):
         self.assertEqual(plugin._edge_llm.deadline_margin_ms, 23.0)
         self.assertEqual(plugin._edge_llm.min_expected_gain, 0.05)
         self.assertEqual(plugin.cloud_llm_min_expected_gain, 0.05)
+
+
+class TrafficJointPromptContractTests(unittest.TestCase):
+    @staticmethod
+    def _active(
+        max_input_tokens,
+        lora_adapter,
+        context_encoder="freeway-routing-context-decimal@v2",
+    ):
+        description = {
+            "input_contract": {
+                "context_encoder": context_encoder,
+                "max_input_tokens": max_input_tokens,
+            },
+            "runtime": {"lora_adapter": lora_adapter},
+        }
+        return SimpleNamespace(
+            model=SimpleNamespace(describe=lambda: description)
+        )
+
+    def test_joint_runtime_uses_t_prefix_and_no_request_lora(self):
+        controller = TrafficEdgeLLMController(
+            Path("release.json"),
+            Path("runtime.json"),
+            mode="primary",
+            edge_llm_prompt_prefix="T",
+        )
+        active = self._active(
+            17, None, context_encoder="scene-prefixed-decimal17@v1"
+        )
+        with patch(
+            "freeway_traffic_full.edge_llm.load_active_edge_llm",
+            return_value=active,
+        ):
+            controller.warmup()
+
+        _, event = _normalize()
+        event = replace(
+            event,
+            metadata={
+                **event.metadata,
+                "edge_runtime_network_available": True,
+                "edge_runtime_network_status": "normal",
+            },
+        )
+        prompt = controller._build_action_prompt(event, _student(event))
+        self.assertEqual(len(prompt), 17)
+        self.assertEqual(prompt[0], "T")
+        self.assertTrue(prompt[1:].isdigit())
+        self.assertIs(controller.active, active)
+
+    def test_legacy_runtime_keeps_decimal16_and_request_lora(self):
+        controller = TrafficEdgeLLMController(
+            Path("release.json"), Path("runtime.json"), mode="primary"
+        )
+        active = self._active(16, {"id": 0, "scale": 1.0})
+        with patch(
+            "freeway_traffic_full.edge_llm.load_active_edge_llm",
+            return_value=active,
+        ):
+            controller.warmup()
+
+        _, event = _normalize()
+        event = replace(
+            event,
+            metadata={
+                **event.metadata,
+                "edge_runtime_network_available": True,
+                "edge_runtime_network_status": "normal",
+            },
+        )
+        prompt = controller._build_action_prompt(event, _student(event))
+        self.assertEqual(len(prompt), 16)
+        self.assertTrue(prompt.isdigit())
+
+    def test_joint_runtime_rejects_request_level_lora(self):
+        controller = TrafficEdgeLLMController(
+            Path("release.json"),
+            Path("runtime.json"),
+            mode="primary",
+            edge_llm_prompt_prefix="T",
+        )
+        with patch(
+            "freeway_traffic_full.edge_llm.load_active_edge_llm",
+            return_value=self._active(17, {"id": 0, "scale": 1.0}),
+        ):
+            with self.assertRaisesRegex(ValueError, "omit request-level LoRA"):
+                controller.warmup()
 
 
 class TrafficSemanticTests(unittest.TestCase):

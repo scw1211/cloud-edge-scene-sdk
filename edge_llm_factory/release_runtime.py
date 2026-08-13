@@ -43,6 +43,8 @@ def _runtime_matches_release(
     manifest: Dict[str, Any],
     release_id: str,
     artifact: Path,
+    revision: Optional[int] = None,
+    record: Optional[Dict[str, Any]] = None,
 ) -> None:
     deployment = manifest.get("deployment")
     if not isinstance(deployment, dict):
@@ -74,6 +76,38 @@ def _runtime_matches_release(
                     sorted(accepted)
                 )
             )
+    binding = runtime.get("release_binding")
+    if binding is not None:
+        if revision is None or record is None:
+            raise ManifestError("runtime release_binding 无法校验 active release")
+        expected = {
+            "release_id": str(release_id),
+            "revision": int(revision),
+            "binding_fingerprint": record.get("binding_fingerprint"),
+            "deployment_sha256": record.get("deployment_artifact", {}).get(
+                "sha256"
+            ),
+        }
+        for field, expected_value in expected.items():
+            if binding.get(field) != expected_value:
+                raise ManifestError(
+                    "runtime release_binding.{} 与 active release 不一致".format(
+                        field
+                    )
+                )
+        adapter_id = binding.get("adapter_id")
+        runtime_adapters = record.get("runtime_adapters")
+        if adapter_id is None:
+            if runtime.get("lora_adapter") is not None:
+                raise ManifestError("base runtime 禁止选择 LoRA")
+        else:
+            if not isinstance(runtime_adapters, list) or adapter_id >= len(
+                runtime_adapters
+            ):
+                raise ManifestError("runtime release_binding adapter 不存在")
+            adapter = runtime_adapters[adapter_id]
+            if adapter.get("sha256") != binding.get("adapter_sha256"):
+                raise ManifestError("runtime release_binding adapter SHA256 不一致")
 
 
 def load_active_edge_llm(
@@ -98,7 +132,14 @@ def load_active_edge_llm(
             )
         )
     runtime = validate_runtime_config(read_json_object(Path(runtime_config_path)))
-    _runtime_matches_release(runtime, manifest, str(release_id), artifact)
+    _runtime_matches_release(
+        runtime,
+        manifest,
+        str(release_id),
+        artifact,
+        revision=int(status["revision"]),
+        record=record,
+    )
     model = ValidatedEdgeLLM(
         base_manifest_path=base_manifest,
         adapter_package=adapter_package,

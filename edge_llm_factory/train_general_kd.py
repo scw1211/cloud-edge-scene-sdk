@@ -256,6 +256,45 @@ def _model_report(model: Any) -> Dict[str, Any]:
     return {"parameter_count": parameter_count, "modality": "text_only"}
 
 
+def validate_resume_adapter(
+    adapter: Path, expected_weights_sha256: str, base: Mapping[str, Any]
+) -> Dict[str, Any]:
+    """Validate a same-base LoRA before it can initialize a new candidate."""
+
+    adapter = Path(adapter).resolve()
+    weights = adapter / "adapter_model.safetensors"
+    config_path = adapter / "adapter_config.json"
+    if not weights.is_file() or not config_path.is_file():
+        raise ManifestError("续训 Adapter 缺少权重或配置")
+    expected = str(expected_weights_sha256).strip().lower()
+    actual = sha256_file(weights)
+    if len(expected) != 64 or expected != actual:
+        raise ManifestError("续训 Adapter 权重 SHA-256 不匹配")
+    config = read_json_object(config_path)
+    if config.get("base_model_name_or_path") != base["source"]["model_id"]:
+        raise ManifestError("续训 Adapter 的文本基座不匹配")
+    modules = sorted(str(value) for value in config.get("target_modules", []))
+    if not modules or not set(modules).issubset(
+        set(base["lora_policy"]["allowed_target_modules"])
+    ):
+        raise ManifestError("续训 Adapter target_modules 不受基座策略允许")
+    rank = int(config.get("r", 0))
+    if rank <= 0 or rank > int(base["lora_policy"]["max_rank"]):
+        raise ManifestError("续训 Adapter rank 无效")
+    return {
+        "adapter": adapter,
+        "config": config,
+        "target_modules": modules,
+        "rank": rank,
+        "initialization": {
+            "mode": "resume_same_base_lora",
+            "adapter_path": str(adapter),
+            "adapter_weights_sha256": actual,
+            "adapter_config_sha256": sha256_file(config_path),
+        },
+    }
+
+
 def main(argv: Optional[list] = None) -> None:
     parser = argparse.ArgumentParser(description="训练场景无关的多 token 通用知识蒸馏 LoRA。")
     parser.add_argument("--base", required=True)
@@ -279,6 +318,16 @@ def main(argv: Optional[list] = None) -> None:
     parser.add_argument("--alpha", type=int, default=64)
     parser.add_argument("--dropout", type=float, default=0.05)
     parser.add_argument("--target_modules", default="")
+    parser.add_argument(
+        "--resume_adapter",
+        default="",
+        help="可选：从同一文本基座上的既有 LoRA 权重继续训练，并保存为新的独立 Adapter。",
+    )
+    parser.add_argument(
+        "--expected_resume_adapter_sha256",
+        default="",
+        help="使用 --resume_adapter 时必填；锁定 adapter_model.safetensors。",
+    )
     parser.add_argument("--gradient_checkpointing", action="store_true")
     parser.add_argument("--bf16", action="store_true")
     parser.add_argument("--fp16", action="store_true")
@@ -333,7 +382,7 @@ def main(argv: Optional[list] = None) -> None:
         raise ManifestError("通用蒸馏训练集和验证集 prompt 重叠")
 
     import torch
-    from peft import LoraConfig, TaskType, get_peft_model
+    from peft import LoraConfig, PeftModel, TaskType, get_peft_model
     from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
 
     random.seed(args.seed)
@@ -367,26 +416,46 @@ def main(argv: Optional[list] = None) -> None:
         model.enable_input_require_grads()
     model.config.use_cache = False
 
-    target_modules = (
-        [part.strip() for part in args.target_modules.split(",") if part.strip()]
-        if args.target_modules
-        else list(base["lora_policy"]["allowed_target_modules"])
-    )
-    if not set(target_modules).issubset(set(base["lora_policy"]["allowed_target_modules"])):
-        raise ManifestError("target_modules 包含未授权模块")
-    if args.rank > int(base["lora_policy"]["max_rank"]):
-        raise ManifestError("LoRA rank 超过基座策略上限")
-    model = get_peft_model(
-        model,
-        LoraConfig(
-            r=args.rank,
-            lora_alpha=args.alpha,
-            lora_dropout=args.dropout,
-            target_modules=target_modules,
-            task_type=TaskType.CAUSAL_LM,
-            bias="none",
-        ),
-    )
+    resume_adapter = Path(args.resume_adapter).resolve() if args.resume_adapter else None
+    initialization: Dict[str, Any]
+    if resume_adapter is not None:
+        resume = validate_resume_adapter(
+            resume_adapter, args.expected_resume_adapter_sha256, base
+        )
+        resume_config = resume["config"]
+        target_modules = resume["target_modules"]
+        model = PeftModel.from_pretrained(model, str(resume_adapter), is_trainable=True)
+        initialization = resume["initialization"]
+        lora_rank = resume["rank"]
+        lora_alpha = int(resume_config.get("lora_alpha", 0))
+        lora_dropout = float(resume_config.get("lora_dropout", 0.0))
+    else:
+        if args.expected_resume_adapter_sha256:
+            raise ManifestError("未使用 --resume_adapter 时不得提供其 SHA-256")
+        target_modules = (
+            [part.strip() for part in args.target_modules.split(",") if part.strip()]
+            if args.target_modules
+            else list(base["lora_policy"]["allowed_target_modules"])
+        )
+        if not set(target_modules).issubset(set(base["lora_policy"]["allowed_target_modules"])):
+            raise ManifestError("target_modules 包含未授权模块")
+        if args.rank > int(base["lora_policy"]["max_rank"]):
+            raise ManifestError("LoRA rank 超过基座策略上限")
+        model = get_peft_model(
+            model,
+            LoraConfig(
+                r=args.rank,
+                lora_alpha=args.alpha,
+                lora_dropout=args.dropout,
+                target_modules=target_modules,
+                task_type=TaskType.CAUSAL_LM,
+                bias="none",
+            ),
+        )
+        initialization = {"mode": "clean_text_base"}
+        lora_rank = args.rank
+        lora_alpha = args.alpha
+        lora_dropout = args.dropout
     model.print_trainable_parameters()
 
     output = Path(args.output).resolve()
@@ -424,6 +493,7 @@ def main(argv: Optional[list] = None) -> None:
         }
     summary = {
         "task": "scene_independent_general_behavior_distillation_lora",
+        "initialization": initialization,
         "base_id": base["base_id"],
         "base_fingerprint": base_fingerprint(base),
         "snapshot_validation": snapshot_report,
@@ -442,9 +512,9 @@ def main(argv: Optional[list] = None) -> None:
         "validation_tokenization": val_token_stats,
         "max_seq_length": args.max_seq_length,
         "lora": {
-            "rank": args.rank,
-            "alpha": args.alpha,
-            "dropout": args.dropout,
+            "rank": lora_rank,
+            "alpha": lora_alpha,
+            "dropout": lora_dropout,
             "target_modules": target_modules,
         },
         "optimization": {

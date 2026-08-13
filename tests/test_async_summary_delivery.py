@@ -1014,6 +1014,153 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
         finally:
             registry.close()
 
+    def test_provisional_first_defers_mandatory_cloud_review_to_handoff(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="provisional-first-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry([_AggregationPlugin()])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            handoff = DurableOutboxHandoff(outbox, root / "handoff.jsonl")
+            cloud = _ForbiddenSlowCloud()
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=cloud,
+                    review_store=outbox,
+                    review_tracker=tracker,
+                    durable_handoff=handoff,
+                )
+                result = runtime.process(
+                    _payload(),
+                    network=_network(),
+                    response_detail="compact",
+                    return_provisional_immediately=True,
+                )
+
+                self.assertEqual(
+                    result["data_plane"]["scheduler_selected_route"],
+                    "cloud_sync",
+                )
+                self.assertTrue(
+                    result["data_plane"]["scheduler_selected_wait"]
+                )
+                self.assertTrue(
+                    result["data_plane"]["provisional_first_override"]
+                )
+                self.assertEqual(result["schedule"]["route"], "cloud_async")
+                self.assertFalse(result["schedule"]["waits_for_cloud"])
+                self.assertEqual(
+                    result["final_decision"]["status"], "provisional"
+                )
+                self.assertEqual(
+                    result["final_decision"]["route"], "cloud_async"
+                )
+                self.assertFalse(
+                    result["final_decision"]["metadata"][
+                        "action_authorization"
+                    ]["cloud_confirmed"]
+                )
+                self.assertEqual(
+                    result["review"]["requested_route"], "cloud_sync"
+                )
+                self.assertEqual(
+                    result["summary_delivery"]["persistence_stage"],
+                    "handoff_durable",
+                )
+                self.assertTrue(result["summary_delivery"]["fast_path"])
+                self.assertEqual(cloud.aggregate_calls, 0)
+                self.assertEqual(cloud.coordinate_calls, 0)
+
+                deadline = time.monotonic() + 1.0
+                while outbox.count() == 0 and time.monotonic() < deadline:
+                    time.sleep(0.005)
+                self.assertEqual(outbox.count(), 1)
+                stored = outbox.events()[0]
+                self.assertEqual(
+                    stored.metadata["_edge_review_context"]["requested_route"],
+                    "cloud_sync",
+                )
+            finally:
+                handoff.close()
+                tracker.close()
+                outbox.close()
+                registry.close()
+
+    def test_direct_cloud_async_uses_handoff_fast_path(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="direct-async-handoff-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry([_AggregationPlugin()])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            handoff = DurableOutboxHandoff(outbox, root / "handoff.jsonl")
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=_ForbiddenSlowCloud(),
+                    scheduler=_AlwaysAsyncScheduler(),
+                    review_store=outbox,
+                    review_tracker=tracker,
+                    durable_handoff=handoff,
+                )
+                result = runtime.process(
+                    _payload(),
+                    network=_network(),
+                    response_detail="compact",
+                )
+
+                self.assertEqual(result["schedule"]["route"], "cloud_async")
+                self.assertEqual(
+                    result["summary_delivery"]["persistence_stage"],
+                    "handoff_durable",
+                )
+                self.assertTrue(result["summary_delivery"]["fast_path"])
+                self.assertEqual(
+                    result["review"]["requested_route"], "cloud_async"
+                )
+            finally:
+                handoff.close()
+                tracker.close()
+                outbox.close()
+                registry.close()
+
+    def test_local_autonomy_uses_handoff_fast_path(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="autonomy-handoff-") as directory:
+            root = Path(directory)
+            registry = SceneRegistry([_AggregationPlugin()])
+            outbox = SQLiteOutbox(root / "outbox.sqlite3")
+            tracker = ReviewLifecycleStore(root / "reviews.sqlite3")
+            handoff = DurableOutboxHandoff(outbox, root / "handoff.jsonl")
+            try:
+                runtime = EdgeRuntime(
+                    registry=registry,
+                    cloud=_ForbiddenSlowCloud(),
+                    review_store=outbox,
+                    review_tracker=tracker,
+                    durable_handoff=handoff,
+                )
+                result = runtime.process(
+                    _payload(),
+                    network=NetworkSnapshot(available=False, loss_rate=1.0),
+                    response_detail="compact",
+                )
+
+                self.assertEqual(result["schedule"]["route"], "local_autonomy")
+                self.assertEqual(
+                    result["summary_delivery"]["persistence_stage"],
+                    "handoff_durable",
+                )
+                self.assertTrue(result["summary_delivery"]["fast_path"])
+                self.assertEqual(
+                    result["review"]["requested_route"], "local_autonomy"
+                )
+            finally:
+                handoff.close()
+                tracker.close()
+                outbox.close()
+                registry.close()
+
     def test_required_cloud_confirmation_submits_synchronously_then_falls_back(
         self,
     ) -> None:

@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "aggregation_id": "traffic-four-route-20260809",
+  "weight_plan_id": "traffic-route-mix-v1",
+  "locked_at": "2026-08-09T08:00:00+08:00",
+  "expected": {
+    "git_commit": "replace-with-tested-commit",
+    "dataset_id": "pems08-current-state-fixed-test-v1",
+    "data_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "model_ids": {
+      "edge_student": "replace-with-student-sha256",
+      "edge_qwen": "replace-with-edge-qwen-sha256",
+      "cloud_fusion": "replace-with-cloud-fusion-sha256"
+    },
+    "hardware_id": {
+      "edge": "jetson02-orin-nano",
+      "cloud": "server-5070ti"
+    }
+  },
+  "routes": {
+    "edge_only": {
+      "weight": 0.35,
+      "experiments": [
+        {
+          "run_id": "edge-only-run-01",
+          "result_path": "evidence/edge_only.json",
+          "attestation_path": "evidence/edge_only.attestation.json",
+          "sample_ids": [0, 1, 2, 3, 4],
+          "partition_ids": [0, 1, 2, 3],
+          "network_profile": {"profile_id": "lan-online-low-load"}
+        }
+      ]
+    },
+    "local_autonomy": {
+      "weight": 0.15,
+      "experiments": [
+        {
+          "run_id": "offline-run-01",
+          "result_path": "evidence/local_autonomy.json",
+          "attestation_path": "evidence/local_autonomy.attestation.json",
+          "sample_ids": [5, 6, 7, 8, 9],
+          "partition_ids": [0, 1, 2, 3],
+          "network_profile": {
+            "profile_id": "cloud-outage",
+            "cloud_available": false
+          }
+        }
+      ]
+    },
+    "cloud_async": {
+      "weight": 0.40,
+      "experiments": [
+        {
+          "run_id": "async-run-01",
+          "result_path": "evidence/cloud_async.json",
+          "attestation_path": "evidence/cloud_async.attestation.json",
+          "sample_ids": [10, 11, 12, 13, 14],
+          "partition_ids": [0, 1, 2, 3],
+          "network_profile": {"profile_id": "lan-online-normal"}
+        }
+      ]
+    },
+    "cloud_sync": {
+      "weight": 0.10,
+      "experiments": [
+        {
+          "run_id": "sync-run-01",
+          "result_path": "evidence/cloud_sync.json",
+          "attestation_path": "evidence/cloud_sync.attestation.json",
+          "sample_ids": [15, 16, 17, 18, 19],
+          "partition_ids": [0, 1, 2, 3],
+          "network_profile": {"profile_id": "lan-online-high-risk"}
+        }
+      ]
+    }
+  }
+}

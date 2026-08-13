@@ -572,15 +572,26 @@ class Pems08E2EBenchmarkTests(unittest.TestCase):
         self.assertIsNone(row["business_completion_ms"])
 
     def test_authoritative_final_uses_common_sample_t0(self):
+        post = _post()
+        post["response"]["data_plane"].update(
+            {
+                "scheduler_selected_route": "cloud_sync",
+                "scheduler_selected_wait": True,
+                "provisional_first_override": True,
+            }
+        )
         row = benchmark._record_event(
             _native(),
-            _post(),
+            post,
             _review("lightweight_final"),
             sample_t0_epoch_ms=1000,
             review_observed_at_ms=140.0,
         )
 
         self.assertTrue(row["review_authoritative"])
+        self.assertEqual(row["policy_route"], "cloud_sync")
+        self.assertEqual(row["delivery_route"], "cloud_async")
+        self.assertTrue(row["policy_wait"])
         self.assertEqual(row["global_final_ms"], 120.0)
         self.assertEqual(row["business_completion_ms"], 120.0)
         self.assertEqual(row["decision_stratum"], "qwen_accepted_requires_cloud")

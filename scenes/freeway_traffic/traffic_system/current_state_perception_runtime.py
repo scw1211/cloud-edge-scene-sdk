@@ -1,10 +1,11 @@
 """直接根据交通观测窗口生成风险事件，不加载 ASTGCN 或 PyTorch。"""
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 import time
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import numpy as np
 
@@ -216,24 +217,36 @@ class CurrentStateTrafficPerceptionRuntime:
         self,
         managed_nodes: Sequence[int],
         state: Mapping[str, np.ndarray],
+        state_node_indices: Optional[Sequence[int]] = None,
     ) -> List[Dict[str, Any]]:
         probabilities = state["probabilities"]
         ranked_nodes = []
-        for position, raw_node_id in enumerate(managed_nodes):
+        if state_node_indices is None:
+            state_node_indices = managed_nodes
+        if len(state_node_indices) != len(managed_nodes):
+            raise ValueError("state_node_indices must match managed_nodes")
+        for position, (raw_node_id, raw_state_index) in enumerate(
+            zip(managed_nodes, state_node_indices)
+        ):
             node_id = int(raw_node_id)
-            node_probs = probabilities[node_id]
+            state_index = int(raw_state_index)
+            node_probs = probabilities[state_index]
             label_id = int(np.argmax(node_probs))
             # The legacy implementation sorts on the six-decimal value exposed
             # in the event, not on the unrounded score.  Keep that exact key and
             # the original managed-node position so equal keys remain stable.
             risk_score = round(_risk_score(node_probs), 6)
-            ranked_nodes.append((label_id, risk_score, position, node_id))
+            ranked_nodes.append(
+                (label_id, risk_score, position, node_id, state_index)
+            )
         ranked_nodes.sort(key=lambda item: (-item[0], -item[1], item[2]))
 
         rows = []
-        for label_id, risk_score, _, node_id in ranked_nodes[: self.top_k]:
-            node_probs = probabilities[node_id]
-            speed_history = state["speed_history"][node_id]
+        for label_id, risk_score, _, node_id, state_index in ranked_nodes[
+            : self.top_k
+        ]:
+            node_probs = probabilities[state_index]
+            speed_history = state["speed_history"][state_index]
             rows.append(
                 {
                     "node_id": node_id,
@@ -251,16 +264,125 @@ class CurrentStateTrafficPerceptionRuntime:
                         round(float(value), 6) for value in speed_history
                     ],
                     "current_observation": {
-                        "flow_mean": round(float(state["flow_mean"][node_id]), 6),
-                        "occupancy_mean": round(
-                            float(state["occupancy_mean"][node_id]), 6
+                        "flow_mean": round(
+                            float(state["flow_mean"][state_index]), 6
                         ),
-                        "speed_mean": round(float(state["speed_mean"][node_id]), 6),
-                        "speed_min": round(float(state["speed_min"][node_id]), 6),
+                        "occupancy_mean": round(
+                            float(state["occupancy_mean"][state_index]), 6
+                        ),
+                        "speed_mean": round(
+                            float(state["speed_mean"][state_index]), 6
+                        ),
+                        "speed_min": round(
+                            float(state["speed_min"][state_index]), 6
+                        ),
                     },
                 }
             )
         return rows
+
+    def _partition_event(
+        self,
+        sample_id: int,
+        partition_id: int,
+        managed_nodes: Sequence[int],
+        state: Mapping[str, np.ndarray],
+        state_node_indices: Sequence[int],
+        input_shape: Sequence[int],
+        observation_steps: int,
+    ) -> Dict[str, Any]:
+        """Materialize one already-assigned METIS region as one native event."""
+        indices = np.asarray(state_node_indices, dtype=np.int64)
+        node_probs = state["probabilities"][indices]
+        node_labels = np.argmax(node_probs, axis=1)
+        counts = {
+            name: int(np.sum(node_labels == index))
+            for index, name in enumerate(RISK_CLASSES)
+        }
+        mean_probs = np.mean(node_probs, axis=0)
+        local_scores = state["scores"][indices]
+        worst_probs = node_probs[int(np.argmax(local_scores))]
+        region_probs = 0.75 * mean_probs + 0.25 * worst_probs
+        region_probs = region_probs / np.sum(region_probs)
+        region_label_id = int(np.argmax(region_probs))
+        max_label_id = int(np.max(node_labels))
+        high_count = counts["high"]
+        severe_count = counts["severe"]
+        if severe_count:
+            upload_required, upload_level = True, "regional_context"
+        elif high_count >= 1:
+            upload_required, upload_level = True, "sequence"
+        elif counts["medium"] >= 1:
+            upload_required, upload_level = True, "feature"
+        else:
+            upload_required, upload_level = False, "summary"
+        summary = {
+            "region_risk_level": RISK_CLASSES[region_label_id],
+            "region_risk_score": round(_risk_score(region_probs), 6),
+            "region_risk_confidence": round(float(np.max(region_probs)), 6),
+            "region_risk_probabilities": {
+                name: round(float(region_probs[index]), 6)
+                for index, name in enumerate(RISK_CLASSES)
+            },
+            "node_risk_counts": counts,
+            "mean_node_risk_score": round(_mean_risk_score(node_probs), 6),
+            "max_node_risk_level": RISK_CLASSES[max_label_id],
+            # This compact physical-state summary covers every node in the
+            # already-assigned METIS partition, not only the reported top-k.
+            "current_observation": {
+                "node_count": int(len(indices)),
+                "flow_mean": round(
+                    float(np.mean(state["flow_mean"][indices])), 6
+                ),
+                "occupancy_mean": round(
+                    float(np.mean(state["occupancy_mean"][indices])), 6
+                ),
+                "speed_mean": round(
+                    float(np.mean(state["speed_mean"][indices])), 6
+                ),
+                "speed_min": round(
+                    float(np.min(state["speed_min"][indices])), 6
+                ),
+            },
+        }
+        return {
+            "scene": "freeway_traffic_management",
+            "task": "edge_freeway_current_state_risk_assessment",
+            "dataset": "PEMS08",
+            "model": "current_window_risk_rules_v1",
+            "model_version": "current-state-v1",
+            "output_type": "current_state_risk",
+            "risk_source": "current_observed_12_step_window",
+            "checkpoint": "none",
+            "event_id": "freeway_{}_sample_{:04d}_edge_node_{}".format(
+                self.split, sample_id, partition_id
+            ),
+            "edge_id": "edge_node_{}".format(partition_id),
+            "region_id": "region_{}".format(partition_id),
+            "partition_id": partition_id,
+            "num_partitions": self.partition_count,
+            "sample_split": self.split,
+            "sample_id": sample_id,
+            "device": self.device,
+            "model_forward_latency_ms": 0.0,
+            "inference_latency_ms": 0.0,
+            "time_step_minutes": 5,
+            "observation_window_minutes": int(observation_steps) * 5,
+            "prediction_steps": 0,
+            "prediction_horizon_minutes": 0,
+            "input_shape": [int(value) for value in input_shape],
+            "managed_node_ids": [int(value) for value in managed_nodes],
+            "control_capabilities": self._control_capabilities(partition_id),
+            "region_summary": summary,
+            "upload_required": upload_required,
+            "upload_level": upload_level,
+            "top_k_risk_nodes": self._top_nodes(
+                managed_nodes,
+                state,
+                state_node_indices=state_node_indices,
+            ),
+            "perception_mode": "current_state",
+        }
 
     def infer_sample(self, sample_id: int) -> TrafficPerceptionResult:
         sample_id = self.validate_sample_ids([sample_id])[0]
@@ -270,76 +392,16 @@ class CurrentStateTrafficPerceptionRuntime:
         state = current_window_risk(raw_sample, self.rule_config)
         events = []
         for partition_id, managed_nodes in enumerate(self.partitions):
-            managed = np.asarray(managed_nodes, dtype=np.int64)
-            node_probs = state["probabilities"][managed]
-            node_labels = np.argmax(node_probs, axis=1)
-            counts = {
-                name: int(np.sum(node_labels == index))
-                for index, name in enumerate(RISK_CLASSES)
-            }
-            mean_probs = np.mean(node_probs, axis=0)
-            worst_probs = node_probs[int(np.argmax(state["scores"][managed]))]
-            region_probs = 0.75 * mean_probs + 0.25 * worst_probs
-            region_probs = region_probs / np.sum(region_probs)
-            region_label_id = int(np.argmax(region_probs))
-            max_label_id = int(np.max(node_labels))
-            high_count = counts["high"]
-            severe_count = counts["severe"]
-            if severe_count:
-                upload_required, upload_level = True, "regional_context"
-            elif high_count >= 1:
-                upload_required, upload_level = True, "sequence"
-            elif counts["medium"] >= 1:
-                upload_required, upload_level = True, "feature"
-            else:
-                upload_required, upload_level = False, "summary"
-            summary = {
-                "region_risk_level": RISK_CLASSES[region_label_id],
-                "region_risk_score": round(_risk_score(region_probs), 6),
-                "region_risk_confidence": round(float(np.max(region_probs)), 6),
-                "region_risk_probabilities": {
-                    name: round(float(region_probs[index]), 6)
-                    for index, name in enumerate(RISK_CLASSES)
-                },
-                "node_risk_counts": counts,
-                "mean_node_risk_score": round(_mean_risk_score(node_probs), 6),
-                "max_node_risk_level": RISK_CLASSES[max_label_id],
-            }
             events.append(
-                {
-                    "scene": "freeway_traffic_management",
-                    "task": "edge_freeway_current_state_risk_assessment",
-                    "dataset": "PEMS08",
-                    "model": "current_window_risk_rules_v1",
-                    "model_version": "current-state-v1",
-                    "output_type": "current_state_risk",
-                    "risk_source": "current_observed_12_step_window",
-                    "checkpoint": "none",
-                    "event_id": "freeway_{}_sample_{:04d}_edge_node_{}".format(
-                        self.split, sample_id, partition_id
-                    ),
-                    "edge_id": "edge_node_{}".format(partition_id),
-                    "region_id": "region_{}".format(partition_id),
-                    "partition_id": partition_id,
-                    "num_partitions": self.partition_count,
-                    "sample_split": self.split,
-                    "sample_id": sample_id,
-                    "device": self.device,
-                    "model_forward_latency_ms": 0.0,
-                    "inference_latency_ms": 0.0,
-                    "time_step_minutes": 5,
-                    "observation_window_minutes": int(raw_sample.shape[-1]) * 5,
-                    "prediction_steps": 0,
-                    "prediction_horizon_minutes": 0,
-                    "input_shape": list(normalized.shape),
-                    "managed_node_ids": list(managed_nodes),
-                    "control_capabilities": self._control_capabilities(partition_id),
-                    "region_summary": summary,
-                    "upload_required": upload_required,
-                    "upload_level": upload_level,
-                    "top_k_risk_nodes": self._top_nodes(managed_nodes, state),
-                    "perception_mode": "current_state",
-                }
+                self._partition_event(
+                    sample_id=sample_id,
+                    partition_id=partition_id,
+                    managed_nodes=managed_nodes,
+                    state=state,
+                    state_node_indices=managed_nodes,
+                    input_shape=normalized.shape,
+                    observation_steps=raw_sample.shape[-1],
+                )
             )
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         for event in events:
@@ -349,4 +411,153 @@ class CurrentStateTrafficPerceptionRuntime:
             model_forward_ms=0.0,
             perception_ms=round(elapsed_ms, 6),
             events=events,
+        )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as file_obj:
+        for block in iter(lambda: file_obj.read(8 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+class PartitionCurrentStateTrafficPerceptionRuntime(
+    CurrentStateTrafficPerceptionRuntime
+):
+    """Resident runtime for exactly one pre-assigned METIS edge region."""
+
+    def __init__(
+        self,
+        manifest_path: Path,
+        partition_id: int,
+        rule_config_path: Path,
+        topology_path: Path,
+        split: str,
+        top_k: int,
+        verify_sha256: bool = True,
+    ) -> None:
+        if split not in {"train", "val", "test"}:
+            raise ValueError("split must be train, val or test")
+        if top_k <= 0:
+            raise ValueError("top_k must be positive")
+        started = time.perf_counter()
+        self.manifest_path = Path(manifest_path).resolve()
+        self.rule_config_path = Path(rule_config_path).resolve()
+        self.topology_path = Path(topology_path).resolve()
+        self.split = split
+        self.top_k = int(top_k)
+        self.device = "cpu:numpy"
+        self.partition_id = int(partition_id)
+
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        if int(manifest.get("schema_version", 0)) != 1:
+            raise ValueError("unsupported partition manifest schema")
+        if str(manifest.get("format", "")) != (
+            "pems08_preassigned_metis_edge_partitions"
+        ):
+            raise ValueError("partition manifest format is not recognized")
+        self.rule_config = json.loads(
+            self.rule_config_path.read_text(encoding="utf-8")
+        )
+        self.topology = json.loads(self.topology_path.read_text(encoding="utf-8"))
+        self.partitions = [
+            [int(node) for node in partition]
+            for partition in self.rule_config["partitions"]
+        ]
+        if self.partition_id < 0 or self.partition_id >= len(self.partitions):
+            raise ValueError("partition_id is outside configured partitions")
+        contract = manifest.get("partition_contract", {})
+        if not isinstance(contract, dict):
+            raise ValueError("partition contract must be an object")
+        if int(contract.get("partition_count", 0)) != len(self.partitions):
+            raise ValueError("partition manifest count does not match rule config")
+        if contract.get("runtime_repartition_allowed") is not False:
+            raise ValueError("partition manifest must prohibit runtime repartition")
+        if verify_sha256:
+            if _sha256_file(self.rule_config_path) != str(
+                contract.get("rule_config_sha256", "")
+            ):
+                raise ValueError("rule config SHA-256 does not match manifest")
+            if _sha256_file(self.topology_path) != str(
+                contract.get("topology_sha256", "")
+            ):
+                raise ValueError("topology SHA-256 does not match manifest")
+        records = manifest.get("partitions", [])
+        if not isinstance(records, list):
+            raise ValueError("partition manifest records must be a list")
+        matches = [
+            record
+            for record in records
+            if int(record.get("partition_id", -1)) == self.partition_id
+        ]
+        if len(matches) != 1:
+            raise ValueError("partition manifest must contain one matching record")
+        record = matches[0]
+        self.data_path = (
+            self.manifest_path.parent / str(record["file"])
+        ).resolve()
+        if self.data_path.stat().st_size != int(record.get("bytes", -1)):
+            raise ValueError("partition shard size does not match manifest")
+        if verify_sha256 and _sha256_file(self.data_path) != str(record["sha256"]):
+            raise ValueError("partition shard SHA-256 does not match manifest")
+
+        split_key = "{}_x".format(split)
+        with np.load(self.data_path, allow_pickle=False) as data:
+            required = {
+                split_key,
+                "mean",
+                "std",
+                "global_node_ids",
+                "partition_id",
+                "num_partitions",
+            }
+            missing = sorted(required - set(data.files))
+            if missing:
+                raise ValueError("missing partition arrays: {}".format(missing))
+            stored_partition_id = int(np.asarray(data["partition_id"]).item())
+            stored_partition_count = int(np.asarray(data["num_partitions"]).item())
+            if stored_partition_id != self.partition_id:
+                raise ValueError("partition shard identity does not match request")
+            if stored_partition_count != len(self.partitions):
+                raise ValueError("partition shard count does not match rule config")
+            self.managed_node_ids = [
+                int(node) for node in np.asarray(data["global_node_ids"]).tolist()
+            ]
+            if self.managed_node_ids != self.partitions[self.partition_id]:
+                raise ValueError("partition shard node assignment has drifted")
+            self.split_x = np.asarray(data[split_key])
+            self.mean = np.asarray(data["mean"]).reshape(1, -1, 1).astype(
+                np.float32
+            )
+            self.std = np.asarray(data["std"]).reshape(1, -1, 1).astype(
+                np.float32
+            )
+        if self.split_x.shape[1] != len(self.managed_node_ids):
+            raise ValueError("partition shard node count does not match assignment")
+        self.load_latency_ms = round((time.perf_counter() - started) * 1000.0, 6)
+
+    def infer_sample(self, sample_id: int) -> TrafficPerceptionResult:
+        sample_id = self.validate_sample_ids([sample_id])[0]
+        started = time.perf_counter()
+        normalized = self.split_x[sample_id].astype(np.float32, copy=False)
+        raw_sample = normalized * self.std + self.mean
+        state = current_window_risk(raw_sample, self.rule_config)
+        event = self._partition_event(
+            sample_id=sample_id,
+            partition_id=self.partition_id,
+            managed_nodes=self.managed_node_ids,
+            state=state,
+            state_node_indices=list(range(len(self.managed_node_ids))),
+            input_shape=normalized.shape,
+            observation_steps=raw_sample.shape[-1],
+        )
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        event["inference_latency_ms"] = round(elapsed_ms, 6)
+        event["partition_data_preassigned"] = True
+        return TrafficPerceptionResult(
+            sample_id=sample_id,
+            model_forward_ms=0.0,
+            perception_ms=round(elapsed_ms, 6),
+            events=[event],
         )

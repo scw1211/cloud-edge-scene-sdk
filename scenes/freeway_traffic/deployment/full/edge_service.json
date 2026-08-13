@@ -39,7 +39,7 @@
     "downlink_mbps": 100.0,
     "expected_response_bytes": 4096,
     "cloud_queue_ms": 1.0,
-    "cloud_compute_ms": 12.0
+    "cloud_compute_ms": 120.0
   },
   "replay": {
     "interval_seconds": 0.2,

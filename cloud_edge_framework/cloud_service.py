@@ -273,13 +273,19 @@ class CloudApiService:
         try:
             with self.manager.lease() as snapshot:
                 runtime = snapshot.require_cloud()
+                trusted_groups = [
+                    self._events_with_trusted_aggregation_context(
+                        lease, snapshot.registry
+                    )
+                    for lease in leases
+                ]
                 if hasattr(runtime, "coordinate_groups"):
                     coordinated = runtime.coordinate_groups(
-                        [lease.events for lease in leases]
+                        trusted_groups
                     )
                 else:
                     coordinated = [
-                        runtime.coordinate(lease.events) for lease in leases
+                        runtime.coordinate(events) for events in trusted_groups
                     ]
             if len(coordinated) != len(leases):
                 raise ValueError(
@@ -329,6 +335,82 @@ class CloudApiService:
             "aggregation_worker_groups_total", amount=len(completed)
         )
         return completed, []
+
+    @staticmethod
+    def _events_with_trusted_aggregation_context(
+        lease: Any,
+        registry: Any,
+    ) -> List[SemanticEvent]:
+        """Replace client member claims with the durable cloud lease contract."""
+        expected_members = [str(value) for value in lease.expected_members]
+        received_members = [str(value) for value in lease.received_members]
+        missing_members = [str(value) for value in lease.missing_members]
+        if (
+            not expected_members
+            or len(set(expected_members)) != len(expected_members)
+            or len(set(received_members)) != len(received_members)
+            or bool(set(received_members) - set(expected_members))
+            or set(missing_members) != set(expected_members) - set(received_members)
+        ):
+            raise ValueError("aggregation lease member contract is inconsistent")
+        complete = bool(
+            lease.completion_reason == "all_expected_members"
+            and not missing_members
+            and set(received_members) == set(expected_members)
+        )
+        events: List[SemanticEvent] = []
+        derived_members: List[str] = []
+        for event in lease.events:
+            if event.scene != str(lease.scene):
+                raise ValueError(
+                    "leased event {} disagrees with aggregation scene".format(
+                        event.event_id
+                    )
+                )
+            plugin = registry.get(event.scene)
+            raw_spec = plugin.aggregation_spec(event)
+            if raw_spec is None:
+                raise ValueError(
+                    "leased event {} has no aggregation spec".format(event.event_id)
+                )
+            spec = AggregationSpec.from_dict(raw_spec)
+            if (
+                spec.key != str(lease.group_key)
+                or spec.expected_members != sorted(expected_members)
+                or spec.member not in received_members
+                or spec.member in derived_members
+            ):
+                raise ValueError(
+                    "leased event {} disagrees with durable aggregation state".format(
+                        event.event_id
+                    )
+                )
+            derived_members.append(spec.member)
+            metadata = dict(event.metadata)
+            previous = metadata.get("aggregation")
+            aggregation = dict(previous) if isinstance(previous, dict) else {}
+            aggregation.update(
+                {
+                    "authority": "cloud_aggregation_lease",
+                    "group_id": str(lease.group_id),
+                    "key": str(lease.group_key),
+                    "member": spec.member,
+                    "expected_members": list(expected_members),
+                    "received_members": list(received_members),
+                    "missing_members": list(missing_members),
+                    "completion_reason": str(lease.completion_reason),
+                    "evidence_complete": complete,
+                    "finality": "final" if complete else "partial_final",
+                    "result_revision": int(lease.result_revision),
+                }
+            )
+            metadata["aggregation"] = aggregation
+            events.append(replace(event, metadata=metadata))
+        if set(derived_members) != set(received_members):
+            raise ValueError(
+                "durable aggregation members do not match leased event payloads"
+            )
+        return events
 
     @staticmethod
     def _mark_aggregation_finality(

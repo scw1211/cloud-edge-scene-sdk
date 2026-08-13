@@ -21,6 +21,28 @@ GENERAL_CATEGORIES = ("code", "math", "natural_language_reasoning")
 NUM_PREDICT = {"code": 384, "math": 256, "natural_language_reasoning": 4}
 
 
+def resolve_required_categories(
+    declared: Sequence[str], rows: Sequence[Mapping[str, Any]]
+) -> Tuple[str, ...]:
+    requested = tuple(str(value).strip() for value in declared if str(value).strip())
+    if len(requested) != len(set(requested)):
+        raise ManifestError("required_category 不能重复声明")
+    unknown = sorted(set(requested) - set(GENERAL_CATEGORIES))
+    if unknown:
+        raise ManifestError("required_category 不受支持: {}".format(unknown))
+    actual = tuple(sorted({str(row.get("category", "")) for row in rows}))
+    if not actual or any(category not in GENERAL_CATEGORIES for category in actual):
+        raise ManifestError("蒸馏源没有有效的通用能力类别")
+    if requested:
+        undeclared = sorted(set(actual) - set(requested))
+        if undeclared:
+            raise ManifestError(
+                "蒸馏源包含未声明的 required_category: {}".format(undeclared)
+            )
+        return requested
+    return actual
+
+
 def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
     rows = []
     with path.open("r", encoding="utf-8") as file_obj:
@@ -266,6 +288,13 @@ def main(argv: Optional[list] = None) -> None:
     parser.add_argument("--limit_train_per_category", type=int, default=0)
     parser.add_argument("--limit_val_per_category", type=int, default=0)
     parser.add_argument("--minimum_accepted_per_category", type=int, default=10)
+    parser.add_argument(
+        "--required_category",
+        action="append",
+        default=[],
+        choices=GENERAL_CATEGORIES,
+        help="只要求本轮源数据中实际声明的类别达到验收数量；可重复声明。",
+    )
     parser.add_argument("--seed", type=int, default=20260719)
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args(argv)
@@ -309,6 +338,9 @@ def main(argv: Optional[list] = None) -> None:
         raise ManifestError("训练集与验证集 prompt 重叠: {}".format(len(overlap)))
     if train_skipped.get("evaluation_overlap", 0) or val_skipped.get("evaluation_overlap", 0):
         raise ManifestError("检测到冻结测试 prompt 泄漏")
+    required_categories = resolve_required_categories(
+        args.required_category, train_rows + val_rows
+    )
 
     reused_by_fingerprint, reuse_sources = load_reused_verified_rows(
         reuse_paths, args.teacher_model
@@ -327,6 +359,7 @@ def main(argv: Optional[list] = None) -> None:
         "selected_val_ids": [row["sample_id"] for row in val_rows],
         "num_ctx": args.num_ctx,
         "num_predict": NUM_PREDICT,
+        "required_categories": list(required_categories),
         "no_thinking": True,
         "seed": args.seed,
     }
@@ -428,7 +461,7 @@ def main(argv: Optional[list] = None) -> None:
     rejected = [row for row in rollout_by_id.values() if not row["accepted"]]
     train_counts = _category_counts(accepted_train)
     val_counts = _category_counts(accepted_val)
-    for category in GENERAL_CATEGORIES:
+    for category in required_categories:
         if train_counts.get(category, 0) < args.minimum_accepted_per_category:
             raise ManifestError("{} 通过验收的训练样本不足".format(category))
         if val_counts.get(category, 0) < 1:
@@ -445,6 +478,7 @@ def main(argv: Optional[list] = None) -> None:
         "task": "scene_independent_black_box_behavior_distillation",
         "teacher_model": args.teacher_model,
         "teacher_no_thinking": True,
+        "required_categories": list(required_categories),
         "train_rows": len(accepted_train),
         "validation_rows": len(accepted_val),
         "rejected_rows": len(rejected),

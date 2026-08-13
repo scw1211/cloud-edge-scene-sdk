@@ -231,6 +231,19 @@ class CloudRuntime:
             )
             correlation = correlation_groups(fused_events)
             result = coordinated.to_dict()
+            optimization_records = list(
+                result.get("global_optimizations", [])
+            )
+            optimization_active = any(
+                bool(record.get("applied"))
+                for record in optimization_records
+                if isinstance(record, dict)
+            )
+            candidate_optimality_verified = any(
+                bool(record.get("candidate_set_optimality_verified"))
+                for record in optimization_records
+                if isinstance(record, dict)
+            )
             result.update(
                 {
                     "event_count": len(fused_events),
@@ -252,9 +265,15 @@ class CloudRuntime:
                         for event in fused_events
                     ],
                     "coordination_semantics": (
-                        "global_information_fusion_and_consistency_coordination"
+                        "explicit_scene_utility_and_consistency_coordination"
+                        if optimization_records
+                        else "global_information_fusion_and_consistency_coordination"
                     ),
                     "global_optimality_claimed": False,
+                    "global_objective_active": optimization_active,
+                    "candidate_set_optimality_verified": (
+                        candidate_optimality_verified
+                    ),
                     "cloud_batch_group_count": len(groups),
                     "cloud_runtime_ms": round(
                         (time.perf_counter() - started) * 1000.0, 6
@@ -650,6 +669,17 @@ class EdgeRuntime:
                 "local_autonomy",
                 "cloud_error",
                 "edge_llm_selection_reason",
+                "edge_qwen_selection_reason",
+                "edge_qwen_selected",
+                "edge_qwen_mode",
+                "edge_qwen_prediction",
+                "edge_qwen_token",
+                "edge_qwen_latency_ms",
+                "edge_qwen_prompt_tokens",
+                "edge_qwen_output_tokens",
+                "edge_qwen_rule_agreement",
+                "edge_qwen_fallback",
+                "edge_qwen_fallback_reason",
                 "transport",
             )
             if name in metadata
@@ -904,6 +934,7 @@ class EdgeRuntime:
         conflict_suspected: bool = False,
         model_disagreement: bool = False,
         response_detail: str = "full",
+        return_provisional_immediately: bool = False,
     ) -> Dict[str, Any]:
         response_detail = str(response_detail).strip().lower()
         if response_detail not in {"full", "compact"}:
@@ -922,6 +953,9 @@ class EdgeRuntime:
         source_business_context = {
             "conflict_suspected": bool(conflict_suspected),
             "model_disagreement": bool(model_disagreement),
+            "return_provisional_immediately": bool(
+                return_provisional_immediately
+            ),
         }
         plugin = self.registry.for_envelope(envelope, validate=False)
         event = plugin.normalize_envelope(envelope)
@@ -1180,6 +1214,10 @@ class EdgeRuntime:
             upload_bytes=planned_upload_bytes,
             evidence_level=evidence_plan.required_level,
             measured_cloud_path_ms=profile.cloud_path_ms if profile is not None else None,
+            # A multi-edge aggregation first acknowledges the durable summary
+            # and later returns the authoritative result through the result
+            # channel.  Direct cloud decisions complete in one request.
+            cloud_round_trips=2 if aggregation_spec is not None else 1,
             selective_defer=bool(
                 routing_advice.get("selective_defer", False)
             ),
@@ -1194,6 +1232,22 @@ class EdgeRuntime:
         )
         scheduler_selected_route = schedule.route
         scheduler_selected_wait = bool(schedule.waits_for_cloud)
+        provisional_first_override = bool(
+            return_provisional_immediately
+            and schedule.route == "cloud_sync"
+            and schedule.cloud_requested
+        )
+        if provisional_first_override:
+            schedule = replace(
+                schedule,
+                route="cloud_async",
+                reason=(
+                    "{}; the caller requested provisional-first delivery, so "
+                    "the cloud review remains mandatory for action authorization "
+                    "but runs on the independent result channel"
+                ).format(schedule.reason),
+                waits_for_cloud=False,
+            )
         if (
             summary_delivery_required
             and snapshot.available
@@ -1220,7 +1274,6 @@ class EdgeRuntime:
         persistence_stage = "not_required"
         ordinary_summary_fast_path = bool(
             summary_delivery_required
-            and scheduler_selected_route == "edge_only"
             and schedule.route == "cloud_async"
             and self.durable_handoff is not None
         )
@@ -1538,6 +1591,9 @@ class EdgeRuntime:
                 )
                 final = _with_action_authorization(final, cloud_confirmed=False)
         elif schedule.route == "cloud_async":
+            requested_review_route = (
+                "cloud_sync" if provisional_first_override else "cloud_async"
+            )
             pending_event = self._pending_review_event(
                 cloud_event,
                 local,
@@ -1545,7 +1601,7 @@ class EdgeRuntime:
                 snapshot,
                 planned_upload_bytes,
                 delivery_operation,
-                "cloud_async",
+                requested_review_route,
                 requested_at_ms,
                 edge_preliminary_decision_ms,
                 routing_features,
@@ -1571,7 +1627,7 @@ class EdgeRuntime:
                     review_response = {
                         "review_id": review_id,
                         "event_id": event.event_id,
-                        "requested_route": "cloud_async",
+                        "requested_route": requested_review_route,
                         "state": "queued",
                         "persistence_stage": persistence_stage,
                     }
@@ -1588,7 +1644,7 @@ class EdgeRuntime:
                 review_id = self.review_tracker.queue(
                     event,
                     local,
-                    "cloud_async",
+                    requested_review_route,
                     evidence_plan.required_level,
                     requested_at_ms,
                     edge_preliminary_decision_ms,
@@ -1604,6 +1660,9 @@ class EdgeRuntime:
                     "review_id": review_id,
                     "review_state": "queued",
                     "summary_persistence_stage": persistence_stage,
+                    "provisional_first": provisional_first_override,
+                    "scheduler_requested_route": scheduler_selected_route,
+                    "action_waits_for_cloud_final": provisional_first_override,
                 }
             )
             final = replace(
@@ -1620,31 +1679,56 @@ class EdgeRuntime:
                 or cloud_review_requested
             )
             if review_queued:
-                self.review_store.append(
-                    self._pending_review_event(
-                        cloud_event,
-                        local,
-                        evidence_plan.required_level,
-                        snapshot,
-                        planned_upload_bytes,
-                        delivery_operation,
-                        "local_autonomy",
-                        requested_at_ms,
-                        edge_preliminary_decision_ms,
-                        routing_features,
-                    )
-                )
-                review_id = self.review_tracker.queue(
-                    event,
+                pending_event = self._pending_review_event(
+                    cloud_event,
                     local,
-                    "local_autonomy",
                     evidence_plan.required_level,
+                    snapshot,
+                    planned_upload_bytes,
+                    delivery_operation,
+                    "local_autonomy",
                     requested_at_ms,
                     edge_preliminary_decision_ms,
-                    planned_upload_bytes,
                     routing_features,
                 )
-                persistence_stage = "outbox_durable"
+                ordinary_summary_fast_path = bool(
+                    summary_delivery_required and self.durable_handoff is not None
+                )
+                if ordinary_summary_fast_path:
+                    try:
+                        self.durable_handoff.submit(
+                            pending_event,
+                            timeout_seconds=min(
+                                0.05,
+                                max(0.005, float(schedule.deadline_ms) / 1000.0),
+                            ),
+                        )
+                        review_id = stable_id(
+                            "review", event.event_id, local.decision_id
+                        )
+                        persistence_stage = "handoff_durable"
+                        review_response = {
+                            "review_id": review_id,
+                            "event_id": event.event_id,
+                            "requested_route": "local_autonomy",
+                            "state": "queued",
+                            "persistence_stage": persistence_stage,
+                        }
+                    except Exception:
+                        ordinary_summary_fast_path = False
+                if not ordinary_summary_fast_path:
+                    self.review_store.append(pending_event)
+                    review_id = self.review_tracker.queue(
+                        event,
+                        local,
+                        "local_autonomy",
+                        evidence_plan.required_level,
+                        requested_at_ms,
+                        edge_preliminary_decision_ms,
+                        planned_upload_bytes,
+                        routing_features,
+                    )
+                    persistence_stage = "outbox_durable"
             metadata = dict(local.metadata)
             metadata.update(
                 {
@@ -1739,6 +1823,9 @@ class EdgeRuntime:
                     "request_reduction_ratio": round(
                         1.0 - cloud_request_bytes / max(1, legacy_request_bytes), 6
                     ),
+                    "scheduler_selected_route": scheduler_selected_route,
+                    "scheduler_selected_wait": scheduler_selected_wait,
+                    "provisional_first_override": provisional_first_override,
                 },
                 "framework_runtime_ms": round(runtime_ms, 6),
                 "closed_loop_accounting": {
@@ -1781,6 +1868,7 @@ class EdgeRuntime:
                 "ordinary_summary_fast_path": ordinary_summary_fast_path,
                 "scheduler_selected_route": scheduler_selected_route,
                 "scheduler_selected_wait": scheduler_selected_wait,
+                "provisional_first_override": provisional_first_override,
                 "legacy_full_request_bytes": legacy_request_bytes,
                 "selected_request_bytes": cloud_request_bytes,
                 "planned_artifact_request_bytes": planned_artifact_bytes,

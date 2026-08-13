@@ -34,6 +34,8 @@ VENV_PYTHON="${VENV_DIR}/bin/python"
   -r "${SDK_ROOT}/scenes/freeway_traffic/requirements-runtime.txt"
 "${VENV_PYTHON}" -m pip install \
   -e "${SDK_ROOT}/scenes/freeway_traffic" --no-deps
+"${VENV_PYTHON}" -m pip install \
+  -e "${SDK_ROOT}/scenes/industrial_anomaly" --no-deps
 
 if [[ "${ROLE}" == "edge" ]]; then
   if [[ -n "${JETSON_TORCH_WHEEL_URL:-}" ]]; then

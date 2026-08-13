@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/edge_llm_runtime_disabled.schema.json",
+  "title": "Explicitly disabled release-managed Edge LLM runtime v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "enabled",
+    "reason",
+    "release_binding"
+  ],
+  "oneOf": [
+    {
+      "required": ["required_adapter_id"],
+      "not": {"required": ["required_deployment_sha256"]},
+      "properties": {
+        "reason": {"const": "release_missing_runtime_adapter"}
+      }
+    },
+    {
+      "required": ["required_deployment_sha256"],
+      "not": {"required": ["required_adapter_id"]},
+      "properties": {
+        "reason": {"const": "release_missing_static_deployment"}
+      }
+    }
+  ],
+  "properties": {
+    "schema_version": {"const": "edge-llm-runtime-disabled/v1"},
+    "enabled": {"const": false},
+    "reason": {
+      "enum": [
+        "release_missing_runtime_adapter",
+        "release_missing_static_deployment"
+      ]
+    },
+    "required_adapter_id": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535
+    },
+    "required_deployment_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "release_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_id",
+        "revision",
+        "binding_fingerprint",
+        "deployment_sha256",
+        "runtime_output",
+        "adapter_id",
+        "adapter_sha256"
+      ],
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$"
+        },
+        "revision": {"type": "integer", "minimum": 1},
+        "binding_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "deployment_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "runtime_output": {"type": "string", "minLength": 1, "maxLength": 128},
+        "adapter_id": {"type": "null"},
+        "adapter_sha256": {"type": "null"}
+      }
+    }
+  }
+}

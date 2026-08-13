@@ -19,6 +19,9 @@ from traffic_system.decision_utils import (  # noqa: E402
     load_json,
     save_json,
 )
+from edge_llm_factory.action_constraints import (  # noqa: E402
+    action_token_constraint_evidence,
+)
 from traffic_system.build_llm_sft_dataset import (  # noqa: E402
     ACTION_TOKEN_SYSTEM_PROMPT,
     build_user_prompt,
@@ -87,6 +90,10 @@ def completion_prompt(user_prompt: str, prompt_format: str = "full_chat") -> str
 def request_action_token(
     host: str, prompt: str, timeout: float, prompt_format: str = "full_chat"
 ) -> Dict[str, Any]:
+    constraint = action_token_constraint_evidence(
+        tuple("ABCDEF"),
+        reserved_tokens=tuple("GH"),
+    )
     payload = {
         "prompt": completion_prompt(prompt, prompt_format),
         "temperature": 0,
@@ -94,6 +101,7 @@ def request_action_token(
         "n_predict": 1,
         "stream": False,
         "cache_prompt": False,
+        "grammar": constraint["grammar"],
     }
     request = urllib.request.Request(
         host.rstrip("/") + "/completion",
@@ -106,13 +114,14 @@ def request_action_token(
         result = json.loads(response.read().decode("utf-8"))
     latency_ms = round((time.perf_counter() - started) * 1000.0, 4)
     raw_output = str(result.get("content", "")).strip()
-    match = re.fullmatch(r"([A-F])", raw_output.upper())
+    match = re.fullmatch(r"([A-F])", raw_output)
     if not match:
         raise ValueError("Qwen returned an invalid action token: {!r}".format(raw_output))
     return {
         "action_token": match.group(1),
         "latency_ms": latency_ms,
         "raw_output": raw_output,
+        "decoding_constraint": constraint,
     }
 
 

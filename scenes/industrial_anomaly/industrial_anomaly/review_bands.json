@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "policy": "score < review_low => normal; review_low <= score < review_high => review; score >= review_high => anomaly",
+  "source": {
+    "kind": "converted_xlsx",
+    "relative_reference_path": "industrial_reference/cloud-edge-scene-sdk-Industry/scene_plugin_template/summary_f1_review_bands.xlsx",
+    "sha256": "05b2d0ee3f8238bb309117f2a35437a7256456c9b5e9e8799b5a88a1b0bba336",
+    "bootstrap_repeats": 1000
+  },
+  "modalities": {
+    "rgb": {
+      "button_cell": {"review_low": 0.005780165, "review_high": 0.00657566},
+      "capsule": {"review_low": 0.00714016, "review_high": 0.0078258},
+      "cotton": {"review_low": 0.006621785, "review_high": 0.006826495},
+      "cube": {"review_low": 0.006500995, "review_high": 0.00747595},
+      "piggy": {"review_low": 0.007962595, "review_high": 0.00842094},
+      "plastic_cylinder": {"review_low": 0.00387801, "review_high": 0.00479772},
+      "screw": {"review_low": 0.00770743, "review_high": 0.008241615},
+      "solar_panel": {"review_low": 0.00731819, "review_high": 0.007594324},
+      "toothbrush": {"review_low": 0.006159295, "review_high": 0.00654842},
+      "zipper": {"review_low": 0.006947025, "review_high": 0.00730329}
+    },
+    "infrared": {
+      "button_cell": {"review_low": 0.00643083, "review_high": 0.0072365},
+      "capsule": {"review_low": 0.007957835, "review_high": 0.00804616},
+      "cotton": {"review_low": 0.007112185, "review_high": 0.007714435},
+      "cube": {"review_low": 0.00615532, "review_high": 0.00656293},
+      "piggy": {"review_low": 0.0089714, "review_high": 0.009136775},
+      "plastic_cylinder": {"review_low": 0.005794025, "review_high": 0.00699447},
+      "screw": {"review_low": 0.00752653, "review_high": 0.00785741},
+      "solar_panel": {"review_low": 0.008005738, "review_high": 0.00862247},
+      "toothbrush": {"review_low": 0.00747425, "review_high": 0.007722855},
+      "zipper": {"review_low": 0.007824645, "review_high": 0.008014285}
+    }
+  }
+}

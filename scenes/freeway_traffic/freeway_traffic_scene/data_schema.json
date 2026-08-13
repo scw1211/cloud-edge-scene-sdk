@@ -16,7 +16,7 @@
     "sample_split": {"type": "string", "minLength": 1},
     "dataset": {"type": "string", "minLength": 1},
     "region_id": {"type": "string", "minLength": 1},
-    "prediction_horizon_minutes": {"type": "integer", "minimum": 1},
+    "prediction_horizon_minutes": {"type": "integer", "minimum": 0},
     "managed_node_ids": {
       "type": "array",
       "items": {"type": "integer", "minimum": 0},
@@ -42,7 +42,25 @@
           }
         },
         "region_risk_calibration": {"type": "object"},
-        "congestion_cluster_detected": {"type": "boolean"}
+        "congestion_cluster_detected": {"type": "boolean"},
+        "current_observation": {
+          "type": "object",
+          "required": [
+            "node_count",
+            "flow_mean",
+            "occupancy_mean",
+            "speed_mean",
+            "speed_min"
+          ],
+          "properties": {
+            "node_count": {"type": "integer", "minimum": 1},
+            "flow_mean": {"type": "number", "minimum": 0},
+            "occupancy_mean": {"type": "number", "minimum": 0},
+            "speed_mean": {"type": "number", "minimum": 0},
+            "speed_min": {"type": "number", "minimum": 0}
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": true
     },

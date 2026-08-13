@@ -1,7 +1,9 @@
 """不经过 ASTGCN 的当前态势感知路径回归测试。"""
 
 from pathlib import Path
+import json
 import sys
+import tempfile
 import unittest
 
 import numpy as np
@@ -16,10 +18,12 @@ for import_root in (REPOSITORY_ROOT, TRAFFIC_ROOT):
 from freeway_traffic_full.plugin_impl import TrafficPlugin  # noqa: E402
 from traffic_system.current_state_perception_runtime import (  # noqa: E402
     CurrentStateTrafficPerceptionRuntime,
+    PartitionCurrentStateTrafficPerceptionRuntime,
     _mean_risk_score,
     _risk_score,
     current_window_risk,
 )
+from prepare_metis_partition_data import prepare_partition_data  # noqa: E402
 from traffic_system.risk_labels import RISK_CLASSES  # noqa: E402
 from traffic_system.scene_event import traffic_envelope_from_output  # noqa: E402
 
@@ -113,6 +117,80 @@ def _legacy_top_nodes(managed_nodes, state, top_k):
 
 
 class CurrentStateRiskTests(unittest.TestCase):
+    def test_preassigned_partition_runtime_matches_full_runtime_semantics(self):
+        rng = np.random.default_rng(20260806)
+        partitions = [[0, 2], [1], [3, 4], [5]]
+        config = {**RULE_CONFIG, "partitions": partitions}
+        topology = {
+            "region_boundary_nodes": {
+                "region_{}".format(index): list(nodes)
+                for index, nodes in enumerate(partitions)
+            }
+        }
+        arrays = {
+            "train_x": rng.normal(size=(3, 6, 3, 12)).astype(np.float32),
+            "val_x": rng.normal(size=(2, 6, 3, 12)).astype(np.float32),
+            "test_x": rng.normal(size=(4, 6, 3, 12)).astype(np.float32),
+            "mean": np.zeros((1, 1, 3, 1), dtype=np.float32),
+            "std": np.ones((1, 1, 3, 1), dtype=np.float32),
+            "feature_names": np.asarray(["flow", "occupancy", "speed"]),
+        }
+        # Keep speeds in the configured physical range so this fixture tests
+        # data ownership rather than extreme-value behavior.
+        for key in ("train_x", "val_x", "test_x"):
+            arrays[key][:, :, 0, :] = 200.0 + arrays[key][:, :, 0, :]
+            arrays[key][:, :, 1, :] = 0.1 + arrays[key][:, :, 1, :] * 0.01
+            arrays[key][:, :, 2, :] = 55.0 + arrays[key][:, :, 2, :]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.npz"
+            rule_path = root / "rules.json"
+            topology_path = root / "topology.json"
+            output = root / "shards"
+            np.savez_compressed(source, **arrays)
+            rule_path.write_text(json.dumps(config), encoding="utf-8")
+            topology_path.write_text(json.dumps(topology), encoding="utf-8")
+            prepared = prepare_partition_data(
+                source,
+                rule_path,
+                topology_path,
+                output,
+            )
+            self.assertEqual(len(prepared["partitions"]), 4)
+            self.assertFalse(
+                prepared["partition_contract"]["runtime_repartition_allowed"]
+            )
+
+            full = CurrentStateTrafficPerceptionRuntime(
+                source,
+                rule_path,
+                topology_path,
+                split="test",
+                top_k=10,
+            ).infer_sample(1)
+            for partition_id, expected in enumerate(full.events):
+                runtime = PartitionCurrentStateTrafficPerceptionRuntime(
+                    output / "manifest.json",
+                    partition_id,
+                    rule_path,
+                    topology_path,
+                    split="test",
+                    top_k=10,
+                )
+                actual = runtime.infer_sample(1).events[0]
+                self.assertEqual(runtime.split_x.shape[1], len(partitions[partition_id]))
+                self.assertEqual(actual["input_shape"][0], len(partitions[partition_id]))
+                self.assertTrue(actual.pop("partition_data_preassigned"))
+                actual.pop("inference_latency_ms")
+                expected = dict(expected)
+                expected.pop("inference_latency_ms")
+                # The full runtime reports its 6-node physical input; the edge
+                # runtime truthfully reports only its local preassigned shard.
+                actual.pop("input_shape")
+                expected.pop("input_shape")
+                self.assertEqual(actual, expected)
+
     def test_top_nodes_matches_legacy_reference_for_ties_and_boundaries(self):
         runtime = object.__new__(CurrentStateTrafficPerceptionRuntime)
         managed_nodes = [5, 2, 8, 1, 7, 0, 4, 3, 6]

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "objective_id": "traffic_candidate_global_utility_v1",
+  "expected_members": [
+    "edge_node_0",
+    "edge_node_1",
+    "edge_node_2",
+    "edge_node_3"
+  ],
+  "weights": {
+    "delay_reduction": 0.45,
+    "queue_reduction": 0.3,
+    "throughput_gain": 0.15,
+    "risk_relief": 0.1,
+    "switching_cost": 0.2,
+    "conflict_penalty": 2.0,
+    "capability_penalty": 10.0,
+    "safety_penalty": 10.0
+  },
+  "action_effect": {
+    "traffic_advisory": 0.0,
+    "variable_speed_limit": 0.25,
+    "ramp_metering": 0.3,
+    "regional_coordination": 0.32,
+    "reroute": 0.45
+  },
+  "traffic_normalization": {
+    "reference_speed": 68.0,
+    "flow_capacity": 600.0,
+    "occupancy_capacity": 0.22
+  },
+  "unknown_switching_cost": 0.1,
+  "maximum_combined_diversion_ratio": 0.5,
+  "parameter_bounds": {
+    "target_speed_mph": [25.0, 65.0],
+    "metering_rate_veh_per_hour": [120.0, 900.0],
+    "diversion_ratio": [0.0, 0.5]
+  },
+  "max_exact_candidates": 256,
+  "beam_width": 256
+}

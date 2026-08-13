@@ -11,6 +11,7 @@ from edge_llm_factory.adapter_package import (
     MANIFEST_NAME,
     validate_adapter_package,
 )
+from edge_llm_factory.action_constraints import action_token_constraint_evidence
 from edge_llm_factory.contracts import (
     ManifestError,
     RISK_ORDER,
@@ -21,6 +22,7 @@ from edge_llm_factory.contracts import (
 )
 from edge_llm_factory.providers import (
     GenerationProvider,
+    LlamaCppProvider,
     build_provider,
     load_provider,
 )
@@ -73,12 +75,29 @@ class ConfiguredActionClient:
         token_to_slot = {str(token): str(slot) for slot, token in valid_tokens.items()}
         if len(token_to_slot) != len(valid_tokens):
             raise ManifestError("动作 token 不能重复")
-        result = self.provider.generate(prompt)
+        constraint = None
+        if isinstance(self.provider, LlamaCppProvider):
+            constraint = action_token_constraint_evidence(valid_tokens)
+            result = self.provider.generate_action(prompt, valid_tokens)
+        else:
+            result = self.provider.generate(prompt)
         output = result.text.strip()
         if output not in token_to_slot:
             raise ManifestError("边缘模型输出不符合单 token 协议: {!r}".format(output))
         normalized = result.to_dict()
-        normalized.update({"slot": token_to_slot[output], "token": output})
+        normalized.update(
+            {
+                "slot": token_to_slot[output],
+                "token": output,
+                "decoding_constraint": constraint
+                or {
+                    "enabled": False,
+                    "backend": self.provider.config["provider"],
+                    "allowed_tokens": list(token_to_slot),
+                    "post_hoc_remapping": False,
+                },
+            }
+        )
         normalized.pop("text", None)
         return normalized
 
@@ -95,6 +114,7 @@ class LlamaCppActionClient:
     def predict(self, prompt: str, valid_tokens: Mapping[str, str]) -> Dict[str, Any]:
         if not isinstance(prompt, str) or not prompt:
             raise ValueError("prompt must be non-empty")
+        constraint = action_token_constraint_evidence(valid_tokens)
         payload = {
             "prompt": prompt,
             "temperature": 0,
@@ -102,6 +122,7 @@ class LlamaCppActionClient:
             "n_predict": 1,
             "stream": False,
             "cache_prompt": False,
+            "grammar": constraint["grammar"],
         }
         request = urllib.request.Request(
             self.endpoint + "/completion",
@@ -124,6 +145,7 @@ class LlamaCppActionClient:
             "latency_ms": round(latency_ms, 4),
             "prompt_tokens": timings.get("prompt_n") if isinstance(timings, dict) else None,
             "predicted_tokens": timings.get("predicted_n") if isinstance(timings, dict) else None,
+            "decoding_constraint": constraint,
         }
 
 
@@ -133,11 +155,24 @@ class ActionDecoder:
         self.mapping = validate_action_mapping(action_mapping, self.base)
         self.entries = {str(row["slot"]): dict(row) for row in self.mapping["entries"]}
         self.fallback_slot = str(self.mapping["fallback_slot"])
+        reserved_slots = {
+            str(slot)
+            for slot in self.base["decision_protocol"].get("reserved_slots", {})
+        }
+        self.reserved_tokens = {
+            slot: str(record["token"])
+            for slot, record in base_slots(self.base).items()
+            if slot in self.entries and slot in reserved_slots
+        }
+        # Reserved abstain/request-cloud slots remain available to the
+        # deterministic decoder, but are never sampled by the learned model.
         self.valid_tokens = {
             slot: str(record["token"])
             for slot, record in base_slots(self.base).items()
-            if slot in self.entries
+            if slot in self.entries and slot not in reserved_slots
         }
+        if not self.valid_tokens:
+            raise ManifestError("动作映射没有可供模型采样的非保留动作槽")
 
     def _fallback(self, reason: str, original_slot: str) -> Dict[str, Any]:
         fallback = self.entries[self.fallback_slot]
@@ -241,6 +276,13 @@ class ValidatedEdgeLLM:
             "input_contract": dict(self.manifest.get("input_contract", {})),
             "deployment": dict(self.manifest.get("deployment", {})),
             "runtime": runtime,
+            "action_decoding_contract": {
+                "allowed_model_tokens": list(self.decoder.valid_tokens.values()),
+                "reserved_slots_excluded_from_sampling": dict(
+                    self.decoder.reserved_tokens
+                ),
+                "post_hoc_remapping": False,
+            },
         }
 
     def decide(
@@ -250,5 +292,13 @@ class ValidatedEdgeLLM:
         network_available: bool,
     ) -> Dict[str, Any]:
         inference = self.client.predict(prompt, self.decoder.valid_tokens)
+        constraint = inference.get("decoding_constraint")
+        if isinstance(constraint, dict):
+            inference["decoding_constraint"] = {
+                **constraint,
+                "reserved_slots_excluded_from_sampling": dict(
+                    self.decoder.reserved_tokens
+                ),
+            }
         decoded = self.decoder.decode(inference["slot"], event, network_available)
         return {"inference": inference, "decision": decoded}

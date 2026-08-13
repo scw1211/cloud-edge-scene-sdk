@@ -243,6 +243,22 @@ class ScenePlugin(ABC):
         """Attach scene-owned cross-edge context before cloud inference."""
         return list(events)
 
+    def optimize_global_plan(
+        self,
+        events: Sequence[SemanticEvent],
+        decisions: Sequence[DecisionEnvelope],
+    ) -> Tuple[Sequence[DecisionEnvelope], Dict[str, Any]]:
+        """Optionally optimize one sample's joint scene plan.
+
+        ``CloudRuntime`` may batch model inference across several samples, but
+        this hook is invoked only after decisions have been regrouped by one
+        aggregation/sample.  The default is deliberately an identity so a
+        scene is never required to provide a global objective merely to use the
+        common framework.
+        """
+        del events
+        return list(decisions), {}
+
     def action_conflict(self, left: Action, right: Action) -> Tuple[bool, str]:
         """Return whether two actions on a shared resource are incompatible."""
         if left.action_type != right.action_type:

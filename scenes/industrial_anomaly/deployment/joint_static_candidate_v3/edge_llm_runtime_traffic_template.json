@@ -1,0 +1,17 @@
+{
+  "authentication": {"api_key_env": ""},
+  "endpoint": "http://127.0.0.1:19393",
+  "generation": {
+    "keep_alive": "30m",
+    "max_input_tokens": 17,
+    "max_output_tokens": 1,
+    "seed": 42,
+    "temperature": 0.0,
+    "thinking": false,
+    "top_p": 1.0
+  },
+  "model": "/home/jetson02/cloud-edge-deploy-industrial-multilora-v1/deployment/joint_static_fusion_v1/joint_static_fusion.Q5_K_M.gguf",
+  "provider": "llama_cpp",
+  "schema_version": "edge-llm-runtime/v1",
+  "timeout_seconds": 0.5
+}

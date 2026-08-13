@@ -14,11 +14,15 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 from urllib.parse import urlsplit
 
+from edge_llm_factory.action_constraints import build_action_token_gbnf
 from edge_llm_factory.contracts import ManifestError, read_json_object
 
 
 RUNTIME_SCHEMA = "edge-llm-runtime/v1"
+DISABLED_RUNTIME_SCHEMA = "edge-llm-runtime-disabled/v1"
 PROVIDERS = {"llama_cpp", "ollama", "openai_compatible"}
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+RELEASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$")
 
 
 def _reject_unknown(value: Mapping[str, Any], allowed: set, field: str) -> None:
@@ -67,6 +71,148 @@ def _endpoint(value: Any) -> str:
     return endpoint
 
 
+def _release_binding(value: Any) -> Optional[Dict[str, Any]]:
+    """Validate an optional immutable runtime-to-release binding."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ManifestError("release_binding 必须是对象")
+    _reject_unknown(
+        value,
+        {
+            "release_id",
+            "revision",
+            "binding_fingerprint",
+            "deployment_sha256",
+            "runtime_output",
+            "adapter_id",
+            "adapter_sha256",
+        },
+        "release_binding",
+    )
+    release_id = value.get("release_id")
+    if not isinstance(release_id, str) or RELEASE_ID.fullmatch(release_id) is None:
+        raise ManifestError("release_binding.release_id 无效")
+    revision = _integer(
+        value.get("revision"), "release_binding.revision", 1, 2**63 - 1
+    )
+    binding_fingerprint = value.get("binding_fingerprint")
+    if (
+        not isinstance(binding_fingerprint, str)
+        or SHA256_HEX.fullmatch(binding_fingerprint) is None
+    ):
+        raise ManifestError("release_binding.binding_fingerprint 无效")
+    deployment_sha256 = value.get("deployment_sha256")
+    if (
+        not isinstance(deployment_sha256, str)
+        or SHA256_HEX.fullmatch(deployment_sha256) is None
+    ):
+        raise ManifestError("release_binding.deployment_sha256 无效")
+    runtime_output = value.get("runtime_output")
+    if (
+        not isinstance(runtime_output, str)
+        or not runtime_output.strip()
+        or len(runtime_output) > 128
+    ):
+        raise ManifestError("release_binding.runtime_output 无效")
+    adapter_id = value.get("adapter_id")
+    adapter_sha256 = value.get("adapter_sha256")
+    if adapter_id is None:
+        if adapter_sha256 is not None:
+            raise ManifestError("release_binding 无 adapter_id 时禁止 adapter_sha256")
+    else:
+        adapter_id = _integer(
+            adapter_id, "release_binding.adapter_id", 0, 65535
+        )
+        if (
+            not isinstance(adapter_sha256, str)
+            or SHA256_HEX.fullmatch(adapter_sha256) is None
+        ):
+            raise ManifestError("release_binding.adapter_sha256 无效")
+    return {
+        "release_id": release_id,
+        "revision": revision,
+        "binding_fingerprint": binding_fingerprint,
+        "deployment_sha256": deployment_sha256,
+        "runtime_output": runtime_output.strip(),
+        "adapter_id": adapter_id,
+        "adapter_sha256": adapter_sha256,
+    }
+
+
+def validate_disabled_runtime_config(value: Mapping[str, Any]) -> Dict[str, Any]:
+    """Validate the explicit sentinel used to disable one scene runtime safely."""
+    config = dict(value)
+    _reject_unknown(
+        config,
+        {
+            "schema_version",
+            "enabled",
+            "reason",
+            "required_adapter_id",
+            "required_deployment_sha256",
+            "release_binding",
+        },
+        "disabled runtime config",
+    )
+    if config.get("schema_version") != DISABLED_RUNTIME_SCHEMA:
+        raise ManifestError(
+            "disabled runtime schema_version 必须是 {}".format(
+                DISABLED_RUNTIME_SCHEMA
+            )
+        )
+    if config.get("enabled") is not False:
+        raise ManifestError("disabled runtime enabled 必须严格为 false")
+    reason = config.get("reason")
+    if reason not in {
+        "release_missing_runtime_adapter",
+        "release_missing_static_deployment",
+    }:
+        raise ManifestError("disabled runtime reason 无效")
+    raw_adapter_id = config.get("required_adapter_id")
+    required_deployment_sha = config.get("required_deployment_sha256")
+    if reason == "release_missing_runtime_adapter":
+        required_adapter_id = _integer(
+            raw_adapter_id,
+            "disabled runtime required_adapter_id",
+            0,
+            65535,
+        )
+        if required_deployment_sha is not None:
+            raise ManifestError(
+                "adapter-disabled runtime 禁止 required_deployment_sha256"
+            )
+    else:
+        if raw_adapter_id is not None:
+            raise ManifestError(
+                "static-disabled runtime 禁止 required_adapter_id"
+            )
+        required_adapter_id = None
+        if (
+            not isinstance(required_deployment_sha, str)
+            or SHA256_HEX.fullmatch(required_deployment_sha) is None
+        ):
+            raise ManifestError(
+                "disabled runtime required_deployment_sha256 无效"
+            )
+    binding = _release_binding(config.get("release_binding"))
+    if binding is None:
+        raise ManifestError("disabled runtime 缺少 release_binding")
+    if binding["adapter_id"] is not None:
+        raise ManifestError("disabled runtime release_binding 禁止绑定 adapter")
+    validated = {
+        "schema_version": DISABLED_RUNTIME_SCHEMA,
+        "enabled": False,
+        "reason": reason,
+        "release_binding": binding,
+    }
+    if required_adapter_id is not None:
+        validated["required_adapter_id"] = required_adapter_id
+    if required_deployment_sha is not None:
+        validated["required_deployment_sha256"] = required_deployment_sha
+    return validated
+
+
 def validate_runtime_config(value: Mapping[str, Any]) -> Dict[str, Any]:
     config = dict(value)
     _reject_unknown(
@@ -79,6 +225,8 @@ def validate_runtime_config(value: Mapping[str, Any]) -> Dict[str, Any]:
             "timeout_seconds",
             "generation",
             "authentication",
+            "lora_adapter",
+            "release_binding",
         },
         "runtime config",
     )
@@ -152,6 +300,32 @@ def validate_runtime_config(value: Mapping[str, Any]) -> Dict[str, Any]:
     if provider != "openai_compatible" and api_key_env:
         raise ManifestError("只有 openai_compatible provider 支持 api_key_env")
 
+    raw_lora = config.get("lora_adapter")
+    lora_adapter = None
+    if raw_lora is not None:
+        if not isinstance(raw_lora, dict):
+            raise ManifestError("lora_adapter 必须是对象")
+        _reject_unknown(raw_lora, {"id", "scale"}, "lora_adapter")
+        if provider != "llama_cpp":
+            raise ManifestError("只有 llama_cpp provider 支持按请求选择 LoRA Adapter")
+        lora_adapter = {
+            "id": _integer(raw_lora.get("id"), "lora_adapter.id", 0, 65535),
+            "scale": _number(
+                raw_lora.get("scale", 1.0), "lora_adapter.scale", 0.000001, 16
+            ),
+        }
+
+    release_binding = _release_binding(config.get("release_binding"))
+    if release_binding is not None:
+        bound_adapter_id = release_binding["adapter_id"]
+        configured_adapter_id = (
+            lora_adapter["id"] if lora_adapter is not None else None
+        )
+        if bound_adapter_id != configured_adapter_id:
+            raise ManifestError(
+                "release_binding.adapter_id 与 lora_adapter.id 不一致"
+            )
+
     return {
         "schema_version": RUNTIME_SCHEMA,
         "provider": provider,
@@ -168,6 +342,8 @@ def validate_runtime_config(value: Mapping[str, Any]) -> Dict[str, Any]:
             "keep_alive": keep_alive,
         },
         "authentication": {"api_key_env": api_key_env},
+        "lora_adapter": lora_adapter,
+        "release_binding": release_binding,
     }
 
 
@@ -200,6 +376,16 @@ class GenerationProvider(ABC):
             "model": self.config["model"],
             "timeout_seconds": self.config["timeout_seconds"],
             "generation": generation,
+            "lora_adapter": (
+                dict(self.config["lora_adapter"])
+                if self.config["lora_adapter"] is not None
+                else None
+            ),
+            "release_binding": (
+                dict(self.config["release_binding"])
+                if self.config.get("release_binding") is not None
+                else None
+            ),
             "authenticated": bool(self.config["authentication"]["api_key_env"]),
         }
 
@@ -249,7 +435,12 @@ class GenerationProvider(ABC):
 
 
 class LlamaCppProvider(GenerationProvider):
-    def generate(self, prompt: str, system_prompt: str = "") -> GenerationResult:
+    def _generate(
+        self,
+        prompt: str,
+        system_prompt: str = "",
+        grammar: Optional[str] = None,
+    ) -> GenerationResult:
         prompt = self._prompt(prompt, system_prompt)
         rendered = "{}\n\n{}".format(system_prompt.strip(), prompt) if system_prompt.strip() else prompt
         options = self.config["generation"]
@@ -262,6 +453,14 @@ class LlamaCppProvider(GenerationProvider):
             "stream": False,
             "cache_prompt": False,
         }
+        if grammar is not None:
+            payload["grammar"] = grammar
+        lora_adapter = self.config["lora_adapter"]
+        if lora_adapter is not None:
+            # llama-server preloads all task adapters. Supplying a per-request
+            # list selects exactly this adapter and implicitly gives every
+            # omitted adapter scale 0, so concurrent scenes cannot leak state.
+            payload["lora"] = [dict(lora_adapter)]
         started = time.perf_counter()
         result = self._post(self.config["endpoint"] + "/completion", payload, {})
         latency = (time.perf_counter() - started) * 1000
@@ -277,6 +476,23 @@ class LlamaCppProvider(GenerationProvider):
             load_duration_ms=None,
             prompt_duration_ms=_optional_float(timings.get("prompt_ms")),
             generation_duration_ms=_optional_float(timings.get("predicted_ms")),
+        )
+
+    def generate(self, prompt: str, system_prompt: str = "") -> GenerationResult:
+        return self._generate(prompt, system_prompt=system_prompt)
+
+    def generate_action(
+        self,
+        prompt: str,
+        valid_tokens: Mapping[str, str],
+        system_prompt: str = "",
+    ) -> GenerationResult:
+        """Generate one action under an explicit grammar, before token sampling."""
+
+        return self._generate(
+            prompt,
+            system_prompt=system_prompt,
+            grammar=build_action_token_gbnf(valid_tokens),
         )
 
 

@@ -1,0 +1,46 @@
+{
+  "schema_version": "edge-llm-joint-static-candidate-identity/v1",
+  "release_id": "traffic-industrial-joint-static-v2-q5km",
+  "status": "package_validated_sidecar_not_promoted",
+  "deployment": {
+    "model_mode": "joint_static_fusion",
+    "path": "/home/jetson02/cloud-edge-deploy-industrial-multilora-v1/deployment/joint_static_fusion_v1/joint_static_fusion.Q5_K_M.gguf",
+    "bytes": 577990656,
+    "sha256": "308daa980c7ca295e18bd76e8dcf6dc1ed725ded32ada535a0c5c1910c695ce2",
+    "quantization": "Q5_K_M",
+    "runtime_adapters": []
+  },
+  "full_validation": {
+    "path": "/home/scw/unified-distill-work-20260813/joint_traffic_industrial_v1/deployment/static_fusion_joint_v1/q5_full_traffic2400_industrial960.json",
+    "bytes": 2485013,
+    "sha256": "4219c45c6119a2fab308d0546c11547f64b291e5eab08bc099f7fd6f35173ad3",
+    "all_gates_passed": true
+  },
+  "nano_observational_gate": {
+    "path": "/home/scw/unified-distill-work-20260813/joint_traffic_industrial_v1/deployment/nano_q5_static_fusion_gate_v2/nano222_evidence/observed_gate_summary.json",
+    "bytes": 2797,
+    "sha256": "6c5ca030564f0ed5822adaa91ed425ef9985c0f813f45281f07946968981deb5",
+    "gate_pass": true,
+    "strict_peak_bytes": 1047126016,
+    "release_authorized": false
+  },
+  "adapter_package": {
+    "path": "/home/scw/unified-distill-work-20260813/joint_traffic_industrial_v1/deployment/q5_static_joint_release_v2/adapter_package",
+    "manifest_bytes": 16247,
+    "manifest_sha256": "504eda480843e3e0540d8495bbab880b66a61651cbc7eb9a177e5f43e7cfc24c",
+    "gate_summary_sha256": "54d2a553fe8ecafde645c4d542e7d630b1026caf627507a74db96656c03981c1",
+    "validation_status": "valid",
+    "runtime_adapters": []
+  },
+  "runtime_contract": {
+    "llama_endpoint": "http://127.0.0.1:19393",
+    "edge_endpoint": "http://127.0.0.1:19391",
+    "cloud_endpoint": "http://192.168.31.135:18100",
+    "traffic_prefix": "T",
+    "industrial_prefix": "I",
+    "input_tokens": 17,
+    "output_tokens": 1,
+    "request_level_lora": false,
+    "runtime_lora_count": 0
+  }
+}

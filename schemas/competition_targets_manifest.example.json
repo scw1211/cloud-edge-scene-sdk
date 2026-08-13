@@ -1,0 +1,136 @@
+{
+  "schema_version": "1.0",
+  "evaluation_id": "replace-with-current-run-id",
+  "scene": "freeway_traffic",
+  "industrial_excluded": true,
+  "targets": {
+    "capability_retention": {
+      "evidence": {
+        "path": "evidence/replace-capability.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "git_commit": "replace-with-tested-commit",
+        "dataset_id": "replace-with-fixed-general-capability-testset-id",
+        "model_ids": {"teacher": "replace-full-model", "edge": "replace-edge-model"},
+        "hardware_id": "replace-with-benchmark-hardware-id",
+        "metric_semantics": "macro_capability_retention"
+      },
+      "criteria": {"minimum_retention_rate": 0.8}
+    },
+    "ttft_reduction": {
+      "evidence": {
+        "path": "evidence/replace-ttft.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "git_commit": "replace-with-tested-commit",
+        "dataset_id": "replace-with-fixed-ttft-promptset-id",
+        "model_ids": {"baseline": "replace-baseline-model", "edge": "replace-edge-model"},
+        "hardware_id": "replace-with-same-device-and-runtime-id",
+        "metric_semantics": "same_protocol_ttft_reduction"
+      },
+      "criteria": {"minimum_reduction_rate": 0.75}
+    },
+    "single_inference_memory": {
+      "evidence": {
+        "path": "evidence/replace-memory.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "git_commit": "replace-with-tested-commit",
+        "dataset_id": "replace-with-fixed-memory-promptset-id",
+        "model_ids": ["replace-edge-model"],
+        "hardware_id": "replace-with-edge-device-runtime-id",
+        "metric_semantics": "single_inference_peak_memory_mb"
+      },
+      "criteria": {"maximum_peak_memory_mb": 1536}
+    },
+    "weak_network_retention": {
+      "evidence": {
+        "path": "evidence/replace-weak-network.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "experiment_plan": {
+        "path": "evidence/replace-weak-network-experiment-plan.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "git_commit": "replace-with-tested-commit",
+        "dataset_id": "replace-with-preregistered-network-profile-and-sample-id",
+        "model_ids": ["replace-edge-decision-model"],
+        "hardware_id": "replace-with-cloud-edge-topology-id",
+        "metric_semantics": "basic_business_function_retention"
+      },
+      "criteria": {"minimum_retention_rate": 0.9}
+    },
+    "weighted_business_e2e": {
+      "evidence": {
+        "path": "evidence/replace-four-route-latency.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "weight_plan": {
+        "path": "evidence/replace-preregistered-route-weights.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "git_commit": "replace-with-tested-commit",
+        "dataset_id": "replace-with-untouched-route-evaluation-set-id",
+        "model_ids": ["replace-edge-model", "replace-cloud-model"],
+        "hardware_id": "replace-with-cloud-edge-topology-id",
+        "metric_semantics": "business_actionable_end_to_end_latency_ms"
+      },
+      "criteria": {
+        "maximum_weighted_mean_ms_exclusive": 200,
+        "maximum_bootstrap_95_ci_upper_ms_exclusive": 200,
+        "required_routes": ["edge_only", "local_autonomy", "cloud_async", "cloud_sync"]
+      }
+    },
+    "traffic_global_objective": {
+      "evidence": {
+        "path": "evidence/replace-global-objective-results.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "objective_definition": {
+        "path": "evidence/replace-objective-definition.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "sample_plan": {
+        "path": "evidence/replace-global-objective-sample-plan.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "git_commit": "replace-with-tested-commit",
+        "dataset_id": "replace-with-untouched-global-objective-testset-id",
+        "model_ids": ["replace-cloud-coordinator"],
+        "hardware_id": "replace-with-cloud-server-id",
+        "metric_semantics": "finite_candidate_joint_plan_utility"
+      },
+      "criteria": {"mode": "active", "authoritative_input": true, "exact_search": true, "candidate_set_complete": true, "minimum_utility_improvement": 0}
+    },
+    "model_update_loop": {
+      "evidence": {
+        "path": "evidence/replace-model-update-loop.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "stage_evidence": {
+        "package": {"path": "evidence/01_package.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+        "release": {"path": "evidence/02_release.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+        "apply": {"path": "evidence/03_apply.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+        "rollback": {"path": "evidence/04_rollback.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"}
+      },
+      "completion_marker": {"path": "evidence/FORMAL_EVIDENCE_COMPLETE.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+      "distributed_evidence": {"path": "evidence/distributed_model_update_loop.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+      "distributed_completion_marker": {"path": "evidence/FORMAL_DISTRIBUTED_EVIDENCE_COMPLETE.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+      "expected": {
+        "git_commit": "replace-with-tested-commit",
+        "dataset_id": "replace-with-update-smoke-testset-id",
+        "model_ids": {"before": "replace-old-model", "applied": "replace-new-model"},
+        "hardware_id": "replace-with-edge-device-id",
+        "metric_semantics": "package_release_apply_rollback",
+        "llama_server_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "criteria": {"required_stages": ["package", "release", "apply", "rollback"], "rollback_must_restore_previous_model": true, "real_cloud_edge_http_required": true, "cloud_receipt_ack_required": true}
+    }
+  }
+}

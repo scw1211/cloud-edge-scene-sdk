@@ -43,6 +43,8 @@ current-state v2.0.2 允许 Qwen 在当前仍为 low、但 Student 已授权非�
 | `asset_catalog.json` | 所有真实资产的版本、位置、字节数、SHA-256 和下载地址 |
 | `send_real_partitions.py` | 发送指定分区；默认运行当前态势直通模式，两台机器分别使用 `0,1` 和 `2,3`，加 `--perception-mode astgcn` 可运行原预测链路 |
 | `benchmark_real_current_state_e2e.py` | 常驻加载 PEMS08，按连续窗口顺序加速回放；统一测量本地可执行、业务完成、后台摘要字节和四分区权威 final |
+| `prepare_metis_partition_data.py` | 部署前按照冻结的 METIS4 映射生成四份区域 NPZ 和 SHA-256 清单；运行时禁止重新划分 |
+| `run_partitioned_current_state_edges.py` | 在单台 Nano 上启动四个独立常驻进程；每个进程只加载自己的区域 NPZ、生成一个事件并并发调用公共边缘服务 |
 | `traffic_system/current_state_perception_runtime.py` | 纯 NumPy 当前态势感知：根据最近 12 步流量、占有率和速度生成风险事件，不加载 PyTorch 或 ASTGCN |
 | `verify_real_two_edge.py` | 从两台 Jetson 和云服务器读取 review、aggregation，检查四边完整闭环 |
 | `freeway_traffic_full/plugin_impl.py` | 真实交通插件：按事件合同选择当前态势或 ASTGCN 的 Student、特征编码器和 ExtraTrees，再做拓扑融合与冲突处理 |
@@ -70,23 +72,65 @@ current-state v2.0.2 允许 Qwen 在当前仍为 low、但 Student 已授权非�
 三个通道、12 个 5 分钟步，也就是最近 60 分钟。float32 名义输入为 24,480
 字节。sample `i+1` 是时间上紧接 sample `i` 的下一个滑动窗口。
 
-`current_state_perception_runtime.py` 常驻加载 NPZ。每个 sample 只索引一次窗口、
-反归一化并计算当前态势，然后按冻结的 METIS4 映射产生四个分区事件。测试脚本
-按 sample 顺序提交；前一窗口取得四个本地响应后立即推进下一窗口，不等待它的
-异步云端 final。这是连续窗口的加速回放，不包含传感器接入、原始 CSV 解析和
-线上 12 步缓冲时间，冷加载也必须单独报告。
+旧兼容基准由`current_state_perception_runtime.py`常驻加载完整 NPZ，每个 sample
+索引一次完整窗口，再按冻结的 METIS4 映射产生四个分区事件。该模式便于逐字段
+回归，但只能称为“单进程四逻辑区域”，不能称为四个边缘节点。
+
+正式单板分布式输入先运行`prepare_metis_partition_data.py`，离线生成四份区域
+NPZ。四个常驻进程分别只加载一份区域数据；每个窗口各自产生一个事件并并发提交。
+METIS 不在在线路径重新计算，`node_id → partition_id → edge_id`由带 SHA-256 的
+清单锁定。脚本支持两种可对照模式：兼容模式由四个感知进程共用一个边缘服务；
+推荐的仿真模式为每个分区启动独立边缘服务端口、独立 Outbox、Review、幂等库和
+监测库，只共享一块 Nano、一个可选 Edge-Qwen 服务和同一云端。这是“一台物理
+Nano、四个逻辑边缘节点”，不能写成四台物理板卡。
+
+准备数据：
+
+```bash
+python scenes/freeway_traffic/prepare_metis_partition_data.py
+```
+
+运行四个独立逻辑边缘节点并验收10个连续窗口。`--cloud-url`必须填写从 Nano
+实际可访问的云端地址；19101—19104 仅用于隔离测试，不占用正式18101：
+
+```bash
+python scenes/freeway_traffic/run_partitioned_current_state_edges.py \
+  --project-root . \
+  --manifest scenes/freeway_traffic/runtime/pems08_metis4_partitions/manifest.json \
+  --launch-isolated-edge-services \
+  --edge-port-base 19101 \
+  --cloud-url http://192.168.31.160:18100 \
+  --sample-start 100 \
+  --sample-stop 110 \
+  --output /tmp/pems08-four-edge-processes.json
+```
+
+如需复现旧的共享服务模式，去掉上述三个选项并传入
+`--edge-url http://127.0.0.1:18101`。共享模式只用于消融，不能作为四个完整逻辑
+边缘节点的部署证据。
+
+输出必须同时满足：4个不同 PID、170个节点恰好覆盖一次、每进程每窗口一个事件、
+4/4 权威 final；独立模式还必须满足4个服务 PID、4个端口和4套持久化状态互不
+共享。任何一项缺失都会失败关闭，不能把2/4部分汇聚写成完整结果。测试脚本逐窗口
+测量：四个边缘并发提交，观察本窗口权威 final 后再进入下一窗口，避免把后续样本的
+运行时间错误计入前一窗口。这是连续窗口回放，不包含传感器接入、原始 CSV 解析和
+线上12步缓冲时间，冷加载也必须单独报告。
 
 数据在链路上分三层，不能都叫“上传原始样本”：
 
-1. NPZ 到感知进程：完整 `[170,3,12]` 窗口，只在 Jetson 内存中使用。
+1. 区域 NPZ 到感知进程：只读取本区域约42—43个节点的 `[N,3,12]` 窗口；完整
+   `[170,3,12]` 仅存在于离线预切分工具中。
 2. 感知进程到本机 edge `/decide`：四个语义事件，包含区域摘要、控制能力、
    top-10 风险节点和它们的 12 步速度历史，不包含完整 170 节点三通道 tensor。
 3. 138 到 160：再裁剪为区域摘要或编码特征；默认不带 `raw_evidence`，Outbox
    后台批量发送，云端持久接收后立即 ACK，再做四分区汇聚和 final 回填。
 
 普通本地动作在持久 handoff/Outbox 接受边界后即可返回，摘要发送失败会重试。
-动作后果风险高、模型高不确定、跨区冲突或策略强制审核命中时，网络和 deadline
-允许才同步等待云端；需要云确认的动作在权威 final 前不会被授权。
+交通连续监测与四边缘性能脚本对 `/decide` 使用
+`Prefer: return=minimal, respond-async`：即使动作后果风险高、模型高不确定、
+跨区冲突或策略强制审核命中，也先返回无云确认的 provisional，后台继续取得
+权威 final。这里异步的是响应和复核执行，不是放宽动作安全；需要云确认的动作在
+权威 final 前仍不会被授权。不带 `respond-async` 的兼容调用保留同步等待能力。
 
 连续时间流中，四个分区通常会紧邻到达。常态完整配置对尚未形成结果的完整聚合
 每 25 ms 复查一次，对已收到 `partial_final` 的结果每 50 ms 复查一次，使迟到
@@ -100,17 +144,19 @@ current-state v2.0.2 允许 Qwen 在当前仍为 low、但 Student 已授权非�
 规则不同会设置宽泛的 `requires_review`，用于特征证据和异步全局复核；只有
 Student 最高类概率低于 `current_state_sync_confidence_threshold`（默认 0.50）
 且与规则不同、预测集多值或 defer 命中，才设置
-`requires_synchronous_review` 阻塞业务。若本地 Qwen 的决策及动作语义与 Student
+`requires_synchronous_review` 要求业务动作等待云确认。使用 provisional-first
+接口时，它不再阻塞本地临时结果的返回。若本地 Qwen 的决策及动作语义与 Student
 一致，可消解第一种 Student 不确定性；它不能消解预测集歧义、高动作风险、
 跨区冲突、策略强制审核或动作的云确认要求。
 
 正式基准的共同 T0 位于常驻、预热完成后，紧挨一个已到齐的 12 步窗口处理前：
 
 - `event_local_actionable_ms` / `event_business_completion_ms`：单个 METIS 区域
-  决策的本地返回与动作可完成时延，覆盖连续段内全部风险层；
+  的本地返回与路径声明的安全业务终点时延，覆盖连续段内全部风险层；
 - `local_actionable_ms`：T0 到四个 compact `/decide` 响应全部返回；
-- `business_completion_ms`：本地已授权动作止于本地响应，需要云确认的动作止于
-  权威 final；
+- `business_completion_ms`：`edge_only`、`local_autonomy`、`cloud_async` 止于带
+  action authorization 且摘要已持久入队的安全 provisional；其中高风险控制仍为
+  deferred，不能执行。`cloud_sync` 才止于完整成员上的权威 final；
 - `global_authoritative_final_ms`：T0 到四个 review 都完成权威回填；
   `partial_final` 和 `local_only_timeout` 不算权威完成。
 
@@ -390,3 +436,65 @@ Outbox、多机汇聚等待和 final 回填，
 Student、defer gate 和交通 Edge-Qwen 都属于交通场景，不是公共框架要求每个
 场景都实现一份。工业场景可以拥有自己的专业模型和局部决策器，公共框架只负责
 事件信封、调度、可靠传输、汇聚、复核、冲突和模型发布。
+
+## 六、交通联合目标与七项证据门禁
+
+当前仓库已实现优化器、证据提取器和统一门禁，但正式云配置仍默认为 `shadow`，
+且未随仓库提供当前提交在隔离 `active` 环境中的正式输出。因此第六项当前是
+“可取证、未判定”，不能写成已实测通过。
+
+云端在同一 `sample_id` 的区域决策完成后，可调用交通插件的
+`optimize_global_plan()`。当前目标定义在
+`assets/models/traffic_global_utility_v1.json`，对模型已经提出的有限动作组合计算：
+
+```text
+联合效用 = 延误代理改善收益
+         + 排队代理改善收益
+         + 吞吐代理改善收益
+         + 风险缓解收益
+         - 控制切换代价
+         - 动作冲突惩罚
+         - 设备能力越界惩罚
+         - 安全约束越界惩罚
+```
+
+这些交通项使用每个区域摘要中的当前流量、占有率和速度计算无量纲代理量；它们
+用于比较同一次完整汇聚内的有限候选动作，不把当前态势规则包装成未来交通预测。
+
+四区域候选不超过配置上限时使用完整枚举，并记录目标文件 SHA、候选数量、基线
+效用、选中效用和约束结果。正式云配置默认使用 `shadow`：计算和留证，但不改变
+现有动作。只有经过留出集验证后才可改为 `active`；部分汇聚即使配置为 `active`
+也不会应用联合动作。即使正式门禁通过，该结果也只能表述为“测量前锁定的有限
+候选集合上的代理目标结果”，不能表述成物理道路网络、未来真实交通延误或无限
+动作空间中的全局最优。
+
+正式成员集合来自目标定义文件预登记的 `expected_members`。CloudService 使用云端
+持久 aggregation lease 的成员上下文覆盖客户端 metadata，证据提取器和门禁再核对
+expected/observed 成员与定义完全一致；客户端不能通过自报较小成员集合把部分汇聚
+包装成“全局”。
+
+正式取证不要直接把生产配置从 `shadow` 改成 `active`。使用隔离端口、独立数据库和
+`deployment/full/scene_plugins_cloud_global_objective_active.json` 启动旁路云服务，
+在预先固定的留出样本上完成真实 4/4 汇聚后，再从端到端原始结果提取第六项证据：
+
+```bash
+python scenes/freeway_traffic/extract_global_objective_evidence.py \
+  --benchmark-json /绝对路径/真实端到端结果.json \
+  --objective-definition scenes/freeway_traffic/assets/models/traffic_global_utility_v1.json \
+  --sample-plan /绝对路径/测量前锁定的全局目标样本计划.json \
+  --dataset-id /预注册留出集ID/ \
+  --model-id /云端协调模型ID/ \
+  --hardware-id /云服务器及运行时ID/ \
+  --run-id /唯一实验ID/ \
+  --output /绝对路径/交通全局目标证据.json
+```
+
+样本计划必须先按`schemas/traffic_global_objective_sample_plan.schema.json`锁定
+样本清单、预期数量和慢样本阈值。提取器将成功、慢、部分汇聚和失败样本全部写入
+`attempts`；只有完整权威汇聚进入`records`。样本缺失、重复或偏离计划会立即停止；
+证据完整但含失败/部分汇聚时，统一门禁会如实判为未通过，不能只提交成功子集。
+`shadow`结果可以被原样导出用于诊断，但统一门禁会拒绝把它认作第六项达标证据。
+
+七项非工业指标统一使用 `scripts/evaluate_competition_targets.py` 判定，证据格式、
+SHA 和口径见 `docs/七项统一证据门禁.md`。缺失当前提交、当前模型或当前硬件的
+证据时，工具会输出“未测量”，不会自动沿用历史实验。

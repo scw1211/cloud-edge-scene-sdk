@@ -1,0 +1,53 @@
+{
+  "schema_version": "edge-llm-joint-candidate-identity/v1",
+  "release_id": "traffic-industrial-joint-v1-clean-q5km-f16",
+  "status": "full_passed_nano_pending",
+  "base": {
+    "path": "/home/jetson02/cloud-edge-deploy-industrial-multilora-v1/deployment/joint_single_adapter/base.Q5_K_M.gguf",
+    "bytes": 577990656,
+    "sha256": "3b24fe1e89760dbfccbcbf6420fdc3ca7a6dd07cb2dc5c1578ce62a0252461de",
+    "quantization": "Q5_K_M"
+  },
+  "runtime_adapter": {
+    "path": "/home/jetson02/cloud-edge-deploy-industrial-multilora-v1/deployment/joint_single_adapter/joint_traffic_industrial.F16-LoRA.gguf",
+    "bytes": 12793312,
+    "sha256": "e97da30341514bff9285c389e7d53797037925d253aa2d6578dbf8cbf8ba86f1",
+    "tensor_type": "F16",
+    "default_scale": 1
+  },
+  "adapter_package": {
+    "status": "pending_nano_gate",
+    "sha256": null
+  },
+  "full_validation": {
+    "status": "passed",
+    "result": {
+      "path": "/home/scw/unified-distill-work-20260813/joint_traffic_industrial_v1/deployment/q5_f16_full_v1/full_traffic2400_industrial960.json",
+      "bytes": 2484871,
+      "sha256": "e7a1405c2e9546bea71dfb9a3a63a8ece0a69b709142ece95c09098ed2300636"
+    }
+  },
+  "startup_probes": {
+    "path": "scenes/industrial_anomaly/deployment/joint_candidate/startup_probes.json",
+    "bytes": 965,
+    "sha256": "1986a6f0df8c890acb5168de9307df77147f88697fd90ab69365c65164b0f23f",
+    "status": "bound_to_q5_and_joint_f16"
+  },
+  "runtime_contract": {
+    "endpoint": "http://127.0.0.1:19393",
+    "edge_endpoint": "http://127.0.0.1:19391",
+    "traffic_prefix": "T",
+    "industrial_prefix": "I",
+    "input_tokens": 17,
+    "output_tokens": 1,
+    "request_level_lora": false
+  },
+  "deployment_scope": {
+    "purpose": "nano222_controlled_sidecar_candidate",
+    "edge_endpoint": "http://127.0.0.1:19391",
+    "cloud_endpoint": "http://192.168.31.135:18100",
+    "release_watch_enabled": false,
+    "release_watch_reason": "sidecar supervisor pins one frozen candidate release",
+    "formal_template_requirement": "set release_watch.enabled=true only after Nano gate and controlled formal promotion"
+  }
+}

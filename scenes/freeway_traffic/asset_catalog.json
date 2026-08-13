@@ -11,6 +11,7 @@
     },
     "pems08_inference_array": {
       "role": "edge",
+      "startup_required": false,
       "file": "assets/downloads/PEMS08_r1_d0_w0_astcgn_multitask.npz",
       "url": "https://github.com/scw1211/cloud-edge-scene-sdk/releases/download/traffic-assets-v0.13.0/PEMS08_r1_d0_w0_astcgn_multitask.npz",
       "bytes": 73107329,

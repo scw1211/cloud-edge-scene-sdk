@@ -66,6 +66,7 @@ class ScheduleDecision:
     upload_bytes: int
     estimated_transfer_ms: float
     analytic_cloud_path_ms: float
+    cloud_round_trips: int
     profile_source: str
     network: Dict[str, Any]
     selective_defer: bool
@@ -92,28 +93,63 @@ class CollaborationScheduler:
         upload_bytes: int = 0,
         evidence_level: str = "summary",
         measured_cloud_path_ms: Optional[float] = None,
+        cloud_round_trips: int = 1,
         selective_defer: bool = False,
         defer_recommended: bool = False,
         routing_risk_level: Optional[str] = None,
         decision_uncertain: Optional[bool] = None,
     ) -> ScheduleDecision:
         upload_bytes = max(0, int(upload_bytes))
-        transfer_ms = (
+        cloud_round_trips = int(cloud_round_trips)
+        if cloud_round_trips < 1:
+            raise ValueError("cloud_round_trips must be positive")
+        upload_transfer_ms = (
             upload_bytes * 8.0 / (network.uplink_mbps * 1_000_000.0) * 1000.0
-            + network.expected_response_bytes
+        )
+        response_transfer_ms = (
+            network.expected_response_bytes
             * 8.0
             / (network.downlink_mbps * 1_000_000.0)
             * 1000.0
         )
+        transfer_ms = upload_transfer_ms + response_transfer_ms
+        guarded_round_trip_ms = (
+            network.rtt_ms + self.jitter_guard * network.jitter_ms
+        )
         analytic_cloud_path_ms = (
-            network.rtt_ms
-            + self.jitter_guard * network.jitter_ms
+            cloud_round_trips * guarded_round_trip_ms
             + transfer_ms
             + network.cloud_queue_ms
             + network.cloud_compute_ms
         )
         if measured_cloud_path_ms is not None and measured_cloud_path_ms >= 0.0:
-            cloud_path_ms = 0.7 * float(measured_cloud_path_ms) + 0.3 * analytic_cloud_path_ms
+            if cloud_round_trips == 1:
+                # A direct cloud decision returns its final result in the same
+                # request, so the historical HTTP measurement covers the whole
+                # path and retains the original EWMA blend.
+                cloud_path_ms = (
+                    0.7 * float(measured_cloud_path_ms)
+                    + 0.3 * analytic_cloud_path_ms
+                )
+            else:
+                # Aggregated summaries first receive a durable acceptance and
+                # then query/receive the authoritative result.  The stored
+                # measurement covers the submission request only; budgeting it
+                # as the whole cloud path undercounts one network round trip.
+                analytic_submission_ms = (
+                    guarded_round_trip_ms + upload_transfer_ms
+                )
+                measured_submission_ms = (
+                    0.7 * float(measured_cloud_path_ms)
+                    + 0.3 * analytic_submission_ms
+                )
+                cloud_path_ms = (
+                    measured_submission_ms
+                    + (cloud_round_trips - 1) * guarded_round_trip_ms
+                    + response_transfer_ms
+                    + network.cloud_queue_ms
+                    + network.cloud_compute_ms
+                )
             profile_source = "measured_ewma_blended"
         else:
             cloud_path_ms = analytic_cloud_path_ms
@@ -244,6 +280,7 @@ class CollaborationScheduler:
             upload_bytes=upload_bytes,
             estimated_transfer_ms=round(transfer_ms, 6),
             analytic_cloud_path_ms=round(analytic_cloud_path_ms, 6),
+            cloud_round_trips=cloud_round_trips,
             profile_source=profile_source,
             network=asdict(network),
             selective_defer=bool(selective_defer),

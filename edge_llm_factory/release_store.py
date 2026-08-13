@@ -5,10 +5,11 @@ import fcntl
 import json
 import os
 import re
+import stat
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, Mapping, Optional
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
 
 from edge_llm_factory.adapter_package import MANIFEST_NAME, validate_adapter_package
 from edge_llm_factory.contracts import (
@@ -21,6 +22,7 @@ from edge_llm_factory.contracts import (
 
 RELEASE_STORE_SCHEMA = "edge-llm-release-store/v1"
 RELEASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$")
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _now_utc() -> str:
@@ -48,6 +50,178 @@ def _directory_digest(path: Path) -> Dict[str, Any]:
         "bytes": total,
         "file_count": len(records),
         "sha256": canonical_sha256(records),
+    }
+
+
+def _regular_file(path: Path, label: str) -> None:
+    """Reject missing files, non-regular files and the symlink itself."""
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as exc:
+        raise ManifestError("{}不存在: {}".format(label, path)) from exc
+    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+        raise ManifestError("{}必须是普通文件且不能是符号链接: {}".format(label, path))
+
+
+def _validate_runtime_adapter_records(
+    value: Any,
+    *,
+    verify_files: bool,
+) -> List[Dict[str, Any]]:
+    """Validate the immutable, id-ordered runtime LoRA binding."""
+    if not isinstance(value, list):
+        raise ManifestError("runtime_adapters 必须是数组")
+    validated: List[Dict[str, Any]] = []
+    for expected_id, raw in enumerate(value):
+        if not isinstance(raw, dict):
+            raise ManifestError("runtime_adapters 条目必须是对象")
+        adapter_id = raw.get("id")
+        if isinstance(adapter_id, bool) or not isinstance(adapter_id, int):
+            raise ManifestError("runtime adapter id 必须是整数")
+        if adapter_id != expected_id:
+            raise ManifestError("runtime adapter id 必须从 0 连续递增")
+        default_scale = raw.get("default_scale")
+        if (
+            isinstance(default_scale, bool)
+            or not isinstance(default_scale, (int, float))
+            or default_scale not in (0, 1)
+        ):
+            raise ManifestError("runtime adapter default_scale 必须严格为 0 或 1")
+        path_text = raw.get("path")
+        if not isinstance(path_text, str) or not path_text.strip():
+            raise ManifestError("runtime adapter path 必须是非空字符串")
+        byte_count = raw.get("bytes")
+        if (
+            isinstance(byte_count, bool)
+            or not isinstance(byte_count, int)
+            or byte_count < 0
+        ):
+            raise ManifestError("runtime adapter bytes 无效")
+        digest = raw.get("sha256")
+        if not isinstance(digest, str) or not SHA256_HEX.fullmatch(digest):
+            raise ManifestError("runtime adapter sha256 无效")
+        path = Path(path_text)
+        if verify_files:
+            _regular_file(path, "runtime adapter")
+            if path.stat().st_size != byte_count:
+                raise ManifestError(
+                    "runtime adapter 大小已变化: id={}".format(adapter_id)
+                )
+            if sha256_file(path) != digest:
+                raise ManifestError(
+                    "runtime adapter SHA256 已变化: id={}".format(adapter_id)
+                )
+        validated.append(
+            {
+                "id": adapter_id,
+                "path": path_text,
+                "bytes": byte_count,
+                "sha256": digest,
+                "default_scale": int(default_scale),
+            }
+        )
+    if any(item["default_scale"] == 1 for item in validated) and len(validated) != 1:
+        raise ManifestError("default_scale=1 仅允许单个常驻联合 Adapter")
+    return validated
+
+
+def _capture_runtime_adapters(value: Optional[Sequence[Any]]) -> List[Dict[str, Any]]:
+    """Resolve and hash runtime adapters supplied during promotion."""
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes, Path)) or not isinstance(value, Sequence):
+        raise ManifestError("runtime_adapters 必须是数组")
+    records: List[Dict[str, Any]] = []
+    for expected_id, raw in enumerate(value):
+        if isinstance(raw, Mapping):
+            adapter_id = raw.get("id", expected_id)
+            path_value = raw.get("path")
+            default_scale = raw.get("default_scale", 0)
+            declared_bytes = raw.get("bytes")
+            declared_sha = raw.get("sha256")
+        else:
+            adapter_id = expected_id
+            path_value = raw
+            default_scale = 0
+            declared_bytes = None
+            declared_sha = None
+        if isinstance(adapter_id, bool) or not isinstance(adapter_id, int):
+            raise ManifestError("runtime adapter id 必须是整数")
+        if adapter_id != expected_id:
+            raise ManifestError("runtime adapter id 必须从 0 连续递增")
+        if (
+            isinstance(default_scale, bool)
+            or not isinstance(default_scale, (int, float))
+            or default_scale not in (0, 1)
+        ):
+            raise ManifestError("runtime adapter default_scale 必须严格为 0 或 1")
+        if not isinstance(path_value, (str, Path)) or not str(path_value).strip():
+            raise ManifestError("runtime adapter path 必须是非空路径")
+        unresolved = Path(path_value).expanduser()
+        _regular_file(unresolved, "runtime adapter")
+        path = unresolved.resolve()
+        _regular_file(path, "runtime adapter")
+        byte_count = path.stat().st_size
+        digest = sha256_file(path)
+        if declared_bytes is not None and declared_bytes != byte_count:
+            raise ManifestError(
+                "runtime adapter 声明大小与文件不一致: id={}".format(adapter_id)
+            )
+        if declared_sha is not None and declared_sha != digest:
+            raise ManifestError(
+                "runtime adapter 声明 SHA256 与文件不一致: id={}".format(adapter_id)
+            )
+        records.append(
+            {
+                "id": adapter_id,
+                "path": str(path),
+                "bytes": byte_count,
+                "sha256": digest,
+                "default_scale": int(default_scale),
+            }
+        )
+    if any(item["default_scale"] == 1 for item in records) and len(records) != 1:
+        raise ManifestError("default_scale=1 仅允许单个常驻联合 Adapter")
+    return records
+
+
+def _binding_from_record(record: Mapping[str, Any]) -> Dict[str, Any]:
+    binding = {
+        "base_manifest_sha256": record["base_manifest"]["sha256"],
+        "base_fingerprint": record["base_manifest"]["fingerprint"],
+        "adapter_package_sha256": record["adapter_package"]["sha256"],
+        "adapter_sha256": record["adapter"]["adapter_sha256"],
+        "deployment_sha256": record["deployment_artifact"]["sha256"],
+        "adapter_id": record["adapter"]["adapter_id"],
+        "adapter_version": record["adapter"]["version"],
+    }
+    runtime_adapters = record.get("runtime_adapters", [])
+    if runtime_adapters:
+        binding["runtime_adapters"] = [
+            {
+                "id": item["id"],
+                "sha256": item["sha256"],
+                "bytes": item["bytes"],
+                "default_scale": item["default_scale"],
+            }
+            for item in runtime_adapters
+        ]
+    return binding
+
+
+def _runtime_binding_audit(record: Mapping[str, Any]) -> Dict[str, Any]:
+    return {
+        "binding_fingerprint": record.get("binding_fingerprint"),
+        "deployment_sha256": record.get("deployment_artifact", {}).get("sha256"),
+        "runtime_adapters": [
+            {
+                "id": item.get("id"),
+                "sha256": item.get("sha256"),
+                "default_scale": item.get("default_scale"),
+            }
+            for item in record.get("runtime_adapters", [])
+            if isinstance(item, dict)
+        ],
     }
 
 
@@ -84,6 +258,15 @@ def _validate_state(value: Mapping[str, Any]) -> Dict[str, Any]:
         raise ManifestError("release store release_order 含重复版本")
     if set(state["release_order"]) != set(state["releases"]):
         raise ManifestError("release_order 与 releases 不一致")
+    for release_id, record in state["releases"].items():
+        if not isinstance(record, dict):
+            raise ManifestError("release store release 条目必须是对象")
+        if record.get("release_id") != release_id:
+            raise ManifestError("release store release_id 与键不一致")
+        if "runtime_adapters" in record:
+            _validate_runtime_adapter_records(
+                record["runtime_adapters"], verify_files=False
+            )
     if not isinstance(state.get("history"), list):
         raise ManifestError("release store history 必须是数组")
     active = state.get("active_release_id")
@@ -158,6 +341,7 @@ class ReleaseStore:
         base_manifest_path: Path,
         adapter_package: Path,
         deployment_artifact: Path,
+        runtime_adapters: Optional[Sequence[Any]] = None,
     ) -> Dict[str, Any]:
         if not RELEASE_ID.fullmatch(release_id):
             raise ManifestError("release_id 格式无效: {}".format(release_id))
@@ -180,6 +364,7 @@ class ReleaseStore:
         if artifact_bytes != deployment.get("artifact_bytes"):
             raise ManifestError("部署 GGUF 大小与适配器 manifest 不一致")
         package_digest = _directory_digest(package_path)
+        runtime_adapter_records = _capture_runtime_adapters(runtime_adapters)
         binding = {
             "base_manifest_sha256": sha256_file(base_path),
             "base_fingerprint": validation["base_fingerprint"],
@@ -189,6 +374,16 @@ class ReleaseStore:
             "adapter_id": validation["adapter_id"],
             "adapter_version": validation["version"],
         }
+        if runtime_adapter_records:
+            binding["runtime_adapters"] = [
+                {
+                    "id": item["id"],
+                    "sha256": item["sha256"],
+                    "bytes": item["bytes"],
+                    "default_scale": item["default_scale"],
+                }
+                for item in runtime_adapter_records
+            ]
         return {
             "release_id": release_id,
             "created_at_utc": _now_utc(),
@@ -214,6 +409,7 @@ class ReleaseStore:
                 "metrics": validation["metrics"],
                 "gate_results": validation["gate_results"],
             },
+            "runtime_adapters": runtime_adapter_records,
         }
 
     @staticmethod
@@ -236,6 +432,15 @@ class ReleaseStore:
         validation = validate_adapter_package(package, base, require_gates=True)
         if validation["base_fingerprint"] != record["base_manifest"]["fingerprint"]:
             raise ManifestError("发布版本的基座指纹已变化")
+        runtime_adapters = _validate_runtime_adapter_records(
+            record.get("runtime_adapters", []), verify_files=True
+        )
+        binding_record = dict(record)
+        binding_record["runtime_adapters"] = runtime_adapters
+        if canonical_sha256(_binding_from_record(binding_record)) != record.get(
+            "binding_fingerprint"
+        ):
+            raise ManifestError("发布版本的绑定指纹已变化")
         return {
             "status": "verified",
             "release_id": record["release_id"],
@@ -244,20 +449,24 @@ class ReleaseStore:
 
     @staticmethod
     def _activate(
-        state: Dict[str, Any], release_id: str, action: str
+        state: Dict[str, Any],
+        release_id: str,
+        action: str,
+        audit: Optional[Mapping[str, Any]] = None,
     ) -> Dict[str, Any]:
         previous = state["active_release_id"]
         state["active_release_id"] = release_id
         state["revision"] += 1
-        state["history"].append(
-            {
-                "sequence": state["revision"],
-                "action": action,
-                "from_release_id": previous,
-                "to_release_id": release_id,
-                "at_utc": _now_utc(),
-            }
-        )
+        entry = {
+            "sequence": state["revision"],
+            "action": action,
+            "from_release_id": previous,
+            "to_release_id": release_id,
+            "at_utc": _now_utc(),
+        }
+        if audit is not None:
+            entry["audit"] = dict(audit)
+        state["history"].append(entry)
         return state
 
     def promote(
@@ -266,9 +475,14 @@ class ReleaseStore:
         base_manifest_path: Path,
         adapter_package: Path,
         deployment_artifact: Path,
+        runtime_adapters: Optional[Sequence[Any]] = None,
     ) -> Dict[str, Any]:
         candidate = self._release_record(
-            release_id, base_manifest_path, adapter_package, deployment_artifact
+            release_id,
+            base_manifest_path,
+            adapter_package,
+            deployment_artifact,
+            runtime_adapters=runtime_adapters,
         )
         with self._locked():
             state = self._read()
@@ -315,7 +529,13 @@ class ReleaseStore:
             if target not in state["releases"]:
                 raise ManifestError("未知回滚版本: {}".format(target))
             verification = self._verify_release(state["releases"][target])
-            self._activate(state, target, "rollback")
+            audit = {
+                "trigger": "explicit_rollback",
+                "restored_release": _runtime_binding_audit(
+                    state["releases"][target]
+                ),
+            }
+            self._activate(state, target, "rollback", audit=audit)
             _atomic_write(self.registry_path, state)
             return {
                 "status": "rolled_back",
@@ -324,6 +544,80 @@ class ReleaseStore:
                 "revision": state["revision"],
                 "verification": verification,
                 "release": state["releases"][target],
+            }
+
+    def rollback_if_active(
+        self,
+        expected_release_id: str,
+        expected_revision: int,
+        release_id: str,
+        reason: str,
+    ) -> Dict[str, Any]:
+        """Rollback only if the failed candidate is still the active revision.
+
+        The compare-and-swap guard prevents a slow supervisor from reverting a
+        newer promotion that arrived while the candidate process was starting.
+        The failure reason is retained in release history so a successful
+        runtime failback does not erase why the candidate was rejected.
+        """
+        if not RELEASE_ID.fullmatch(str(expected_release_id)):
+            raise ManifestError(
+                "expected_release_id 格式无效: {}".format(expected_release_id)
+            )
+        if isinstance(expected_revision, bool) or not isinstance(
+            expected_revision, int
+        ):
+            raise ManifestError("expected_revision 必须是整数")
+        if expected_revision < 0:
+            raise ManifestError("expected_revision 不能为负数")
+        if not RELEASE_ID.fullmatch(str(release_id)):
+            raise ManifestError("release_id 格式无效: {}".format(release_id))
+        failure_reason = str(reason).strip() or "candidate apply failed"
+        # Keep the registry bounded even when a runtime returns a very long error.
+        failure_reason = failure_reason[:2048]
+
+        with self._locked():
+            state = self._read()
+            current = state["active_release_id"]
+            revision = int(state["revision"])
+            if current != expected_release_id or revision != expected_revision:
+                return {
+                    "status": "rollback_skipped",
+                    "reason": "active_release_changed",
+                    "registry": str(self.registry_path),
+                    "expected_release_id": expected_release_id,
+                    "expected_revision": expected_revision,
+                    "active_release_id": current,
+                    "revision": revision,
+                }
+            if release_id == current:
+                raise ManifestError("回滚目标不能是当前活动版本")
+            if release_id not in state["releases"]:
+                raise ManifestError("未知回滚版本: {}".format(release_id))
+            verification = self._verify_release(state["releases"][release_id])
+            audit = {
+                "trigger": "candidate_apply_failure",
+                "failed_release_id": expected_release_id,
+                "failed_revision": expected_revision,
+                "error": failure_reason,
+                "failed_release": _runtime_binding_audit(
+                    state["releases"][expected_release_id]
+                ),
+                "restored_release": _runtime_binding_audit(
+                    state["releases"][release_id]
+                ),
+            }
+            self._activate(state, release_id, "rollback", audit=audit)
+            _atomic_write(self.registry_path, state)
+            return {
+                "status": "rolled_back",
+                "reason": "candidate_apply_failure",
+                "registry": str(self.registry_path),
+                "active_release_id": release_id,
+                "revision": state["revision"],
+                "verification": verification,
+                "audit": audit,
+                "release": state["releases"][release_id],
             }
 
     def status(self, verify_active: bool = True) -> Dict[str, Any]:
@@ -353,6 +647,25 @@ def main(argv: Optional[list] = None) -> None:
     promote.add_argument("--base", required=True)
     promote.add_argument("--package", required=True)
     promote.add_argument("--deployment-artifact", "--deployment_artifact", required=True)
+    promote.add_argument(
+        "--runtime-adapter",
+        action="append",
+        default=[],
+        help=(
+            "随此 release 预载的 llama.cpp LoRA GGUF；可重复，id 按顺序从 0 "
+            "连续分配。"
+        ),
+    )
+    promote.add_argument(
+        "--runtime-adapter-default-scale",
+        type=int,
+        choices=(0, 1),
+        default=0,
+        help=(
+            "runtime adapter 的进程默认 scale，默认0（请求级选择）；"
+            "1仅允许单个常驻联合 Adapter。"
+        ),
+    )
 
     rollback = subparsers.add_parser("rollback")
     rollback.add_argument("--registry", required=True)
@@ -365,11 +678,20 @@ def main(argv: Optional[list] = None) -> None:
 
     store = ReleaseStore(Path(args.registry))
     if args.command == "promote":
+        runtime_adapters = [
+            {
+                "id": adapter_id,
+                "path": Path(path),
+                "default_scale": args.runtime_adapter_default_scale,
+            }
+            for adapter_id, path in enumerate(args.runtime_adapter)
+        ]
         result = store.promote(
             args.release_id,
             Path(args.base),
             Path(args.package),
             Path(args.deployment_artifact),
+            runtime_adapters=runtime_adapters,
         )
     elif args.command == "rollback":
         result = store.rollback(args.release_id)

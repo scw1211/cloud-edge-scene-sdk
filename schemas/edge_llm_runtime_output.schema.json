@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/edge_llm_runtime_output.schema.json",
+  "title": "Release-managed Edge LLM runtime output declaration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "template",
+    "output",
+    "on_missing_adapter"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {"adapter_mode": {"const": "static"}},
+        "required": ["adapter_mode"]
+      },
+      "then": {
+        "required": ["static_deployment_sha256"],
+        "not": {"required": ["adapter_id"]}
+      },
+      "else": {
+        "required": ["adapter_id"],
+        "not": {"required": ["static_deployment_sha256"]}
+      }
+    }
+  ],
+  "properties": {
+    "schema_version": {"const": "edge-llm-runtime-output/v1"},
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    },
+    "template": {"type": "string", "minLength": 1},
+    "output": {"type": "string", "minLength": 1},
+    "adapter_id": {"type": "integer", "minimum": 0, "maximum": 65535},
+    "adapter_mode": {"enum": ["request", "process_default", "static"]},
+    "static_deployment_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "on_missing_adapter": {"enum": ["base", "disable"]}
+  }
+}

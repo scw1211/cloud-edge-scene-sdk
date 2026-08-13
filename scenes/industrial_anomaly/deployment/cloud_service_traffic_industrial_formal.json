@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "role": "cloud",
+  "plugin_config": "scenes/industrial_anomaly/deployment/scene_plugins_cloud_traffic_industrial_formal.json",
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 18100,
+    "max_body_bytes": 8388608,
+    "access_log": false
+  },
+  "storage": {
+    "feedback": "/home/scw/cloud-edge-deploy-51d796d/runtime/full_traffic/cloud_feedback.jsonl",
+    "idempotency": "/home/scw/cloud-edge-deploy-51d796d/runtime/full_traffic/cloud_idempotency.sqlite3",
+    "artifacts": "/home/scw/cloud-edge-deploy-51d796d/runtime/full_traffic/cloud_artifacts",
+    "aggregations": "/home/scw/cloud-edge-deploy-51d796d/runtime/full_traffic/cloud_aggregations.sqlite3"
+  },
+  "idempotency": {
+    "ttl_seconds": 86400,
+    "max_entries": 100000
+  }
+}

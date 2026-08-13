@@ -22,6 +22,7 @@ EDGE_LLM_MODES = {"disabled", "shadow", "selective", "primary"}
 TRAFFIC_ADAPTER_SCENE = "freeway_traffic_management"
 TRAFFIC_CONTEXT_ENCODER = "freeway-bitpacked-decimal@v1"
 TRAFFIC_CONTEXT_ENCODER_V2 = "freeway-routing-context-decimal@v2"
+TRAFFIC_JOINT_CONTEXT_ENCODER = "scene-prefixed-decimal17@v1"
 TRAFFIC_CONTEXT_ENCODERS = {
     TRAFFIC_CONTEXT_ENCODER,
     TRAFFIC_CONTEXT_ENCODER_V2,
@@ -84,6 +85,7 @@ class TrafficEdgeLLMController:
         runtime_failure_cooldown_seconds: float = 5.0,
         min_expected_gain: float = 0.05,
         gain_profile_path: Optional[Path] = None,
+        edge_llm_prompt_prefix: Optional[str] = None,
     ) -> None:
         self.release_registry_path = (
             Path(release_registry_path) if release_registry_path is not None else None
@@ -98,6 +100,9 @@ class TrafficEdgeLLMController:
         self.gain_profile_path = (
             Path(gain_profile_path) if gain_profile_path is not None else None
         )
+        if edge_llm_prompt_prefix is not None and edge_llm_prompt_prefix != "T":
+            raise ValueError("traffic edge_llm_prompt_prefix must be T")
+        self.edge_llm_prompt_prefix = edge_llm_prompt_prefix
         self.gain_profile: Optional[Dict[str, Any]] = None
         self.gain_profile_inactive_reason: Optional[str] = None
         self.deadline_margin_ms = float(deadline_margin_ms)
@@ -144,12 +149,35 @@ class TrafficEdgeLLMController:
             self.runtime_config_path,
             expected_scene=TRAFFIC_ADAPTER_SCENE,
         )
-        contract = active.model.describe()["input_contract"]
+        description = active.model.describe()
+        contract = description["input_contract"]
         context_encoder = str(contract.get("context_encoder", ""))
-        if context_encoder not in TRAFFIC_CONTEXT_ENCODERS:
-            raise ValueError("traffic Edge LLM uses an unsupported context encoder")
-        if int(contract.get("max_input_tokens", 0)) > 16:
-            raise ValueError("traffic Edge LLM input contract exceeds the 16-token budget")
+        max_input_tokens = int(contract.get("max_input_tokens", 0))
+        if self.edge_llm_prompt_prefix is not None:
+            if context_encoder not in (
+                TRAFFIC_CONTEXT_ENCODERS | {TRAFFIC_JOINT_CONTEXT_ENCODER}
+            ):
+                raise ValueError(
+                    "joint traffic Edge LLM uses an unsupported context encoder"
+                )
+            if max_input_tokens != 17:
+                raise ValueError(
+                    "joint traffic Edge LLM requires exactly 17 input tokens"
+                )
+            runtime = description.get("runtime", {})
+            if not isinstance(runtime, dict) or runtime.get("lora_adapter") is not None:
+                raise ValueError(
+                    "joint traffic Edge LLM runtime must omit request-level LoRA"
+                )
+        else:
+            if context_encoder not in TRAFFIC_CONTEXT_ENCODERS:
+                raise ValueError(
+                    "traffic Edge LLM uses an unsupported context encoder"
+                )
+            if max_input_tokens > 16:
+                raise ValueError(
+                    "traffic Edge LLM input contract exceeds the 16-token budget"
+                )
         self.active = active
         self.context_encoder = context_encoder
         self.gain_profile = None
@@ -174,6 +202,28 @@ class TrafficEdgeLLMController:
             )
         self.last_error = None
         self._circuit_open_until = 0.0
+
+    def _build_action_prompt(
+        self,
+        event: SemanticEvent,
+        student: DecisionEnvelope,
+    ) -> str:
+        if self.context_encoder in {
+            TRAFFIC_CONTEXT_ENCODER_V2,
+            TRAFFIC_JOINT_CONTEXT_ENCODER,
+        }:
+            prompt = build_action_prompt(
+                event.scene_payload,
+                "routing_context_v2",
+                routing_context=self._prompt_routing_context(event, student),
+            )
+        else:
+            prompt = build_action_prompt(event.scene_payload, "bitpacked_decimal")
+        if self.edge_llm_prompt_prefix is not None:
+            if len(prompt) != 16 or not prompt.isdigit():
+                raise ValueError("joint traffic Edge LLM prompt is not decimal16")
+            prompt = self.edge_llm_prompt_prefix + prompt
+        return prompt
 
     @staticmethod
     def _structured_metadata(value: Any) -> Dict[str, Any]:
@@ -457,14 +507,7 @@ class TrafficEdgeLLMController:
             )
         assert self.active is not None
         self.invocations += 1
-        if self.context_encoder == TRAFFIC_CONTEXT_ENCODER_V2:
-            prompt = build_action_prompt(
-                event.scene_payload,
-                "routing_context_v2",
-                routing_context=self._prompt_routing_context(event, student),
-            )
-        else:
-            prompt = build_action_prompt(event.scene_payload, "bitpacked_decimal")
+        prompt = self._build_action_prompt(event, student)
         network_available = bool(event.metadata["edge_runtime_network_available"])
         try:
             decoder_event, student_advisory_whitelisted = self._decoder_event(
@@ -580,6 +623,8 @@ class TrafficEdgeLLMController:
             "loaded": self.active is not None,
             "active": active,
             "context_encoder": self.context_encoder,
+            "prompt_prefix": self.edge_llm_prompt_prefix,
+            "joint_prompt_contract": self.edge_llm_prompt_prefix is not None,
             "invocations": self.invocations,
             "accepted": self.accepted,
             "fallbacks": self.fallbacks,
