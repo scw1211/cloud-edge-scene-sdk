@@ -229,7 +229,9 @@ def build_handler(
             )
 
         def control_allowed(self) -> bool:
-            if not _loopback_client(str(self.client_address[0])):
+            client_host = str(self.client_address[0])
+            bound_host = str(self.server.server_address[0])
+            if not _loopback_client(client_host) and client_host != bound_host:
                 return False
             if not control_token:
                 return True

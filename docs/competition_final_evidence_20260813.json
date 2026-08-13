@@ -1,0 +1,143 @@
+{
+  "schema_version": "competition-final-evidence/v1",
+  "observed_at": "2026-08-13",
+  "active_release": {
+    "release_id": "traffic-industrial-joint-static-v2-q5km",
+    "revision": 3,
+    "model_format": "gguf",
+    "quantization": "Q5_K_M",
+    "model_bytes": 577990656,
+    "model_sha256": "308daa980c7ca295e18bd76e8dcf6dc1ed725ded32ada535a0c5c1910c695ce2",
+    "runtime_lora_count": 0,
+    "scene_prefixes": {
+      "traffic": "T",
+      "industrial": "I"
+    },
+    "input_tokens": 17,
+    "output_tokens": 1
+  },
+  "gates": {
+    "two_scene_deployment": {
+      "status": "passed",
+      "scenes": [
+        "traffic",
+        "industrial_anomaly"
+      ]
+    },
+    "nano_memory": {
+      "status": "passed",
+      "threshold_bytes": 1500000000,
+      "strict_peak_bytes": 1047126016,
+      "headroom_bytes": 452873984,
+      "definition": "max(VmHWM, sampled VmRSS+VmSwap at 20ms), no baseline subtraction",
+      "enforcement": "observational_only_not_cgroup_enforced"
+    },
+    "two_scene_mean_e2e": {
+      "status": "passed_with_scope_qualifications",
+      "traffic_event_business_completion_mean_ms": 174.240621,
+      "traffic_window_business_completion_mean_ms": 212.514133,
+      "industrial_score_input_to_provisional_mean_ms": 111.077345,
+      "industrial_perception_model_executed": false
+    },
+    "weak_network_current_release": {
+      "status": "incomplete",
+      "profiles_exercised": [
+        "normal",
+        "mild",
+        "severe",
+        "outage"
+      ],
+      "terminal_failure": "concurrency_8_edge_http_connection_reset",
+      "service_restarts": 0,
+      "oom_observed": false
+    },
+    "conflict_consistency": {
+      "status": "passed_historical_not_current_release_bound",
+      "natural_conflict_rate": 0.044776,
+      "resolution_success_rate": 1.0,
+      "injected_cases": 48,
+      "injected_successes": 48
+    },
+    "general_reasoning_retention": {
+      "status": "failed_development_evidence",
+      "math_retention": 0.652921,
+      "natural_language_retention": 0.798507,
+      "code_gate_available": false,
+      "current_static_q5_formal_blind_test_available": false
+    },
+    "ttft_reduction_75_percent": {
+      "status": "unverified_current_same_protocol"
+    }
+  },
+  "nano_500": {
+    "completed": 500,
+    "traffic_count": 250,
+    "industrial_count": 250,
+    "overall_mean_latency_ms": 132.610802,
+    "traffic_accuracy": 0.728,
+    "traffic_weighted_f1": 0.736485551,
+    "industrial_accuracy": 1.0,
+    "industrial_macro_f1": 1.0,
+    "industrial_weighted_f1": 1.0,
+    "valid_output_rate": 1.0,
+    "rss_plus_swap_growth_100_to_500_bytes": 999424,
+    "oom_kill_delta": 0,
+    "inference_d_samples": 0
+  },
+  "formal_services": {
+    "cloud_unit": "cloud-edge-cloud-18100-dual-v1.service",
+    "cloud_enabled": true,
+    "cloud_active": true,
+    "cloud_nrestarts": 0,
+    "cloud_linger": true,
+    "edge_unit": "cloud-edge-edge-18101-joint-static-q5-v1.service",
+    "edge_enabled": true,
+    "edge_active": true,
+    "edge_nrestarts": 0,
+    "edge_linger": true,
+    "cloud_aggregation_waiting": 0,
+    "cloud_aggregation_inflight": 0,
+    "edge_outbox_active": 0,
+    "edge_reconciliation_active": 0,
+    "edge_durable_pending": 0,
+    "nano_clock_synchronized": false
+  },
+  "evidence": [
+    {
+      "name": "nano_static_q5_500_summary",
+      "sha256": "6c5ca030564f0ed5822adaa91ed425ef9985c0f813f45281f07946968981deb5"
+    },
+    {
+      "name": "static_q5_full_summary",
+      "sha256": "3d24ef0be460022353e0d73eae5cabfd13a1c3fc7b56824836d226b46b2a9d66"
+    },
+    {
+      "name": "industrial_formal_180",
+      "sha256": "c260da971fe5be5b64fe1d7b7bbd88d67a4c6a0342b864962bb6f21307779333"
+    },
+    {
+      "name": "traffic_formal_100_windows",
+      "sha256": "2d138097e7f846fa297d6f4d7a742c2fa27f03254c07419f382838c6daa84988"
+    },
+    {
+      "name": "current_weak_network_proxy_raw",
+      "sha256": "66de734596134f7b49533ae9c22b86dfd707f4d1b4cc9d8cb1e48f5e06b0caaf"
+    },
+    {
+      "name": "general_reasoning_development_gate_failed",
+      "sha256": "74b3ebb992486a7421fd1c44b5f37a06a491667a65e64da8284b21b96265f327"
+    },
+    {
+      "name": "historical_traffic_weak_network",
+      "sha256": "64f3999509987336b9ca83c724f975cbdbb754219ef30afcc08bfa1398d7e1d0"
+    },
+    {
+      "name": "historical_traffic_conflict",
+      "sha256": "fd6366ba93d7f0fe600246b802f556eccb8388a92d405d1fa207aa52d4d56824"
+    },
+    {
+      "name": "historical_industrial_full_matrix",
+      "sha256": "100ab3842129c7d85b09af28c4b8e1c3a2d3a66b5dacb939a9e0f8cc860ad2d0"
+    }
+  ]
+}
