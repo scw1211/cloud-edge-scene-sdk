@@ -29,20 +29,40 @@ def labels_for(image_path, img_size):
     return image_label, (np.asarray(mask) > 127).astype(np.uint8)
 
 
+def remap_source(image_path, source_root):
+    """Map a target-device ``.../test/<defect>/<name>`` path to local data."""
+    if not source_root:
+        return image_path
+    parts = Path(image_path).parts
+    try:
+        test_index = len(parts) - 1 - list(reversed(parts)).index("test")
+    except ValueError as exc:
+        raise ValueError("prediction path has no test component: %s" % image_path) from exc
+    return str(Path(source_root).joinpath(*parts[test_index + 1 :]))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--predictions", required=True)
-    parser.add_argument("--base", required=True)
+    parser.add_argument("--base", help="Reference metrics CSV required unless --no-gate is set")
     parser.add_argument("--class-name", required=True, choices=["capsule", "screw"])
     parser.add_argument("--img-size", type=int, default=160)
+    parser.add_argument(
+        "--source-root",
+        help="Local modality test root used to remap target-device prediction paths",
+    )
     parser.add_argument("--output", help="Write rgb_module-compatible metrics.csv")
     parser.add_argument("--no-gate", action="store_true", help="Report metrics without applying deployment thresholds")
     args = parser.parse_args()
+    if not args.no_gate and not args.base:
+        parser.error("--base is required unless --no-gate is set")
     image_scores, image_labels, pixel_scores, pixel_labels = [], [], [], []
     with open(Path(args.predictions) / "predictions.csv") as handle:
         for row in csv.DictReader(handle):
             # predictions.csv 中 map_file 指向 C++ 写出的 img_size x img_size float32 原始得分图。
-            label, mask = labels_for(row["path"], args.img_size)
+            label, mask = labels_for(
+                remap_source(row["path"], args.source_root), args.img_size
+            )
             map_path = Path(args.predictions) / row["map_file"]
             score_map = np.fromfile(str(map_path), dtype=np.float32).reshape(args.img_size, args.img_size)
             if mask is None:
@@ -54,8 +74,10 @@ def main():
     precision, recall, _ = precision_recall_curve(pixel_labels, pixel_scores)
     f1 = 2 * precision * recall / (precision + recall + 1e-6)
     actual = {"Image_ROCAUC": roc_auc_score(image_labels, image_scores), "Infra_Pixel_ROCAUC": roc_auc_score(pixel_labels, pixel_scores), "Infra_Pixel_F1": float(f1.max()), "Infra_Pixel_AUPR": auc(recall, precision), "Infra_Pixel_AP": average_precision_score(pixel_labels, pixel_scores)}
-    with open(args.base) as handle:
-        target = next(row for row in csv.DictReader(handle) if row["Method"] == "Infra" and row["Class"].lower() == args.class_name)
+    target = None
+    if args.base:
+        with open(args.base) as handle:
+            target = next(row for row in csv.DictReader(handle) if row["Method"] == "Infra" and row["Class"].lower() == args.class_name)
     required_ratios = {
         # 160 低延迟部署门禁：Image AUROC 放宽到原版 baseline 的 85%；
         # Infra Pixel AUROC 和 Infra Pixel F1 都要求大于原版 baseline 的 80%。
@@ -88,6 +110,9 @@ def main():
         print("Wrote metrics:", output_path)
     failures = []
     for name, value in actual.items():
+        if target is None:
+            print("%s=%.3f (reported without reference baseline)" % (name, value))
+            continue
         baseline = float(target[name])
         if name not in required_ratios:
             print("%s=%.3f baseline=%.3f (reported only)" % (name, value, baseline))
@@ -99,7 +124,10 @@ def main():
             failures.append("%s <= %.3f" % (name, required))
     if failures and not args.no_gate:
         raise SystemExit("Metric gate failed: " + ", ".join(failures))
-    print("Metric gate passed" if not failures else "Metrics reported; deployment gate not applied")
+    if args.no_gate:
+        print("Metrics reported; deployment gate not applied")
+    else:
+        print("Metric gate passed")
 
 
 if __name__ == "__main__":

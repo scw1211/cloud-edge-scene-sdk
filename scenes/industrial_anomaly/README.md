@@ -1,8 +1,41 @@
 # 工业异常场景（RGB + 红外）
 
 该场景已接入 SDK `0.13.1` 的正式运行时，不再自行创建后台线程或写死云端地址。
-RGB、红外模型仍负责输出局部异常分数；插件负责阈值语义、动作边界和跨模态策略；
+RGB、红外视觉层负责从真实图片输出局部异常分数和热图；插件负责阈值语义、动作边界和跨模态策略；
 公共框架负责插件路由、Outbox、重试、持久聚合、`partial_final/final` 和结果回填。
+
+## 真实图像感知
+
+真实感知实现位于 [`perception/`](perception/README.md)，不是只有手工 `score`：
+
+```text
+MulSen_AD capsule RGB/红外 PNG
+  -> PIL bicubic + ImageNet normalization
+  -> ViT-small/patch8 ONNX 或 Nano TensorRT FP16
+  -> 384x20x20 patch feature
+  -> RGB/红外独立 PatchCore memory bank
+  -> image score + 160x160 float heatmap
+  -> 工业 CloudEvent -> /decide -> 云端跨模态 final
+```
+
+数据使用 `orgjy314159/MulSen_AD` 的第三个压缩包 `MulSen_AD_new.zip`，只提取历史实验
+对应的 `capsule`：每个模态 64 张正常训练图、58 张测试图；测试图从未进入 memory bank。
+用户提供的两份 ONNX 完全相同，两份 engine 也完全相同，所以当前是“共享视觉骨干 + 两套
+模态独立 memory bank”，不是两套不同权重。原 engine 的 TensorRT 序列化版本与
+Nano222 不兼容，仓库内 engine 已在 Nano222/Orin 上从绑定 ONNX 重建并实测。
+
+新鲜实测摘要在 `evidence/perception_capsule_fresh_summary.json`：
+
+- 原图到分数：RGB/红外均值 `103.96/110.88 ms`；
+- Nano TensorRT 58+58：图像 AUROC `0.940/0.833`，tensor-to-event 均值
+  `53.35/34.26 ms`；
+- 一组真实 RGB+红外图片进入正式 18101 后，本地为 `review/anomaly`，云端收到 2/2
+  模态并输出权威 `review`，全局一致、残余冲突 0；两事件平均图片到 provisional
+  `195.09 ms`。
+
+原始数据不提交 Git；摘要以路径、字节数和 SHA-256 绑定本机逐图报告、Nano 预测热图
+及 HTTP 响应。旧 `current_release_full_matrix_summary.json` 仍是受控 score 输入下的
+180 事件弱网/冲突矩阵，两类证据的输入口径不混写。
 
 ## 统一入口
 

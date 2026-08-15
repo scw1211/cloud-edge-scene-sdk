@@ -252,6 +252,10 @@ def _openai_stream_chat(
         "seed": 42,
         "max_tokens": max_tokens,
         "think": False,
+        # llama.cpp renders Qwen's thinking branch in the Jinja template.
+        # The OpenAI-style ``reasoning_effort`` field alone does not disable
+        # those template-added tokens in llama-server.
+        "chat_template_kwargs": {"enable_thinking": False},
         # Ollama's OpenAI-compatible endpoint ignores ``think`` for Qwen3.5,
         # while ``reasoning_effort=none`` is the supported non-thinking
         # control.  Keep both fields because llama-server accepts ``think``

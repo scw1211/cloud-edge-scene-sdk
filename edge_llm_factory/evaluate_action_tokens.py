@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from edge_llm_factory.action_constraints import normalize_action_tokens
+from edge_llm_factory.build_joint_scene_dataset import SCHEMA_VERSIONS
 from edge_llm_factory.adapter_package import MANIFEST_NAME, validate_adapter_package
 from edge_llm_factory.text_base import verify_text_snapshot
 from edge_llm_factory.contracts import (
@@ -105,10 +106,6 @@ def _joint_evaluation_context(args: argparse.Namespace) -> Optional[Dict[str, An
         raise ManifestError("联合正式评测必须请求 BF16")
     if args.prompt_format != "raw_task":
         raise ManifestError("联合正式评测必须使用 raw_task")
-    if args.prompt_prefix != contract["prefix"]:
-        raise ManifestError("联合正式评测 prompt_prefix 与场景不一致")
-    if args.required_prompt_tokens != 17:
-        raise ManifestError("联合正式评测必须严格要求 17 input tokens")
     if not args.constrain_action_tokens:
         raise ManifestError("联合正式评测必须启用采样前动作白名单")
     allowed = _parse_allowed_action_tokens(args.allowed_action_tokens)
@@ -117,18 +114,28 @@ def _joint_evaluation_context(args: argparse.Namespace) -> Optional[Dict[str, An
 
     manifest_path = Path(args.dataset_manifest).resolve()
     manifest = read_json_object(manifest_path)
-    if manifest.get("schema_version") != "edge-llm-joint-traffic-industrial/v1":
+    if manifest.get("schema_version") not in SCHEMA_VERSIONS:
         raise ManifestError("joint dataset manifest schema_version 不匹配")
     manifest_contract = manifest.get("contract")
     if not isinstance(manifest_contract, Mapping):
         raise ManifestError("joint dataset manifest 缺少 contract")
+    input_tokens = manifest_contract.get("input_tokens")
+    prefixes = manifest_contract.get("prefixes")
+    expected_prefix = (
+        prefixes.get(args.joint_scene) if isinstance(prefixes, Mapping) else None
+    )
     if (
-        manifest_contract.get("input_tokens") != 17
+        input_tokens not in (16, 17)
         or manifest_contract.get("output_tokens") != 1
-        or manifest_contract.get("prefixes", {}).get(args.joint_scene)
-        != contract["prefix"]
+        or not isinstance(expected_prefix, str)
     ):
-        raise ManifestError("joint dataset manifest 的 17-to-1 场景合同不匹配")
+        raise ManifestError("joint dataset manifest 的输入输出合同不匹配")
+    if args.prompt_prefix != expected_prefix:
+        raise ManifestError("联合正式评测 prompt_prefix 与 manifest 场景合同不一致")
+    if args.required_prompt_tokens != input_tokens:
+        raise ManifestError(
+            "联合正式评测必须严格要求 {} input tokens".format(input_tokens)
+        )
     dataset_artifacts = {
         split: _verified_dataset_artifact(manifest, split)
         for split in ("train", "validation")
@@ -153,6 +160,8 @@ def _joint_evaluation_context(args: argparse.Namespace) -> Optional[Dict[str, An
         "dataset_manifest": _file_identity(manifest_path),
         "dataset_artifacts": dataset_artifacts,
         "formal_test": dict(formal_test),
+        "input_tokens": int(input_tokens),
+        "prompt_prefix": expected_prefix,
     }
 
 

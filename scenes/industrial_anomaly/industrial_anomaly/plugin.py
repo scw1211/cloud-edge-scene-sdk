@@ -140,8 +140,8 @@ class IndustrialAnomalyPlugin(ScenePlugin):
         )
         if self.edge_llm_mode != "disabled" and self.edge_llm_runtime_config_path is None:
             raise ValueError("enabled industrial Edge LLM requires a runtime config")
-        if edge_llm_prompt_prefix is not None and edge_llm_prompt_prefix != "I":
-            raise ValueError("industrial edge_llm_prompt_prefix must be I")
+        if edge_llm_prompt_prefix not in (None, "", "I"):
+            raise ValueError("industrial edge_llm_prompt_prefix must be I or empty")
         self.edge_llm_prompt_prefix = edge_llm_prompt_prefix
         self.edge_llm_selective_timeout_limit_seconds = float(
             edge_llm_selective_timeout_limit_seconds
@@ -264,9 +264,12 @@ class IndustrialAnomalyPlugin(ScenePlugin):
         generation = runtime.get("generation", {})
         max_input_tokens = int(generation.get("max_input_tokens", 0))
         if self.edge_llm_prompt_prefix is not None:
-            if max_input_tokens != 17:
+            expected_tokens = 17 if self.edge_llm_prompt_prefix == "I" else 16
+            if max_input_tokens != expected_tokens:
                 raise ValueError(
-                    "joint industrial Edge LLM requires exactly 17 input tokens"
+                    "joint industrial Edge LLM requires exactly {} input tokens".format(
+                        expected_tokens
+                    )
                 )
             if runtime.get("lora_adapter") is not None:
                 raise ValueError(

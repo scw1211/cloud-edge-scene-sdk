@@ -256,6 +256,68 @@ class TrafficJointPromptContractTests(unittest.TestCase):
         self.assertEqual(controller.gain_profile, profile)
         self.assertIsNone(controller.gain_profile_inactive_reason)
 
+    def test_joint_raw16_runtime_uses_no_prefix_and_no_request_lora(self):
+        controller = TrafficEdgeLLMController(
+            Path("release.json"),
+            Path("runtime.json"),
+            mode="primary",
+            edge_llm_prompt_prefix="",
+        )
+        active = self._active(
+            16, None, context_encoder="scene-disjoint-decimal16@v2"
+        )
+        with patch(
+            "freeway_traffic_full.edge_llm.load_active_edge_llm",
+            return_value=active,
+        ):
+            controller.warmup()
+
+        _, event = _normalize()
+        event = replace(
+            event,
+            metadata={
+                **event.metadata,
+                "edge_runtime_network_available": True,
+                "edge_runtime_network_status": "normal",
+            },
+        )
+        prompt = controller._build_action_prompt(event, _student(event))
+        self.assertEqual(len(prompt), 16)
+        self.assertTrue(prompt.isdigit())
+        self.assertIs(controller.active, active)
+
+    def test_joint_raw16_runtime_reuses_routing_context_v2_gain_profile(self):
+        active = self._active(
+            16, None, context_encoder="scene-disjoint-decimal16@v2"
+        )
+        profile = {
+            "schema_version": 1,
+            "baseline": "current_state_student",
+            "accepted_strata": {
+                "normal|no_action|congestion_warning|3|0": {
+                    "validation_gain": 0.2
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory(prefix="joint-raw16-gain-profile-") as directory:
+            path = Path(directory) / "profile.json"
+            path.write_text(json.dumps(profile), encoding="utf-8")
+            controller = TrafficEdgeLLMController(
+                Path("release.json"),
+                Path("runtime.json"),
+                mode="selective",
+                gain_profile_path=path,
+                edge_llm_prompt_prefix="",
+            )
+            with patch(
+                "freeway_traffic_full.edge_llm.load_active_edge_llm",
+                return_value=active,
+            ):
+                controller.warmup()
+
+        self.assertEqual(controller.gain_profile, profile)
+        self.assertIsNone(controller.gain_profile_inactive_reason)
+
     def test_legacy_runtime_keeps_decimal16_and_request_lora(self):
         controller = TrafficEdgeLLMController(
             Path("release.json"), Path("runtime.json"), mode="primary"

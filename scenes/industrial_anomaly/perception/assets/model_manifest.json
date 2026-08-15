@@ -1,0 +1,62 @@
+{
+  "schema_version": "industrial-perception-model/v1",
+  "model": "vit_small_patch8_160_dino_feature_extractor",
+  "input": {
+    "name": "image",
+    "dtype": "float32",
+    "shape": [1, 3, 160, 160]
+  },
+  "output": {
+    "name": "patch_features",
+    "dtype": "float32",
+    "shape": [1, 384, 20, 20]
+  },
+  "onnx": {
+    "path": "vit_small_patch8_160.onnx",
+    "bytes": 86205967,
+    "sha256": "f4efdd64d4ab91c0d538bde497f47d255ef47b40be5edccabcbea898cd60075e",
+    "ir_version": 7,
+    "opset": 13,
+    "producer": "pytorch 1.13.1"
+  },
+  "tensorrt_engine": {
+    "path": "vit_small_patch8_160_fp16.engine",
+    "bytes": 44010579,
+    "sha256": "25e73c162f606c23d8f7495632f1a34c1e1ce468f10206368f0e397c397814ad",
+    "target": "NVIDIA Orin compute capability 8.7",
+    "tensorrt": "8.5.2",
+    "build": "FP16 output, 256 MiB workspace, built from the bound ONNX on Nano222",
+    "validation": {
+      "deserialized": true,
+      "input": "image:float32[1,3,160,160]",
+      "output": "patch_features:float16[1,384,20,20]",
+      "trtexec_mean_gpu_latency_ms": 29.8563,
+      "trtexec_p95_latency_ms": 30.3125
+    }
+  },
+  "user_supplied_engine_audit": {
+    "bytes": 87418147,
+    "sha256": "e0696803dd3e0e23cff674cd6cbb9019b1e0c1ba7aaedfac98df024d7df3747b",
+    "serialized_engine_version": 205,
+    "nano222_required_serialized_engine_version": 232,
+    "target_compatibility": "incompatible_with_nano222_tensorrt_8_5_2",
+    "excluded_from_git": true,
+    "replacement": "vit_small_patch8_160_fp16.engine"
+  },
+  "modalities": {
+    "rgb": {
+      "backbone": "shared",
+      "memory_bank": "independent"
+    },
+    "infrared": {
+      "backbone": "shared_grayscale_replicated_to_rgb",
+      "memory_bank": "independent"
+    }
+  },
+  "duplicate_upload_audit": {
+    "two_onnx_uploads_byte_identical": true,
+    "two_engine_uploads_byte_identical": true,
+    "duplicate_files_excluded_from_git": true
+  },
+  "note": "The backbone outputs patch features only; a modality-specific PatchCore bank is required to produce anomaly scores."
+}

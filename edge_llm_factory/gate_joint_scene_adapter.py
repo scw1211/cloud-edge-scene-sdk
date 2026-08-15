@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
-from edge_llm_factory.build_joint_scene_dataset import SCHEMA_VERSION
+from edge_llm_factory.build_joint_scene_dataset import SCHEMA_VERSIONS
 from edge_llm_factory.contracts import (
     ManifestError,
     read_json_object,
@@ -123,6 +123,7 @@ def _strict_samples(
     scene: str,
     report: Mapping[str, Any],
     action_token_ids: Mapping[str, int],
+    input_tokens: int,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     contract = JOINT_SCENE_CONTRACTS[scene]
     expected_count = int(contract["count"])
@@ -146,7 +147,10 @@ def _strict_samples(
             raw.get("correct") is (prediction == target),
             "{} sample correct 与原始预测不一致".format(scene),
         )
-        _require(raw.get("prompt_tokens") == 17, "{} sample 不是17-token输入".format(scene))
+        _require(
+            raw.get("prompt_tokens") == input_tokens,
+            "{} sample 不是{}-token输入".format(scene, input_tokens),
+        )
         generated = raw.get("generated_token_ids")
         _require(
             isinstance(generated, list)
@@ -170,7 +174,7 @@ def _strict_samples(
     checks = {
         "count": report.get("count") == expected_count,
         "samples_count": len(samples) == expected_count,
-        "all_samples_17_to_1": True,
+        "all_samples_{}_to_1".format(input_tokens): True,
         "valid_output_rate": report.get("valid_output_rate") == 1.0,
         "accuracy_summary_exact": report.get("decision_accuracy")
         == recomputed["accuracy"],
@@ -250,7 +254,16 @@ def gate(
     industrial: Mapping[str, Any],
     dataset_manifest_path: Path,
 ) -> Dict[str, Any]:
-    _require(dataset_manifest.get("schema_version") == SCHEMA_VERSION, "joint dataset schema无效")
+    _require(
+        dataset_manifest.get("schema_version") in SCHEMA_VERSIONS,
+        "joint dataset schema无效",
+    )
+    manifest_contract = dataset_manifest.get("contract")
+    _require(isinstance(manifest_contract, Mapping), "dataset manifest 缺少 contract")
+    input_tokens = manifest_contract.get("input_tokens")
+    prefixes = manifest_contract.get("prefixes")
+    _require(input_tokens in (16, 17), "dataset input_tokens 必须为16或17")
+    _require(isinstance(prefixes, Mapping), "dataset manifest 缺少 prefixes")
     dataset_manifest_identity = {
         "path": str(Path(dataset_manifest_path).resolve()),
         "bytes": Path(dataset_manifest_path).resolve().stat().st_size,
@@ -318,7 +331,7 @@ def gate(
         isinstance(runtime_contract, Mapping)
         and runtime_contract.get("one_resident_adapter") is True
         and runtime_contract.get("request_level_adapter_switching") is False
-        and runtime_contract.get("input_tokens") == 17
+        and runtime_contract.get("input_tokens") == input_tokens
         and runtime_contract.get("output_tokens") == 1,
         "train_metrics 联合单Adapter运行合同无效",
     )
@@ -328,6 +341,8 @@ def gate(
     report_results: Dict[str, Any] = {}
     for scene, report in (("traffic", traffic), ("industrial", industrial)):
         contract = JOINT_SCENE_CONTRACTS[scene]
+        expected_prefix = prefixes.get(scene)
+        _require(isinstance(expected_prefix, str), "{} prefix 合同无效".format(scene))
         formal_test = sources.get(scene, {}).get("formal_test")
         _require(isinstance(formal_test, Mapping), "{} formal_test 缺失".format(scene))
         common_checks = {
@@ -337,13 +352,16 @@ def gate(
             == formal_test.get("sha256"),
             "test_not_training": report.get("test_set_used_for_training") is False,
             "prompt_format": report.get("prompt_format") == "raw_task",
-            "prefix": report.get("prompt_prefix") == contract["prefix"],
-            "required_prompt_tokens": report.get("required_prompt_tokens") == 17,
+            "prefix": report.get("prompt_prefix") == expected_prefix,
+            "required_prompt_tokens": report.get("required_prompt_tokens")
+            == input_tokens,
         }
         _require(all(common_checks.values()), "{} 联合评测公共合同无效".format(scene))
         constraint_checks = _strict_constraint(scene, report, slots, reserved)
         precision_checks = _strict_precision(scene, report)
-        sample_checks, recomputed = _strict_samples(scene, report, slots)
+        sample_checks, recomputed = _strict_samples(
+            scene, report, slots, int(input_tokens)
+        )
         threshold_checks = (
             {
                 "accuracy": recomputed["accuracy"] >= 0.66,

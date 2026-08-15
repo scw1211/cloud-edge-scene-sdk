@@ -7,7 +7,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-from edge_llm_factory.build_joint_scene_dataset import build
+from edge_llm_factory.build_joint_scene_dataset import RAW16_CONTRACT, build
 from edge_llm_factory.contracts import ManifestError
 from edge_llm_factory.evaluate_action_tokens import main as evaluate_main
 from edge_llm_factory.gate_joint_scene_adapter import gate, main as gate_main
@@ -26,7 +26,9 @@ def _write_rows(path: Path, scene: str, count: int, split: str) -> None:
     allowed = "ABCDEF" if scene == "traffic" else "ABC"
     with path.open("w", encoding="utf-8") as file_obj:
         for index in range(count):
-            prompt = str(index % 10**16).zfill(16)
+            prompt = ("0" if scene == "traffic" else "2") + str(
+                index % 10**15
+            ).zfill(15)
             row = {
                 "event_id": "{}:{}:{}".format(scene, split, index),
                 "messages": [
@@ -249,6 +251,52 @@ class JointSceneAdapterTests(unittest.TestCase):
             report = audit_tokenizer_contract(Path("unused"))
         self.assertEqual(report["prefixes"]["traffic"]["token_id"], 51)
         self.assertEqual(report["prefixes"]["industrial"]["token_id"], 40)
+
+    def test_raw16_builder_proves_disjoint_scene_domains_without_prefix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = {}
+            for scene, test_count in (("traffic", 2400), ("industrial", 960)):
+                for split, count in (("train", 6), ("validation", 3), ("test", test_count)):
+                    path = root / "{}_{}.jsonl".format(scene, split)
+                    _write_rows(path, scene, count, split)
+                    paths[(scene, split)] = path
+            result = build(
+                paths[("traffic", "train")],
+                paths[("traffic", "validation")],
+                paths[("traffic", "test")],
+                paths[("industrial", "train")],
+                paths[("industrial", "validation")],
+                paths[("industrial", "test")],
+                root / "joint_raw16",
+                input_contract=RAW16_CONTRACT,
+            )
+            self.assertEqual(result["contract"]["input_tokens"], 16)
+            self.assertEqual(result["contract"]["prefixes"], {"traffic": "", "industrial": ""})
+            self.assertEqual(
+                result["contract"]["scene_first_characters"],
+                {"traffic": ["0"], "industrial": ["2"]},
+            )
+            self.assertEqual(
+                result["contract"]["cross_scene_prompt_overlap"],
+                {"train": 0, "validation": 0},
+            )
+            rows = [
+                json.loads(line)
+                for line in (root / "joint_raw16" / "train.jsonl").read_text().splitlines()
+            ]
+            self.assertTrue(all(len(row["messages"][0]["content"]) == 16 for row in rows))
+
+    def test_raw16_tokenizer_audit_requires_sixteen_tokens(self):
+        transformers = types.SimpleNamespace(
+            AutoTokenizer=types.SimpleNamespace(
+                from_pretrained=lambda *args, **kwargs: _Tokenizer()
+            )
+        )
+        with patch.dict("sys.modules", {"transformers": transformers}):
+            report = audit_tokenizer_contract(Path("unused"), RAW16_CONTRACT)
+        self.assertEqual(report["contract"], "16-to-1")
+        self.assertEqual(report["prefixes"]["traffic"]["text"], "")
 
     def test_trainer_wrapper_passes_only_the_locked_recipe(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,0 +1,23 @@
+[Unit]
+Description=Cloud Edge traffic+industrial joint static Q4 raw16 on Nano222
+After=network-online.target
+Wants=network-online.target
+Conflicts=cloud-edge-edge-18101-joint-static-q5-v1.service cloud-edge-edge-18101-51d796d-rollback.service cloud-edge-edge-18101-5f488235.service cloud-edge-edge-18101-multiscene-multilora-v1.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jetson02/cloud-edge-deploy-industrial-multilora-v1
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/jetson02/cloud-edge-deploy-industrial-multilora-v1:/home/jetson02/cloud-edge-deploy-industrial-multilora-v1/scenes/freeway_traffic:/home/jetson02/cloud-edge-deploy-industrial-multilora-v1/scenes/industrial_anomaly
+Environment=PATH=/usr/local/cuda-11.4/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=LD_LIBRARY_PATH=/usr/local/cuda-11.4/lib64
+StandardOutput=append:/home/jetson02/cloud-edge-deploy-industrial-multilora-v1/runtime/traffic_industrial_joint_static_q4km_raw16_formal_v2/formal_service.log
+StandardError=append:/home/jetson02/cloud-edge-deploy-industrial-multilora-v1/runtime/traffic_industrial_joint_static_q4km_raw16_formal_v2/formal_service.log
+ExecStart=/usr/bin/python3 /home/jetson02/cloud-edge-deploy-industrial-multilora-v1/scenes/freeway_traffic/deploy_node.py run --role edge --cloud-url http://192.168.31.135:18100 --service-config /home/jetson02/cloud-edge-deploy-industrial-multilora-v1/scenes/industrial_anomaly/deployment/joint_static_raw16_formal_v2/edge_service.json --llama-registry /home/jetson02/cloud-edge-deploy-industrial-multilora-v1/runtime/traffic_industrial_joint_static_q4km_raw16_formal_v2/edge_llm_release_store.json --llama-binary /home/jetson02/llama.cpp-src/build-cuda-edge-qk/bin/llama-server --llama-port 18190 --context-tokens 128 --threads 4 --llama-batch-size 16 --llama-ubatch-size 16 --parallel 1 --gpu-layers 99 --device cuda --llama-runtime-output /home/jetson02/cloud-edge-deploy-industrial-multilora-v1/scenes/industrial_anomaly/deployment/joint_static_raw16_formal_v2/runtime_output_traffic.json --llama-runtime-output /home/jetson02/cloud-edge-deploy-industrial-multilora-v1/scenes/industrial_anomaly/deployment/joint_static_raw16_formal_v2/runtime_output_industrial.json --llama-startup-probes /home/jetson02/cloud-edge-deploy-industrial-multilora-v1/scenes/industrial_anomaly/deployment/joint_static_raw16_formal_v2/startup_probes.json --startup-timeout-seconds 180
+Restart=on-failure
+RestartSec=2
+KillMode=control-group
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target

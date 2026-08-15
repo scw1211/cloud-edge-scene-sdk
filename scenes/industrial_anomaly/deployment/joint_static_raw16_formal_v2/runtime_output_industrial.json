@@ -1,0 +1,9 @@
+{
+  "schema_version": "edge-llm-runtime-output/v1",
+  "name": "industrial-joint-static-raw16-formal-v2",
+  "template": "edge_llm_runtime_industrial_template.json",
+  "output": "../../../../runtime/traffic_industrial_joint_static_q4km_raw16_formal_v2/edge_llm_runtime_industrial.json",
+  "adapter_mode": "static",
+  "static_deployment_sha256": "828f839873c7505005101544d8febb7408bc0443c153c4ba97ec4b3603445526",
+  "on_missing_adapter": "disable"
+}

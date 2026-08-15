@@ -13,7 +13,7 @@
 - 学习式效用路由的影子模式与主动模式；
 - 可选云端大模型结构化复核，失败时保留场景专业模型基线。
 - `scenes/freeway_traffic/`交付真实 ASTGCN、交通 Student、defer gate、特征编码器、云端 ExtraTrees 和 Edge-Qwen 适配器；大文件由安装器下载并校验 SHA-256；
-- `scenes/industrial_anomaly/`把 RGB/红外 TensorRT 结果接入同一入口，提供本地三态初判、持久 Outbox、跨模态汇聚和 final 回填；
+- `scenes/industrial_anomaly/`包含 MulSen_AD `capsule` 的 RGB/红外 ONNX/TensorRT + PatchCore 真实图像推理，并把分数与热图接入同一入口，提供本地三态初判、持久 Outbox、跨模态汇聚和 final 回填；
 - 一键真实全链路验收会强制检查四分区全部汇聚、provisional→final 全部回填和残余冲突为零；
 - 两台 Jetson 可按 `0,1` 与 `2,3` 分区在同一时刻运行真实感知并向云端汇聚。
 

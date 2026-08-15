@@ -25,6 +25,6 @@ target_include_directories(infra_patchcore_trt PRIVATE
   ${TENSORRT_INCLUDE_DIR}
   ${OpenCV_INCLUDE_DIRS}
   src)
-target_link_libraries(infra_patchcore_trt PRIVATE ${TENSORRT_LIBRARY} ${OpenCV_LIBS} ${CUBLAS_LIBRARY} cudart curl yaml-cpp)
+target_link_libraries(infra_patchcore_trt PRIVATE ${TENSORRT_LIBRARY} ${OpenCV_LIBS} ${CUBLAS_LIBRARY} cudart)
 # 开启可分离编译，方便 CUDA 源文件和 C++ 主程序分别编译后链接。
 set_target_properties(infra_patchcore_trt PROPERTIES CUDA_SEPARABLE_COMPILATION ON)

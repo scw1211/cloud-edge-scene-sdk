@@ -23,6 +23,7 @@ TRAFFIC_ADAPTER_SCENE = "freeway_traffic_management"
 TRAFFIC_CONTEXT_ENCODER = "freeway-bitpacked-decimal@v1"
 TRAFFIC_CONTEXT_ENCODER_V2 = "freeway-routing-context-decimal@v2"
 TRAFFIC_JOINT_CONTEXT_ENCODER = "scene-prefixed-decimal17@v1"
+TRAFFIC_JOINT_RAW16_CONTEXT_ENCODER = "scene-disjoint-decimal16@v2"
 TRAFFIC_CONTEXT_ENCODERS = {
     TRAFFIC_CONTEXT_ENCODER,
     TRAFFIC_CONTEXT_ENCODER_V2,
@@ -100,8 +101,8 @@ class TrafficEdgeLLMController:
         self.gain_profile_path = (
             Path(gain_profile_path) if gain_profile_path is not None else None
         )
-        if edge_llm_prompt_prefix is not None and edge_llm_prompt_prefix != "T":
-            raise ValueError("traffic edge_llm_prompt_prefix must be T")
+        if edge_llm_prompt_prefix not in (None, "", "T"):
+            raise ValueError("traffic edge_llm_prompt_prefix must be T or empty")
         self.edge_llm_prompt_prefix = edge_llm_prompt_prefix
         self.gain_profile: Optional[Dict[str, Any]] = None
         self.gain_profile_inactive_reason: Optional[str] = None
@@ -154,15 +155,21 @@ class TrafficEdgeLLMController:
         context_encoder = str(contract.get("context_encoder", ""))
         max_input_tokens = int(contract.get("max_input_tokens", 0))
         if self.edge_llm_prompt_prefix is not None:
-            if context_encoder not in (
+            expected_encoders = (
                 TRAFFIC_CONTEXT_ENCODERS | {TRAFFIC_JOINT_CONTEXT_ENCODER}
-            ):
+                if self.edge_llm_prompt_prefix == "T"
+                else {TRAFFIC_JOINT_RAW16_CONTEXT_ENCODER}
+            )
+            if context_encoder not in expected_encoders:
                 raise ValueError(
                     "joint traffic Edge LLM uses an unsupported context encoder"
                 )
-            if max_input_tokens != 17:
+            expected_tokens = 17 if self.edge_llm_prompt_prefix == "T" else 16
+            if max_input_tokens != expected_tokens:
                 raise ValueError(
-                    "joint traffic Edge LLM requires exactly 17 input tokens"
+                    "joint traffic Edge LLM requires exactly {} input tokens".format(
+                        expected_tokens
+                    )
                 )
             runtime = description.get("runtime", {})
             if not isinstance(runtime, dict) or runtime.get("lora_adapter") is not None:
@@ -187,6 +194,7 @@ class TrafficEdgeLLMController:
             and context_encoder in {
                 TRAFFIC_CONTEXT_ENCODER_V2,
                 TRAFFIC_JOINT_CONTEXT_ENCODER,
+                TRAFFIC_JOINT_RAW16_CONTEXT_ENCODER,
             }
         ):
             profile = json.loads(
@@ -214,6 +222,7 @@ class TrafficEdgeLLMController:
         if self.context_encoder in {
             TRAFFIC_CONTEXT_ENCODER_V2,
             TRAFFIC_JOINT_CONTEXT_ENCODER,
+            TRAFFIC_JOINT_RAW16_CONTEXT_ENCODER,
         }:
             prompt = build_action_prompt(
                 event.scene_payload,
@@ -417,6 +426,10 @@ class TrafficEdgeLLMController:
             or (
                 self.context_encoder == TRAFFIC_JOINT_CONTEXT_ENCODER
                 and self.edge_llm_prompt_prefix == "T"
+            )
+            or (
+                self.context_encoder == TRAFFIC_JOINT_RAW16_CONTEXT_ENCODER
+                and self.edge_llm_prompt_prefix == ""
             )
         )
         current_state = bool(

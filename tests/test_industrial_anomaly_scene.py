@@ -250,6 +250,48 @@ class IndustrialAnomalyPluginTests(unittest.TestCase):
             finally:
                 plugin.close()
 
+    def test_industrial_joint_raw16_runtime_uses_no_request_lora(self):
+        config = {
+            "authentication": {"api_key_env": ""},
+            "endpoint": "http://127.0.0.1:18590",
+            "generation": {
+                "keep_alive": "30m",
+                "max_input_tokens": 16,
+                "max_output_tokens": 1,
+                "seed": 42,
+                "temperature": 0.0,
+                "thinking": False,
+                "top_p": 1.0,
+            },
+            "model": "traffic-industrial-joint-raw16-test",
+            "provider": "llama_cpp",
+            "schema_version": "edge-llm-runtime/v1",
+            "timeout_seconds": 0.18,
+        }
+        with tempfile.TemporaryDirectory(prefix="industrial-joint-raw16-") as directory:
+            path = Path(directory) / "runtime.json"
+            path.write_text(json.dumps(config), encoding="utf-8")
+            plugin = IndustrialAnomalyPlugin(
+                edge_llm_runtime_config_path=path,
+                edge_llm_mode="selective",
+                edge_llm_prompt_prefix="",
+            )
+            try:
+                plugin.warmup()
+                self.assertIsNone(plugin._edge_llm_client.describe()["lora_adapter"])
+                client = _IndustrialActionClient("review")
+                plugin._edge_llm_client = client
+                event = plugin.normalize_envelope(
+                    SceneEventEnvelope.from_dict(_sample("rgb_event.json"))
+                )
+                decision = plugin.edge_decide(event)
+                prompt = client.prompts[0][0]
+                self.assertEqual(len(prompt), 16)
+                self.assertTrue(prompt.isdigit())
+                self.assertEqual(decision.metadata["edge_qwen_prompt_tokens"], 16)
+            finally:
+                plugin.close()
+
     def test_industrial_selective_edge_llm_only_runs_for_review(self):
         plugin = IndustrialAnomalyPlugin(
             edge_llm_runtime_config_path=Path("unused-runtime.json"),

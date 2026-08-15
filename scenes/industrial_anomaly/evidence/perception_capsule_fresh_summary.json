@@ -1,0 +1,168 @@
+{
+  "schema_version": "industrial-perception-evidence/v1",
+  "observed_at": "2026-08-14",
+  "scope": {
+    "product": "capsule",
+    "modalities": ["rgb", "infrared"],
+    "visual_model_executed": true,
+    "test_images_per_modality": 58,
+    "train_test_separation_enforced": true
+  },
+  "dataset": {
+    "repository": "orgjy314159/MulSen_AD",
+    "archive": "MulSen_AD_new.zip",
+    "archive_bytes": 8973641666,
+    "archive_sha256": "6e7cfec9211e4cbab85118ae2a65dacef2794ab5bb3951ecdf8b0f2ec82a4b7d",
+    "repository_commit": "6fdbe2ccb12d77017d76cf3c2a6bbe8789d22f3d",
+    "subset_files": 338,
+    "subset_bytes": 591775324,
+    "subset_manifest": {
+      "path": "/home/scw/industrial_data/mulsen_ad_new_capsule/SUBSET_MANIFEST.json",
+      "bytes": 60408,
+      "sha256": "07ba5c1c0120699c1e16f5a288ea68820d88bfe9e785e10b3305f7bdc30cf4b8"
+    }
+  },
+  "assets": {
+    "onnx": {
+      "bytes": 86205967,
+      "sha256": "f4efdd64d4ab91c0d538bde497f47d255ef47b40be5edccabcbea898cd60075e",
+      "input": "float32[1,3,160,160]",
+      "output": "float32[1,384,20,20]"
+    },
+    "nano_tensorrt_engine": {
+      "bytes": 44010579,
+      "sha256": "25e73c162f606c23d8f7495632f1a34c1e1ce468f10206368f0e397c397814ad",
+      "target": "NVIDIA Orin compute capability 8.7",
+      "tensorrt": "8.5.2",
+      "trtexec_mean_gpu_latency_ms": 29.8563,
+      "trtexec_p95_gpu_latency_ms": 30.3125
+    },
+    "rgb_memory_bank": {
+      "rows": 1280,
+      "bytes": 983068,
+      "sha256": "6301280ac20f68f3f34f1340a6cbef09419559765ba8dc335bb72413763eb66a"
+    },
+    "infrared_memory_bank": {
+      "rows": 512,
+      "bytes": 393244,
+      "sha256": "dc494dc2ea03765e77a7197543fb0758d6c973a2694157ed8b03f904ebe74a77"
+    }
+  },
+  "raw_png_onnx_evaluation": {
+    "rgb": {
+      "image_auroc": 0.9375,
+      "image_ap": 0.98553683,
+      "image_max_f1": 0.950495,
+      "pixel_auroc": 0.9946433,
+      "pixel_ap": 0.33364,
+      "pixel_max_f1": 0.42984,
+      "image_to_score_mean_ms": 103.9646,
+      "image_to_score_p95_ms": 128.396,
+      "report": {
+        "path": "/home/scw/industrial_data/perception_evidence/capsule_rgb_onnx_fresh.json",
+        "bytes": 25048,
+        "sha256": "51bb637b8257631e80489368d4bf481e20e8b005a0f26f58f3095bbca877d16d"
+      }
+    },
+    "infrared": {
+      "image_auroc": 0.84375,
+      "image_ap": 0.954641,
+      "image_max_f1": 0.9375,
+      "pixel_auroc": 0.9510673,
+      "pixel_ap": 0.156846,
+      "pixel_max_f1": 0.214785,
+      "image_to_score_mean_ms": 110.8804,
+      "image_to_score_p95_ms": 159.475,
+      "report": {
+        "path": "/home/scw/industrial_data/perception_evidence/capsule_infrared_onnx_fresh.json",
+        "bytes": 25323,
+        "sha256": "ffdd94894454e6f87fd5217cc85cd56ab9f815f985c8f30fbd5f1f147057fa9f"
+      }
+    }
+  },
+  "nano222_tensorrt_full_evaluation": {
+    "preprocessing_contract": "PIL bicubic + ImageNet normalization, frozen NCHW input",
+    "runtime": "TensorRT FP16 feature extractor + cuBLAS PatchCore + event serialization",
+    "rgb": {
+      "completed": 58,
+      "image_auroc": 0.94,
+      "pixel_auroc": 0.996,
+      "pixel_max_f1": 0.51,
+      "inference_mean_ms": 51.379638,
+      "inference_p95_ms": 65.10875,
+      "tensor_to_event_mean_ms": 53.350107,
+      "tensor_to_event_p95_ms": 67.220585,
+      "review_low_binary_accuracy": 0.879310345,
+      "review_low_binary_f1": 0.929292929
+    },
+    "infrared": {
+      "completed": 58,
+      "image_auroc": 0.833,
+      "pixel_auroc": 0.952,
+      "pixel_max_f1": 0.227,
+      "inference_mean_ms": 32.380202,
+      "inference_p95_ms": 37.357505,
+      "tensor_to_event_mean_ms": 34.257759,
+      "tensor_to_event_p95_ms": 39.357995,
+      "review_low_binary_accuracy": 0.844827586,
+      "review_low_binary_f1": 0.910891089
+    },
+    "evidence": {
+      "path": "/home/scw/industrial_data/perception_evidence/nano_full_trt_v1",
+      "sha256_manifest_sha256": "8fb7ef0fdb2db9d4323f982fe5043f85767a12ef76a2eb54f99c295920575af1",
+      "rgb_metrics_sha256": "7b2485667fc0302bcb0c0bb90f66db648c8365cedd3875f80a5b545d9bddb0e4",
+      "infrared_metrics_sha256": "857fe6457c03467458c61e68bde25c3ba287bf6d8c921cbd417cc10686520bef"
+    }
+  },
+  "onnx_tensorrt_parity": {
+    "sample": "capsule/broken_inside/0",
+    "rgb_onnx_score": 0.00761392127,
+    "rgb_tensorrt_score": 0.0076248222,
+    "rgb_absolute_delta": 0.00001090093,
+    "infrared_onnx_score": 0.00926780465,
+    "infrared_tensorrt_score": 0.00929768477,
+    "infrared_absolute_delta": 0.00002988012,
+    "decision_states_preserved": true
+  },
+  "live_visual_cloud_edge_closed_loop": {
+    "input": "real RGB and infrared PNG for the same capsule sample",
+    "rgb_local_state": "review",
+    "infrared_local_state": "anomaly",
+    "mean_accounted_image_to_provisional_ms": 195.088973,
+    "cloud_group_id": "aggregation_72cf98d0e6f8a2f59458",
+    "received_members": ["infrared", "rgb"],
+    "missing_members": [],
+    "completion_reason": "all_expected_members",
+    "aggregation_finality": "final",
+    "cloud_final_decision": "review",
+    "global_confirmation": true,
+    "globally_consistent": true,
+    "residual_conflict_count": 0,
+    "resolution_success_rate": 1.0,
+    "cloud_runtime_ms": 0.712571,
+    "evidence": {
+      "path": "/home/scw/industrial_data/perception_evidence/live_visual_closed_loop_v2",
+      "sha256_manifest_sha256": "ab185b706aff48ebef0678980f1efb9339a400de5e73ff8666638215f0836b4a",
+      "rgb_response_sha256": "04f4e6b7aff2e7c7f2ef38eb877542ce367f251a9a162d1b870130e35ae18206",
+      "infrared_response_sha256": "62827928909211c2e40376c01ac5b771812ac9d2d0c6be9778eeca9fc6e66d4d"
+    }
+  },
+  "checks": {
+    "real_dataset_bound": true,
+    "real_visual_inference_executed": true,
+    "raw_png_image_to_score_mean_under_200ms_both_modalities": true,
+    "nano_tensor_to_event_mean_under_200ms_both_modalities": true,
+    "live_pair_mean_image_to_provisional_under_200ms": true,
+    "cross_modal_cloud_final_complete": true,
+    "formal_edge_outbox_active_zero_after_test": true,
+    "formal_edge_pending_reviews_zero_after_test": true,
+    "cloud_aggregation_waiting_zero_after_test": true,
+    "cloud_worker_errors_empty_after_test": true
+  },
+  "measurement_notes": [
+    "The raw-PNG ONNX test includes image decode, PIL resize/normalization, feature extraction, PatchCore scoring and heatmap construction.",
+    "The Nano full test starts from the frozen preprocessed NCHW tensor so TensorRT is compared against the exact training/evaluation preprocessing contract; its latency is tensor-to-event, not raw-PNG latency.",
+    "The live pair is a measured two-event smoke test, while the 180-event score-input weak-network/conflict matrix remains in current_release_full_matrix_summary.json.",
+    "The Nano system clock is not synchronized with the cloud host; cross-host wall-clock latency is excluded. Edge-local measured durations are used."
+  ]
+}

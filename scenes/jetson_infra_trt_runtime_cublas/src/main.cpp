@@ -2,9 +2,6 @@
 #include <cuda_runtime_api.h>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
-#include <curl/curl.h>
-#include <yaml-cpp/yaml.h>
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -19,6 +16,7 @@
 #include <iostream>
 #include <memory>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <sstream>
 #include <stdexcept>
@@ -246,6 +244,19 @@ std::string file_stem(const std::string& path) {
   return dot == std::string::npos ? name : name.substr(0, dot);
 }
 
+std::string parent_name(const std::string& path) {
+  const size_t slash = path.find_last_of('/');
+  if (slash == std::string::npos || slash == 0) return "unknown";
+  const size_t previous = path.find_last_of('/', slash - 1);
+  return path.substr(previous == std::string::npos ? 0 : previous + 1,
+                     slash - (previous == std::string::npos ? 0 : previous + 1));
+}
+
+std::string environment_or(const char* name, const std::string& fallback) {
+  const char* value = std::getenv(name);
+  return value && *value ? std::string(value) : fallback;
+}
+
 std::string score_text(float score) {
   // 文件名和 JSON score 共用同一种短格式，避免默认 ostream 输出过长。
   std::ostringstream output;
@@ -285,31 +296,55 @@ std::string get_local_ip() {
 
 bool post_json(const std::string& url,
                const std::string& json_body) {
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        return false;
-    }
+  constexpr char prefix[] = "http://";
+  if (url.compare(0, sizeof(prefix) - 1, prefix) != 0) return false;
+  const size_t authority_start = sizeof(prefix) - 1;
+  const size_t path_start = url.find('/', authority_start);
+  const std::string authority = url.substr(
+      authority_start, path_start == std::string::npos ? std::string::npos : path_start - authority_start);
+  const std::string path = path_start == std::string::npos ? "/" : url.substr(path_start);
+  const size_t colon = authority.rfind(':');
+  const std::string host = colon == std::string::npos ? authority : authority.substr(0, colon);
+  const std::string port = colon == std::string::npos ? "80" : authority.substr(colon + 1);
+  if (host.empty() || port.empty()) return false;
 
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers,
-                                "Content-Type: application/json");
-
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_body.c_str());
-
-    CURLcode res = curl_easy_perform(curl);
-
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
-
-    return res == CURLE_OK;
+  addrinfo hints{};
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  addrinfo* addresses = nullptr;
+  if (getaddrinfo(host.c_str(), port.c_str(), &hints, &addresses) != 0) return false;
+  int fd = -1;
+  for (addrinfo* current = addresses; current; current = current->ai_next) {
+    fd = socket(current->ai_family, current->ai_socktype, current->ai_protocol);
+    if (fd >= 0 && connect(fd, current->ai_addr, current->ai_addrlen) == 0) break;
+    if (fd >= 0) close(fd);
+    fd = -1;
+  }
+  freeaddrinfo(addresses);
+  if (fd < 0) return false;
+  std::ostringstream request;
+  request << "POST " << path << " HTTP/1.1\r\nHost: " << authority
+          << "\r\nContent-Type: application/json\r\nContent-Length: " << json_body.size()
+          << "\r\nConnection: close\r\n\r\n" << json_body;
+  const std::string payload = request.str();
+  size_t sent = 0;
+  while (sent < payload.size()) {
+    const ssize_t count = send(fd, payload.data() + sent, payload.size() - sent, 0);
+    if (count <= 0) { close(fd); return false; }
+    sent += static_cast<size_t>(count);
+  }
+  char response[64] = {};
+  const ssize_t received = recv(fd, response, sizeof(response) - 1, 0);
+  close(fd);
+  if (received <= 0) return false;
+  const std::string status(response, static_cast<size_t>(received));
+  return status.find("HTTP/1.1 2") == 0 || status.find("HTTP/1.0 2") == 0;
 }
 
 void write_event_json(const std::string& path, const std::string& event_id, const std::string& event_source,
-                      const std::string& subject, const std::string& sample_id,
+                      const std::string& subject, const std::string& sample_id, const std::string& product,
                       const std::string& source_path, const std::string& heatmap_path,
-                      float score, double inference_ms) {
+                      float score, double preprocessing_ms, double inference_ms) {
   // 写出贴近 rgb_infra_module 的最小事件 JSON：
   // raw_uri 指向原始图片，heatmap_uri 指向实时生成并计入端到端时延的 map_*.f32。
   std::ofstream output(path);
@@ -328,6 +363,7 @@ void write_event_json(const std::string& path, const std::string& event_id, cons
          << "    \"data\": {\n"
          << "        \"asset_id\": \"192.168.31.100\",\n"// 新增，保留字段
          << "        \"sample_id\": \"" << json_escape(sample_id) << "\",\n"
+         << "        \"product\": \"" << json_escape(product) << "\",\n"
          << "        \"modality\": \"infra\",\n"
          << "        \"region_id\": \"1\",\n"// 新增，保留字段
          << "        \"threshold\": \"0.5\",\n"// 新增，保留字段
@@ -336,6 +372,7 @@ void write_event_json(const std::string& path, const std::string& event_id, cons
          << "        \"score\": " << score_text(score) << ",\n"
          << "        \"raw_uri\": \"file://" << json_escape(source_path) << "\",\n"
          << "        \"heatmap_uri\": \"file://" << json_escape(heatmap_path) << "\",\n"
+         << "        \"preprocessing_latency_ms\": " << preprocessing_ms << ",\n"
          << "        \"inference_ms\": " << inference_ms << "\n"
          << "    }\n"
          << "}\n";
@@ -350,19 +387,11 @@ void write_event_json(const std::string& path, const std::string& event_id, cons
             << "}";
     output.close();
 
-    YAML::Node config = YAML::LoadFile("config.yaml");
-
-    std::string host = config["host"].as<std::string>();
-    int port = config["port"].as<int>();
-
-    std::string url =
-        "http://" + host + ":" +
-        std::to_string(port) +
-        "/api/v1/collaboration/decide";
-    
-
     std::string request_body = request_ss.str();
-    post_json(url, request_body);
+    const char* edge_url = std::getenv("PATCHCORE_EDGE_URL");
+    if (edge_url && *edge_url && !post_json(edge_url, request_body)) {
+      std::cerr << "Warning: cannot post event to PATCHCORE_EDGE_URL=" << edge_url << std::endl;
+    }
 }
 
 float image_score(const std::vector<uint16_t>& features, const std::vector<float>& distances,
@@ -445,6 +474,11 @@ int main(int argc, char** argv) {
     // 主流程：加载 TensorRT engine -> 加载记忆库 -> 预热 -> 批量推理 -> 写预测、得分图和延迟记录。
     const auto process_started = std::chrono::steady_clock::now();
     const std::string engine_path(argv[1]), bank_path(argv[2]), input_dir(argv[3]), output_dir(argv[4]);
+    const std::string product_name = environment_or("PATCHCORE_PRODUCT", "capsule");
+    const std::string run_id = environment_or(
+        "PATCHCORE_RUN_ID",
+        std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count()));
     const bool preprocessed = argc == 7 && std::string(argv[5]) == "--preprocessed";
     if (argc == 7 && !preprocessed) throw std::runtime_error("Expected --preprocessed SOURCE_PNG_DIR");
     const std::string source_dir = preprocessed ? argv[6] : "";
@@ -491,7 +525,7 @@ int main(int argc, char** argv) {
     // 触发 TensorRT 的 lazy setup，避免第一张图延迟混入 engine 内部初始化。
     if (!context->enqueueV2(bindings.data(), 0, nullptr)) throw std::runtime_error("TensorRT warm-up failed");
     check(cudaDeviceSynchronize(), "Synchronize TensorRT warm-up");
-    const std::string event_source = get_local_ip();
+    const std::string event_source = "urn:edge:" + get_local_ip() + ":industrial-infrared-patchcore";
     const std::string f32_dir = output_dir + "/f32";
     const std::string json_dir = output_dir + "/json";
     std::system(("mkdir -p '" + output_dir + "' '" + f32_dir + "' '" + json_dir + "'").c_str()); std::ofstream csv(output_dir + "/predictions.csv"); csv << "path,image_score,map_file\n";
@@ -502,6 +536,7 @@ int main(int argc, char** argv) {
       const auto end_to_end_started = std::chrono::steady_clock::now();
       const auto host_input = preprocessed ? read_tensor(files[i], static_cast<size_t>(3) * height * width) : preprocess(files[i], width, height);
       const auto started = std::chrono::steady_clock::now();
+      const double preprocessing_ms = std::chrono::duration<double, std::milli>(started - end_to_end_started).count();
       const auto h2d_started = std::chrono::steady_clock::now();
       check(cudaMemcpy(gpu_input, host_input.data(), host_input.size() * sizeof(float), cudaMemcpyHostToDevice), "Upload input");
       const double input_h2d_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - h2d_started).count();
@@ -530,16 +565,16 @@ int main(int argc, char** argv) {
       const double inference_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
       const std::string source_path = preprocessed ? original_path(files[i], input_dir, source_dir) : files[i];
       const std::string sample_index = index_text(i);
-      const std::string event_id = "industrial_infra_event_" + sample_index;
+      const std::string event_id = "industrial_infra_event_" + run_id + "_" + sample_index;
       const std::string subject = "infra_image_" + sample_index + "_" + file_stem(source_path);
-      const std::string sample_id = "sample_" + sample_index;
+      const std::string sample_id = product_name + "_" + parent_name(source_path) + "_" + file_stem(source_path);
       const std::string map_name = "map_" + std::to_string(i) + ".f32";
       const std::string map_file = "f32/" + map_name;
       const std::string map_path = output_dir + "/" + map_file;
       write_raw_map(map_path, distances, grid, height);
       const std::string json_name = score_text(score) + "_event_" + sample_index + ".json";
-      write_event_json(json_dir + "/" + json_name, event_id, event_source, subject, sample_id,
-                       source_path, map_path, score, inference_ms);
+      write_event_json(json_dir + "/" + json_name, event_id, event_source, subject, sample_id, product_name,
+                       source_path, map_path, score, preprocessing_ms, inference_ms);
       csv << source_path << ',' << score << ',' << map_file << "\n";
       csv.flush();
       const double end_to_end_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - end_to_end_started).count();
@@ -554,4 +589,3 @@ int main(int argc, char** argv) {
   } catch (const std::exception& error) { std::cerr << "Error: " << error.what() << std::endl; return 1; }
   return 0;
 }
-

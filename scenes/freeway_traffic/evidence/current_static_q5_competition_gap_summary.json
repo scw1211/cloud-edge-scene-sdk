@@ -1,0 +1,95 @@
+{
+  "schema_version": "current-static-q5-competition-gap-summary/v1",
+  "observed_at": "2026-08-14",
+  "release": {
+    "release_id": "traffic-industrial-joint-static-v2-q5km",
+    "revision": 3,
+    "model_sha256": "308daa980c7ca295e18bd76e8dcf6dc1ed725ded32ada535a0c5c1910c695ce2",
+    "runtime_lora_count": 0,
+    "input_tokens": 17,
+    "output_tokens": 1
+  },
+  "general_reasoning_development_gate": {
+    "status": "failed",
+    "scope": "development_only_uncommitted_worktree",
+    "sample_count": 80,
+    "teacher_macro_score": 0.666667,
+    "edge_macro_score": 0.4,
+    "macro_retention": 0.6,
+    "minimum_retention": 0.8,
+    "categories": {
+      "code": {
+        "sample_count": 20,
+        "teacher_score": 0.6,
+        "edge_score": 0.2,
+        "retention": 0.333333
+      },
+      "math": {
+        "sample_count": 30,
+        "teacher_score": 0.7,
+        "edge_score": 0.566667,
+        "retention": 0.809524
+      },
+      "natural_language_reasoning": {
+        "sample_count": 30,
+        "teacher_score": 0.7,
+        "edge_score": 0.433333,
+        "retention": 0.619047
+      }
+    },
+    "source_sha256": "ff3df3771b8208105f7dba9bfce5419292ea8bfb5f800ddc91bc109bf28848cd"
+  },
+  "same_short_prompt_ttft_development_gate": {
+    "status": "failed",
+    "runtime": "Ollama 0.31.1, same local GPU, raw /api/generate",
+    "paired_samples": 80,
+    "prompt_tokens": 17,
+    "output_tokens": 1,
+    "teacher_9b_mean_ms": 249.376793,
+    "edge_static_q5_mean_ms": 184.261588,
+    "reduction": 0.261111727,
+    "minimum_reduction": 0.75,
+    "source_sha256": "e4f5b19f06f44a579dc1f031bc9a56a9ba74bdf9d92499d4a0d667c229c4b525"
+  },
+  "same_model_input_compression_ttft_development_gate": {
+    "status": "failed",
+    "runtime": "Ollama 0.31.1, same local GPU, raw /api/generate",
+    "short_prompt_count": 40,
+    "short_prompt_tokens": 17,
+    "short_mean_ms": 175.283617,
+    "full_prompt_count": 5,
+    "full_prompt_token_values": [
+      725,
+      729,
+      732,
+      733
+    ],
+    "full_mean_ms": 227.17073,
+    "output_tokens": 1,
+    "reduction": 0.228405803,
+    "minimum_reduction": 0.75,
+    "source_sha256": "3fd850270a9a6896090e298eca0ebd34336824d5bc4dcd80b2b1e87eb5ad9903"
+  },
+  "nano_batch32_latency_memory_ab": {
+    "status": "failed_and_reverted",
+    "only_runtime_change": "batch_size and ubatch_size from 16 to 32",
+    "completed_requests": 500,
+    "mean_ms": 88.176952,
+    "p95_ms": 91.211311,
+    "traffic_accuracy": 0.72,
+    "traffic_weighted_f1": 0.727936068,
+    "industrial_accuracy": 1.0,
+    "industrial_macro_f1": 1.0,
+    "industrial_weighted_f1": 1.0,
+    "strict_peak_bytes": 1615671296,
+    "threshold_bytes": 1500000000,
+    "memory_excess_bytes": 115671296,
+    "source_sha256": "545cd7facea1c178540cefd39c8147dca80ec38b0eedee7024eae51142556da7",
+    "formal_runtime_after_test": {
+      "batch_size": 16,
+      "ubatch_size": 16,
+      "restored": true
+    }
+  },
+  "submission_boundary": "The current release passes the 0.2 s application latency and 1.5 GB memory gates, but must not be described as passing the 75% TTFT-reduction or 80%-90% general-capability-retention gates."
+}

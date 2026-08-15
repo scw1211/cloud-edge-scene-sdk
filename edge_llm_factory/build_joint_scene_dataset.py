@@ -17,12 +17,19 @@ from edge_llm_factory.contracts import ManifestError, sha256_file, write_json_ob
 
 
 SCHEMA_VERSION = "edge-llm-joint-traffic-industrial/v1"
+RAW16_SCHEMA_VERSION = "edge-llm-joint-traffic-industrial-raw16/v2"
+SCHEMA_VERSIONS = frozenset((SCHEMA_VERSION, RAW16_SCHEMA_VERSION))
+PREFIX17_CONTRACT = "scene-prefix1+decimal16@v1"
+RAW16_CONTRACT = "scene-disjoint-decimal16@v2"
+INPUT_CONTRACTS = frozenset((PREFIX17_CONTRACT, RAW16_CONTRACT))
 PREFIXES = {"traffic": "T", "industrial": "I"}
 TARGETS = {"traffic": frozenset("ABCDEF"), "industrial": frozenset("ABC")}
 EXPECTED_TEST_ROWS = {"traffic": 2400, "industrial": 960}
 
 
-def _read_rows(path: Path, scene: str, split: str) -> List[Dict[str, Any]]:
+def _read_rows(
+    path: Path, scene: str, split: str, input_contract: str
+) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as file_obj:
         for line_number, line in enumerate(file_obj, start=1):
@@ -47,8 +54,9 @@ def _read_rows(path: Path, scene: str, split: str) -> List[Dict[str, Any]]:
             if target not in TARGETS[scene]:
                 raise ManifestError("{}:{} target 超出 {} 动作槽".format(path, line_number, scene))
             row = dict(source)
+            prefix = PREFIXES[scene] if input_contract == PREFIX17_CONTRACT else ""
             row["messages"] = [
-                {"role": "user", "content": PREFIXES[scene] + prompt},
+                {"role": "user", "content": prefix + prompt},
                 {"role": "assistant", "content": target},
             ]
             row["prompt_format"] = "raw_task"
@@ -56,8 +64,8 @@ def _read_rows(path: Path, scene: str, split: str) -> List[Dict[str, Any]]:
             metadata.update(
                 {
                     "joint_scene": scene,
-                    "joint_scene_prefix": PREFIXES[scene],
-                    "joint_input_contract": "scene-prefix1+decimal16@v1",
+                    "joint_scene_prefix": prefix,
+                    "joint_input_contract": input_contract,
                     "joint_split": split,
                 }
             )
@@ -117,7 +125,10 @@ def build(
     industrial_test: Path,
     output_dir: Path,
     seed: int = 20260813,
+    input_contract: str = PREFIX17_CONTRACT,
 ) -> Dict[str, Any]:
+    if input_contract not in INPUT_CONTRACTS:
+        raise ManifestError("unsupported joint input contract: {}".format(input_contract))
     all_inputs = [
         traffic_train,
         traffic_val,
@@ -151,11 +162,11 @@ def build(
     for scene, paths in sources.items():
         scene_rows = {}
         for split in ("train", "validation"):
-            rows = _read_rows(paths[split], scene, split)
+            rows = _read_rows(paths[split], scene, split, input_contract)
             scene_rows[split] = rows
             split_rows[split].extend(rows)
         source_summary[scene] = {
-            "prefix": PREFIXES[scene],
+            "prefix": PREFIXES[scene] if input_contract == PREFIX17_CONTRACT else "",
             "train": {
                 "path": str(paths["train"]),
                 "rows": len(scene_rows["train"]),
@@ -178,6 +189,40 @@ def build(
         row["messages"][0]["content"] for row in split_rows["validation"]
     }
     prompt_overlap = train_prompts & validation_prompts
+    cross_scene_prompt_overlap: Dict[str, int] = {}
+    scene_first_characters: Dict[str, List[str]] = {}
+    if input_contract == RAW16_CONTRACT:
+        for split, rows in split_rows.items():
+            per_scene = {
+                scene: {
+                    row["messages"][0]["content"]
+                    for row in rows
+                    if row["metadata"]["joint_scene"] == scene
+                }
+                for scene in PREFIXES
+            }
+            overlap = per_scene["traffic"] & per_scene["industrial"]
+            if overlap:
+                raise ManifestError(
+                    "raw16 {} traffic/industrial prompt overlap: {}".format(
+                        split, len(overlap)
+                    )
+                )
+            cross_scene_prompt_overlap[split] = 0
+        for scene in PREFIXES:
+            characters = sorted(
+                {
+                    row["messages"][0]["content"][0]
+                    for rows in split_rows.values()
+                    for row in rows
+                    if row["metadata"]["joint_scene"] == scene
+                }
+            )
+            scene_first_characters[scene] = characters
+        if set(scene_first_characters["traffic"]) & set(
+            scene_first_characters["industrial"]
+        ):
+            raise ManifestError("raw16 traffic/industrial first-character domains overlap")
     artifacts = {
         split: _artifact(output_dir / (split + ".jsonl"), rows)
         for split, rows in split_rows.items()
@@ -197,14 +242,24 @@ def build(
             for scene in PREFIXES
         }
     manifest = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": (
+            SCHEMA_VERSION
+            if input_contract == PREFIX17_CONTRACT
+            else RAW16_SCHEMA_VERSION
+        ),
         "seed": seed,
         "contract": {
-            "input": "scene-prefix1+decimal16@v1",
-            "input_characters": 17,
-            "input_tokens": 17,
+            "input": input_contract,
+            "input_characters": 17 if input_contract == PREFIX17_CONTRACT else 16,
+            "input_tokens": 17 if input_contract == PREFIX17_CONTRACT else 16,
             "output_tokens": 1,
-            "prefixes": PREFIXES,
+            "prefixes": (
+                PREFIXES
+                if input_contract == PREFIX17_CONTRACT
+                else {"traffic": "", "industrial": ""}
+            ),
+            "scene_first_characters": scene_first_characters,
+            "cross_scene_prompt_overlap": cross_scene_prompt_overlap,
             "outputs": {"traffic": "A-F", "industrial": "A-C"},
         },
         "artifacts": artifacts,
@@ -232,7 +287,7 @@ def build(
             "gradient_accumulation": 2,
             "learning_rate": 0.0001,
             "precision": "bf16",
-            "max_length": 18,
+            "max_length": 18 if input_contract == PREFIX17_CONTRACT else 17,
             "seed": seed,
         },
         "promotion_gates": {
@@ -265,11 +320,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--industrial_test", required=True)
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--seed", type=int, default=20260813)
+    parser.add_argument(
+        "--input_contract",
+        choices=sorted(INPUT_CONTRACTS),
+        default=PREFIX17_CONTRACT,
+    )
     args = parser.parse_args(argv)
     result = build(
         Path(args.traffic_train), Path(args.traffic_val), Path(args.traffic_test),
         Path(args.industrial_train), Path(args.industrial_val), Path(args.industrial_test),
-        Path(args.output_dir), args.seed,
+        Path(args.output_dir), args.seed, args.input_contract,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
 

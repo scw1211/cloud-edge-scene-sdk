@@ -1,0 +1,27 @@
+{
+  "schema_version": "edge-llm-startup-probes/v1",
+  "require_for_runtime_adapters": true,
+  "require_for_static_fusion": true,
+  "releases": {
+    "traffic-industrial-joint-static-v3-q4km-raw16": {
+      "deployment_sha256": "828f839873c7505005101544d8febb7408bc0443c153c4ba97ec4b3603445526",
+      "adapters": [],
+      "static": [
+        {
+          "prompt": "0371009919313402",
+          "allowed_tokens": ["A", "B", "C", "D", "E", "F"],
+          "expected_token": "F",
+          "expected_prompt_tokens": 16,
+          "timeout_seconds": 2.0
+        },
+        {
+          "prompt": "2100399929990806",
+          "allowed_tokens": ["A", "B", "C"],
+          "expected_token": "A",
+          "expected_prompt_tokens": 16,
+          "timeout_seconds": 2.0
+        }
+      ]
+    }
+  }
+}
