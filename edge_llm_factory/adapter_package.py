@@ -39,7 +39,6 @@ ALLOWED_ROOT_FILES = {
     ACTION_MAP_NAME,
     ADAPTER_CONFIG_NAME,
     ADAPTER_WEIGHTS_NAME,
-    "README.md",
 }
 
 
@@ -297,29 +296,6 @@ def _metric_values(
     return metrics
 
 
-def _readme(spec: Mapping[str, Any], base: Mapping[str, Any]) -> str:
-    return """# {adapter_id}
-
-场景：`{scene}`  
-版本：`{version}`  
-绑定基座：`{base_id}`
-
-此目录是自动构建的场景 LoRA 发布包。加载前必须执行：
-
-```bash
-python -m edge_llm_factory validate-adapter --base /path/to/base_manifest.json --package .
-```
-
-包内只包含 PEFT 配置、safetensors LoRA、动作映射和哈希锁定的评测证据；
-部署 GGUF 单独分发，并通过 `scene_adapter_manifest.json` 中的 SHA256 校验。
-""".format(
-        adapter_id=spec["adapter_id"],
-        scene=spec["scene"],
-        version=spec["version"],
-        base_id=base["base_id"],
-    )
-
-
 def build_adapter_package(
     project_root: Path,
     base_manifest_path: Path,
@@ -401,7 +377,6 @@ def build_adapter_package(
             },
         }
         write_json_object(temporary / MANIFEST_NAME, manifest)
-        (temporary / "README.md").write_text(_readme(spec, base), encoding="utf-8")
         validation = validate_adapter_package(temporary, base_manifest_path, require_gates=True)
         if output.exists():
             if not output.is_dir() or not (output / MANIFEST_NAME).is_file():
