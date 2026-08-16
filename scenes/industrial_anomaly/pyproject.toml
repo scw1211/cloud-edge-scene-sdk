@@ -7,7 +7,12 @@ name = "cloud-edge-industrial-anomaly-scene"
 version = "0.1.0"
 description = "RGB/infrared industrial anomaly scene for cloud-edge-scene-sdk"
 requires-python = ">=3.8"
-dependencies = ["cloud-edge-scene-sdk>=0.13,<0.14"]
+dependencies = [
+  "cloud-edge-scene-sdk>=0.13,<0.14",
+  "joblib>=1.3,<2",
+  "numpy>=1.24,<3",
+  "scikit-learn>=1.3,<2",
+]
 
 [tool.setuptools.packages.find]
 include = ["industrial_anomaly*"]

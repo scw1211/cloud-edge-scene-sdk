@@ -20,8 +20,11 @@
       "enabled": true,
       "options": {
         "thresholds_path": "scenes/industrial_anomaly/industrial_anomaly/review_bands.json",
+        "cloud_model_path": "scenes/industrial_anomaly/assets/models/industrial_cloud_extratrees_capsule_v1.joblib",
+        "cloud_llm_min_expected_gain": 0.20,
+        "cloud_llm_review_confidence_threshold": 0.85,
         "aggregation_timeout_ms": 150,
-        "policy_version": "industrial-1.1.0"
+        "policy_version": "industrial-1.5.0-extratrees"
       }
     }
   ]

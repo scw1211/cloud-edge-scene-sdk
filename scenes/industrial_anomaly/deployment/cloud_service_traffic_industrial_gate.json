@@ -14,6 +14,11 @@
     "artifacts": "runtime/traffic_industrial_gate/cloud_artifacts",
     "aggregations": "runtime/traffic_industrial_gate/cloud_aggregations.sqlite3"
   },
+  "cloud_llm": {
+    "enabled": true,
+    "runtime_config": "scenes/freeway_traffic/deployment/full/cloud_qwen9b_ollama.json",
+    "min_risk_level": "severe"
+  },
   "idempotency": {
     "ttl_seconds": 86400,
     "max_entries": 100000

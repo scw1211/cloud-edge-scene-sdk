@@ -25,6 +25,7 @@ from cloud_edge_framework.review_tracking import ReviewLifecycleStore
 from cloud_edge_framework.runtime import CloudRuntime, EdgeRuntime
 from cloud_edge_framework.scheduling import NetworkSnapshot
 from industrial_anomaly.plugin import IndustrialAnomalyPlugin
+from industrial_anomaly.cloud_coordinator import IndustrialCloudPrediction
 from freeway_traffic_scene.plugin import FreewayTrafficPlugin
 
 
@@ -86,6 +87,35 @@ class _IndustrialActionClient:
             "output_tokens": 1,
             "decoding_constraint": {"allowed_tokens": ["A", "B", "C"]},
         }
+
+
+class _IndustrialCloudCoordinatorStub:
+    def __init__(self, decision="anomaly", confidence=0.82):
+        self.decision = decision
+        self.confidence = confidence
+        self.calls = []
+
+    def describe(self):
+        return {
+            "model_id": "industrial-extratrees-stub",
+            "supported_products": ["capsule"],
+        }
+
+    def predict(self, product, records):
+        self.calls.append((product, copy.deepcopy(records)))
+        return IndustrialCloudPrediction(
+            decision=self.decision,
+            confidence=self.confidence,
+            probabilities={
+                "normal": 1.0 - self.confidence
+                if self.decision == "anomaly"
+                else self.confidence,
+                "anomaly": self.confidence
+                if self.decision == "anomaly"
+                else 1.0 - self.confidence,
+            },
+            feature_context=copy.deepcopy(records),
+        )
 
 
 class IndustrialAnomalyPluginTests(unittest.TestCase):
@@ -572,6 +602,128 @@ class IndustrialAnomalyPluginTests(unittest.TestCase):
                 self.assertTrue(
                     all(item.metadata["cross_modal_complete"] for item in decisions)
                 )
+
+    def test_cross_modal_extratrees_is_primary_and_selects_qwen_by_gain(self):
+        coordinator = _IndustrialCloudCoordinatorStub(
+            decision="anomaly", confidence=0.65
+        )
+        self.plugin._cloud_coordinator = coordinator
+        events = [
+            self._normalize(
+                _with_score(_sample("rgb_event.json"), "tree-rgb", 0.0060)
+            ),
+            self._normalize(
+                _with_score(
+                    _sample("infrared_event.json"),
+                    "tree-infrared",
+                    0.0082,
+                    modality="infrared",
+                )
+            ),
+        ]
+
+        decisions = self.plugin.cloud_decide_batch(
+            self.plugin.fuse_cloud_context(events)
+        )
+
+        self.assertEqual([item.decision for item in decisions], ["anomaly"] * 2)
+        self.assertEqual(len(coordinator.calls), 1)
+        for decision in decisions:
+            self.assertEqual(
+                decision.metadata["source"],
+                "industrial_cloud_extratrees_coordinator",
+            )
+            self.assertEqual(decision.metadata["cloud_model"], "industrial_extratrees")
+            self.assertTrue(decision.metadata["cloud_llm_review_policy"]["eligible"])
+            self.assertEqual(
+                decision.metadata["cloud_review_context"]["extratrees_decision"],
+                "anomaly",
+            )
+
+    def test_cross_modal_extratrees_high_confidence_consensus_skips_qwen(self):
+        self.plugin._cloud_coordinator = _IndustrialCloudCoordinatorStub(
+            decision="normal", confidence=0.98
+        )
+        events = [
+            self._normalize(
+                _with_score(_sample("rgb_event.json"), "tree-normal-rgb", 0.0060)
+            ),
+            self._normalize(
+                _with_score(
+                    _sample("infrared_event.json"),
+                    "tree-normal-infrared",
+                    0.0070,
+                    modality="infrared",
+                )
+            ),
+        ]
+
+        decisions = self.plugin.cloud_decide_batch(
+            self.plugin.fuse_cloud_context(events)
+        )
+
+        self.assertEqual([item.decision for item in decisions], ["normal"] * 2)
+        self.assertTrue(
+            all(
+                not item.metadata["cloud_llm_review_policy"]["eligible"]
+                for item in decisions
+            )
+        )
+
+    def test_industrial_cloud_batch_keeps_multiple_sample_groups_isolated(self):
+        coordinator = _IndustrialCloudCoordinatorStub(
+            decision="anomaly", confidence=0.99
+        )
+        self.plugin._cloud_coordinator = coordinator
+        rgb = _sample("rgb_event.json")
+        infrared = _sample("infrared_event.json")
+        events = []
+        for sample_index in range(2):
+            sample_id = "batch-sample-{}".format(sample_index)
+            pair = []
+            for payload, modality in ((rgb, "rgb"), (infrared, "infrared")):
+                value = _with_score(
+                    payload,
+                    "{}-{}".format(sample_id, modality),
+                    0.0085,
+                    modality=modality,
+                )
+                value["data"]["sample_id"] = sample_id
+                pair.append(self._normalize(value))
+            events.extend(self.plugin.fuse_cloud_context(pair))
+
+        decisions = self.plugin.cloud_decide_batch(events)
+
+        self.assertEqual(len(decisions), 4)
+        self.assertEqual(len(coordinator.calls), 2)
+        self.assertEqual([item.decision for item in decisions], ["anomaly"] * 4)
+
+    def test_cloud_qwen_challenge_is_advisory_and_preserves_extratrees(self):
+        event = self._normalize(_sample("rgb_event.json"))
+        baseline = self.plugin._cloud_group_decisions([event])[0]
+
+        reviewed = self.plugin.apply_cloud_llm_review(
+            event,
+            baseline,
+            {
+                "verdict": "challenge",
+                "recommended_decision": "normal",
+                "confidence": 0.9,
+                "reason": "uncertain boundary",
+            },
+        )
+
+        self.assertEqual(reviewed.decision, baseline.decision)
+        self.assertEqual(reviewed.actions, baseline.actions)
+        self.assertTrue(reviewed.metadata["cloud_llm_baseline_preserved"])
+        self.assertEqual(
+            reviewed.metadata["cloud_llm_review_role"],
+            "advisory_non_authoritative",
+        )
+        self.assertEqual(
+            reviewed.metadata["cloud_llm_advisory_recommendation"],
+            "normal",
+        )
 
     def test_incomplete_member_is_review_not_global_final(self):
         payload = _sample("rgb_event.json")

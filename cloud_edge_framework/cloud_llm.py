@@ -62,6 +62,29 @@ class CloudLLMReviewer:
             >= RISK_PRIORITY[self.min_risk_level]
         )
 
+    def should_review_decision(
+        self,
+        event: SemanticEvent,
+        baseline: DecisionEnvelope,
+    ) -> bool:
+        """Honor post-fusion scene policy before falling back to event policy.
+
+        Traffic can decide review eligibility from an edge event.  Industrial
+        cross-modal confidence only exists after the cloud has fused RGB and
+        infrared and run its ExtraTrees baseline, so that policy is attached
+        to the baseline decision instead.
+        """
+
+        policy = baseline.metadata.get("cloud_llm_review_policy")
+        if policy is None:
+            return self.should_review(event)
+        if not isinstance(policy, dict):
+            raise ValueError("cloud_llm_review_policy must be an object")
+        eligible = policy.get("eligible", False)
+        if not isinstance(eligible, bool):
+            raise ValueError("cloud_llm_review_policy.eligible must be boolean")
+        return eligible
+
     @staticmethod
     def _prompt(event: SemanticEvent, baseline: DecisionEnvelope) -> str:
         payload = {
@@ -104,6 +127,9 @@ class CloudLLMReviewer:
                 "decision": baseline.decision,
                 "actions": [action.to_dict() for action in baseline.actions],
                 "reason": baseline.reason,
+                "scene_review_context": baseline.metadata.get(
+                    "cloud_review_context"
+                ),
             },
         }
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -133,8 +159,8 @@ class CloudLLMReviewer:
         if not math.isfinite(confidence) or confidence < 0.0 or confidence > 1.0:
             raise ValueError("cloud LLM confidence must be within 0 and 1")
         reason = str(value.get("reason", "")).strip()
-        if not reason or len(reason) > 500:
-            raise ValueError("cloud LLM reason must contain 1 to 500 characters")
+        if not reason or len(reason) > 160:
+            raise ValueError("cloud LLM reason must contain 1 to 160 characters")
         return {
             "verdict": verdict,
             "recommended_decision": recommended,
@@ -149,7 +175,8 @@ class CloudLLMReviewer:
             "You are a cloud safety reviewer. Review the baseline decision using only "
             "the supplied structured event. Return exactly one JSON object with keys "
             "verdict, recommended_decision, confidence, reason. verdict must be accept "
-            "or challenge. Do not return markdown or additional text."
+            "or challenge. reason must contain at most 20 words. Do not return markdown "
+            "or additional text."
         )
         schema = {
             "type": "object",
@@ -164,7 +191,7 @@ class CloudLLMReviewer:
                 "verdict": {"type": "string", "enum": ["accept", "challenge"]},
                 "recommended_decision": {"type": "string", "minLength": 1},
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                "reason": {"type": "string", "minLength": 1, "maxLength": 500},
+                "reason": {"type": "string", "minLength": 1, "maxLength": 160},
             },
         }
         generator = getattr(self.provider, "generate_structured", None)

@@ -1,0 +1,171 @@
+{
+  "all_gates_passed": true,
+  "architecture": {
+    "aggregation": "paired RGB/infrared compact summaries",
+    "primary": "industrial ExtraTrees",
+    "review_safety": "Qwen is advisory; accept and challenge both preserve ExtraTrees",
+    "selective_reviewer": "Qwen3.5 9B via Ollama"
+  },
+  "assets": {
+    "extratrees_model": {
+      "bytes": 108466,
+      "path": "/home/scw/cloud-edge-scene-sdk/scenes/industrial_anomaly/assets/models/industrial_cloud_extratrees_capsule_v1.joblib",
+      "sha256": "f733bb4e983ab9e1be3e29bcfad8abca755563e6795a7ee4e75bda9718959ab4"
+    },
+    "review_bands": {
+      "bytes": 1987,
+      "path": "/home/scw/cloud-edge-scene-sdk/scenes/industrial_anomaly/industrial_anomaly/review_bands.json",
+      "sha256": "ff95475e9294440e6f871a40682e827582114d7589553cb6385794598624d7b7"
+    }
+  },
+  "cases": [
+    {
+      "cloud_runtime_ms": 62.929051,
+      "decisions": [
+        "normal",
+        "normal"
+      ],
+      "extratrees_confidence": 0.935994639,
+      "extratrees_probabilities": {
+        "anomaly": 0.064005361,
+        "normal": 0.935994639
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 105.00137,
+      "name": "high-confidence",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.064005,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-high-confidence-1786848882169752055",
+      "scores": {
+        "infrared": 0.007,
+        "rgb": 0.006
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 766.288118,
+      "decisions": [
+        "normal",
+        "normal"
+      ],
+      "extratrees_confidence": 0.637612073,
+      "extratrees_probabilities": {
+        "anomaly": 0.362387927,
+        "normal": 0.637612073
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 811.649104,
+      "name": "low-confidence",
+      "qwen_review": {
+        "confidence": 0.95,
+        "latency_ms": 756.513,
+        "model": "qwen3.5:9b",
+        "output_tokens": 37,
+        "prompt_tokens": 481,
+        "provider": "ollama",
+        "reason": "High risk score and model uncertainty require review despite baseline normal decision.",
+        "recommended_decision": "hold_for_review",
+        "verdict": "challenge"
+      },
+      "qwen_review_policy": {
+        "eligible": true,
+        "expected_gain": 0.362388,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": true,
+        "model_uncertainty_requires_synchronous_review": true,
+        "reason": "industrial_extratrees_uncertainty_with_expected_gain"
+      },
+      "qwen_review_present": [
+        true,
+        true
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": true,
+      "sample_id": "industrial-cloud-low-confidence-1786848882279043814",
+      "scores": {
+        "infrared": 0.00802,
+        "rgb": 0.00745
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    }
+  ],
+  "cloud_url": "http://127.0.0.1:18100",
+  "gates": {
+    "both_paths_globally_consistent": true,
+    "extratrees_model_identity_matches": true,
+    "fast_path_cloud_runtime_under_200ms": true,
+    "fast_path_final_normal": true,
+    "fast_path_is_extratrees": true,
+    "fast_path_skips_qwen": true,
+    "qwen9b_reviewer_enabled": true,
+    "qwen_is_advisory_and_preserves_extratrees": true,
+    "review_path_qwen_is_cost_selected": true,
+    "review_path_reuses_one_group_review": true,
+    "review_path_starts_from_extratrees": true,
+    "service_ready_with_two_scenes": true
+  },
+  "measured_at": "2026-08-16T02:54:43.091131+00:00",
+  "schema_version": "industrial-cloud-chain-http-evidence/v1",
+  "service": {
+    "cloud_llm": {
+      "enabled": true,
+      "min_risk_level": "severe",
+      "runtime": {
+        "authenticated": false,
+        "endpoint": "http://127.0.0.1:11434",
+        "generation": {
+          "keep_alive": "30m",
+          "max_input_tokens": 2048,
+          "max_output_tokens": 128,
+          "seed": 42,
+          "temperature": 0.0,
+          "thinking": false,
+          "top_p": 1.0
+        },
+        "lora_adapter": null,
+        "model": "qwen3.5:9b",
+        "provider": "ollama",
+        "release_binding": null,
+        "schema_version": "edge-llm-runtime/v1",
+        "timeout_seconds": 30.0
+      }
+    },
+    "framework_version": "0.4.1",
+    "industrial_policy_version": "industrial-1.6.0-traffic-aligned",
+    "ready": true,
+    "scenes": [
+      "industrial_anomaly",
+      "traffic"
+    ],
+    "status": "ok"
+  }
+}

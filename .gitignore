@@ -23,6 +23,11 @@ results/
 !scenes/freeway_traffic/assets/edge_llm/adapter_package/adapter_model.safetensors
 !scenes/freeway_traffic/assets/edge_llm/adapter_package_current_state_v2/adapter_model.safetensors
 
+# 工业云端专用 ExtraTrees 很小，连同冻结评测证据作为场景资产交付。
+!scenes/industrial_anomaly/assets/
+!scenes/industrial_anomaly/assets/models/
+!scenes/industrial_anomaly/assets/models/**
+
 # 两个大文件由 install_full_assets.py 下载，不进入 Git。
 scenes/freeway_traffic/assets/downloads/
 

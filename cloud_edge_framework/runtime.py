@@ -83,16 +83,35 @@ class CloudRuntime:
         event: SemanticEvent,
         plugin: Any,
         decision: DecisionEnvelope,
+        review_cache: Optional[Dict[str, Any]] = None,
     ) -> DecisionEnvelope:
         if self.reviewer is not None:
             review_stage = "eligibility"
             try:
-                if self.reviewer.should_review(event):
+                should_review = (
+                    self.reviewer.should_review_decision(event, decision)
+                    if hasattr(self.reviewer, "should_review_decision")
+                    else self.reviewer.should_review(event)
+                )
+                if should_review:
                     review_stage = "inference"
-                    review = self.reviewer.review(event, decision)
+                    cache_key = decision.metadata.get("cloud_llm_review_group_key")
+                    cached = None
+                    if review_cache is not None and isinstance(cache_key, str):
+                        cached = review_cache.get(cache_key)
+                    if cached is None:
+                        try:
+                            review_value = self.reviewer.review(event, decision).to_dict()
+                            cached = {"ok": True, "value": review_value}
+                        except Exception as exc:  # noqa: BLE001
+                            cached = {"ok": False, "value": exc}
+                        if review_cache is not None and isinstance(cache_key, str):
+                            review_cache[cache_key] = cached
+                    if not bool(cached["ok"]):
+                        raise cached["value"]
                     review_stage = "application"
                     decision = plugin.apply_cloud_llm_review(
-                        event, decision, review.to_dict()
+                        event, decision, dict(cached["value"])
                     )
             except Exception as exc:  # noqa: BLE001
                 decision = replace(
@@ -140,8 +159,14 @@ class CloudRuntime:
             raise ValueError("scene cloud_decide_batch changed decision count")
         if any(not isinstance(decision, DecisionEnvelope) for decision in baselines):
             raise TypeError("scene cloud_decide_batch must return DecisionEnvelope values")
+        review_cache: Dict[str, Any] = {}
         return [
-            self._finalize_decision(event, plugin, decision)
+            self._finalize_decision(
+                event,
+                plugin,
+                decision,
+                review_cache=review_cache,
+            )
             for event, decision in zip(normalized, baselines)
         ]
 

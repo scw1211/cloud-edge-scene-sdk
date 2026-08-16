@@ -10,6 +10,7 @@ from pathlib import Path
 import tempfile
 import threading
 import time
+from types import SimpleNamespace
 import unittest
 from typing import Any, Dict, Optional
 
@@ -177,6 +178,39 @@ class _AggregationPlugin(ScenePlugin):
             source="fixture_cloud",
             policy_version=self.policy_version,
         )
+
+
+class _GroupedCloudReviewPlugin(_AggregationPlugin):
+    def cloud_decide(self, event: SemanticEvent):
+        baseline = super().cloud_decide(event)
+        return replace(
+            baseline,
+            metadata={
+                **baseline.metadata,
+                "cloud_llm_review_group_key": "fixture:" + event.scope.entity_id,
+                "cloud_llm_review_policy": {"eligible": True},
+            },
+        )
+
+
+class _CountingCloudReviewer:
+    def __init__(self):
+        self.calls = 0
+
+    def should_review_decision(self, event, baseline):
+        del event
+        return baseline.metadata["cloud_llm_review_policy"]["eligible"]
+
+    def review(self, event, baseline):
+        del event, baseline
+        self.calls += 1
+        value = {
+            "verdict": "accept",
+            "recommended_decision": "monitor",
+            "confidence": 0.99,
+            "reason": "group baseline accepted",
+        }
+        return SimpleNamespace(to_dict=lambda: value)
 
 
 class _ForbiddenSlowCloud:
@@ -982,6 +1016,59 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
         self.assertEqual(prompt["operational_safety_risk"]["level"], "low")
         self.assertEqual(prompt["model_uncertainty"]["score"], 0.2)
         self.assertEqual(prompt["escalation_expected_gain"]["score"], 0.1)
+        self.assertIsNone(prompt["baseline"]["scene_review_context"])
+
+    def test_cloud_llm_can_select_from_post_fusion_decision_policy(self) -> None:
+        plugin = _AggregationPlugin(False)
+        event = plugin.normalize(SceneEventEnvelope.from_dict(_payload()))
+        baseline = plugin.cloud_decide(event)
+        baseline = replace(
+            baseline,
+            metadata={
+                **baseline.metadata,
+                "cloud_llm_review_policy": {
+                    "eligible": True,
+                    "reason": "post_fusion_uncertainty",
+                },
+                "cloud_review_context": {"rgb": "review", "infrared": "anomaly"},
+            },
+        )
+        reviewer = CloudLLMReviewer(provider=object())
+
+        self.assertTrue(reviewer.should_review_decision(event, baseline))
+        prompt = json.loads(reviewer._prompt(event, baseline))
+        self.assertEqual(
+            prompt["baseline"]["scene_review_context"],
+            {"rgb": "review", "infrared": "anomaly"},
+        )
+
+    def test_cloud_llm_reviews_one_time_per_fused_group(self) -> None:
+        plugin = _GroupedCloudReviewPlugin(False)
+        reviewer = _CountingCloudReviewer()
+        registry = SceneRegistry([plugin])
+        try:
+            events = [
+                plugin.normalize(
+                    SceneEventEnvelope.from_dict(
+                        _payload("group-a", "sample-group", "edge-a", 1.0)
+                    )
+                ),
+                plugin.normalize(
+                    SceneEventEnvelope.from_dict(
+                        _payload("group-b", "sample-group", "edge-b", 2.0)
+                    )
+                ),
+            ]
+
+            decisions = CloudRuntime(registry, reviewer=reviewer).decide_batch(events)
+
+            self.assertEqual(len(decisions), 2)
+            self.assertEqual(reviewer.calls, 1)
+            self.assertTrue(
+                all("cloud_llm_review" in item.metadata for item in decisions)
+            )
+        finally:
+            registry.close()
 
     def test_cloud_llm_eligibility_error_preserves_expert_baseline(self) -> None:
         registry = SceneRegistry([_AggregationPlugin(False)])

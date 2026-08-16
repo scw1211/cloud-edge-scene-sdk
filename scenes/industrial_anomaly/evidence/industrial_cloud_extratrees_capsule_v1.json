@@ -1,0 +1,65 @@
+{
+  "schema_version": "industrial-cloud-extratrees-evaluation/v1",
+  "model_id": "industrial-capsule-cross-modal-extratrees-v1",
+  "artifact": {
+    "path": "/home/scw/cloud-edge-scene-sdk/scenes/industrial_anomaly/assets/models/industrial_cloud_extratrees_capsule_v1.joblib",
+    "bytes": 108466,
+    "sha256": "f733bb4e983ab9e1be3e29bcfad8abca755563e6795a7ee4e75bda9718959ab4"
+  },
+  "training": {
+    "dataset": "MulSen_AD/capsule paired Nano TensorRT scores",
+    "split_policy": "stratified fixed heldout; heldout rows never fitted",
+    "seed": 42,
+    "paired_samples": 58,
+    "train_samples": 40,
+    "heldout_samples": 18,
+    "train_identity_sha256": "77140c97c6e3d2ab159fcc68d1e748cfaf176ea2329e77858131125925ca28b5",
+    "heldout_identity_sha256": "cda56e8a5553bdad05ea707aa7211e4fcf23540ff11e7228ec841274ced6a5e3",
+    "rgb_predictions": {
+      "bytes": 6415,
+      "sha256": "7a485739a5e2630237a69497efc16a0b90619aed298bc695e750b6385a236517"
+    },
+    "infrared_predictions": {
+      "bytes": 6695,
+      "sha256": "48f20ebe0b16a92acbe077f7f02ab918a86a787790abd620d327cf9626f8fc2e"
+    },
+    "thresholds": {
+      "bytes": 1987,
+      "sha256": "ff95475e9294440e6f871a40682e827582114d7589553cb6385794598624d7b7"
+    },
+    "sklearn_version": "1.7.2"
+  },
+  "heldout": {
+    "samples": 18,
+    "accuracy": 1.0,
+    "balanced_accuracy": 1.0,
+    "macro_f1": 1.0,
+    "anomaly_precision": 1.0,
+    "anomaly_recall": 1.0,
+    "roc_auc": 1.0,
+    "confusion_matrix_normal_anomaly": [
+      [
+        3,
+        0
+      ],
+      [
+        0,
+        15
+      ]
+    ]
+  },
+  "deterministic_unanimous_baseline": {
+    "heldout_samples": 18,
+    "covered_samples": 11,
+    "coverage": 0.611111111,
+    "covered_accuracy": 1.0,
+    "unresolved_review_samples": 7
+  },
+  "gates": {
+    "heldout_not_fitted": true,
+    "heldout_accuracy_at_least_0_90": true,
+    "heldout_balanced_accuracy_at_least_0_90": true,
+    "heldout_anomaly_recall_at_least_0_95": true
+  },
+  "all_gates_passed": true
+}

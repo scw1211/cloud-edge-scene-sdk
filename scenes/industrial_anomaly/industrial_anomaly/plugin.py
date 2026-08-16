@@ -31,6 +31,7 @@ from edge_llm_factory.providers import (
 )
 from edge_llm_factory.runtime import ConfiguredActionClient
 from .action_codec import prompt_from_values
+from .cloud_coordinator import IndustrialCloudCoordinator
 
 
 PRODUCTS = (
@@ -54,6 +55,8 @@ INDUSTRIAL_SELECTIVE_TIMEOUT_SECONDS = 0.18
 # Keep the low default, but allow a bounded per-deployment limit that covers
 # both calls while the population-mean end-to-end SLA remains below 200 ms.
 INDUSTRIAL_MAX_CONFIGURABLE_SELECTIVE_TIMEOUT_SECONDS = 0.5
+INDUSTRIAL_CLOUD_LLM_MIN_EXPECTED_GAIN = 0.20
+INDUSTRIAL_CLOUD_REVIEW_CONFIDENCE = 0.85
 
 
 def _json_size(value: Any) -> int:
@@ -121,6 +124,13 @@ class IndustrialAnomalyPlugin(ScenePlugin):
         edge_llm_selective_timeout_limit_seconds: float = (
             INDUSTRIAL_SELECTIVE_TIMEOUT_SECONDS
         ),
+        cloud_model_path: Optional[Path] = None,
+        cloud_llm_min_expected_gain: float = (
+            INDUSTRIAL_CLOUD_LLM_MIN_EXPECTED_GAIN
+        ),
+        cloud_llm_review_confidence_threshold: float = (
+            INDUSTRIAL_CLOUD_REVIEW_CONFIDENCE
+        ),
     ) -> None:
         self.policy_version = str(policy_version)
         self.aggregation_timeout_ms = int(aggregation_timeout_ms)
@@ -164,6 +174,23 @@ class IndustrialAnomalyPlugin(ScenePlugin):
         self._edge_llm_invocations = 0
         self._edge_llm_agreements = 0
         self._edge_llm_fallbacks = 0
+        self.cloud_model_path = (
+            Path(cloud_model_path).resolve()
+            if cloud_model_path is not None
+            else None
+        )
+        self.cloud_llm_min_expected_gain = float(cloud_llm_min_expected_gain)
+        if not 0.0 <= self.cloud_llm_min_expected_gain <= 1.0:
+            raise ValueError("industrial cloud_llm_min_expected_gain must be in [0, 1]")
+        self.cloud_llm_review_confidence_threshold = float(
+            cloud_llm_review_confidence_threshold
+        )
+        if not 0.5 <= self.cloud_llm_review_confidence_threshold <= 1.0:
+            raise ValueError(
+                "industrial cloud_llm_review_confidence_threshold must be in [0.5, 1]"
+            )
+        self._cloud_coordinator: Optional[IndustrialCloudCoordinator] = None
+        self._cloud_model_last_error: Optional[str] = None
         self.thresholds_path = Path(
             thresholds_path or Path(__file__).with_name("review_bands.json")
         ).resolve()
@@ -244,9 +271,32 @@ class IndustrialAnomalyPlugin(ScenePlugin):
             "modalities": list(EXPECTED_MODALITIES),
             "product_count": len(PRODUCTS),
             "thresholds_path": str(self.thresholds_path),
+            "cloud_decision_engine": (
+                "industrial_extratrees_with_selective_qwen9b_review"
+                if self._cloud_coordinator is not None
+                else "deterministic_cross_modal_policy"
+            ),
+            "cloud_model_path": (
+                str(self.cloud_model_path) if self.cloud_model_path is not None else None
+            ),
+            "cloud_model": (
+                self._cloud_coordinator.describe()
+                if self._cloud_coordinator is not None
+                else None
+            ),
+            "cloud_model_last_error": self._cloud_model_last_error,
+            "cloud_llm_min_expected_gain": self.cloud_llm_min_expected_gain,
+            "cloud_llm_review_confidence_threshold": (
+                self.cloud_llm_review_confidence_threshold
+            ),
         }
 
     def warmup(self) -> None:
+        if self.cloud_model_path is not None and self._cloud_coordinator is None:
+            self._cloud_coordinator = IndustrialCloudCoordinator.load(
+                self.cloud_model_path
+            )
+            self._cloud_model_last_error = None
         if self.edge_llm_mode == "disabled":
             return
         assert self.edge_llm_runtime_config_path is not None
@@ -753,21 +803,153 @@ class IndustrialAnomalyPlugin(ScenePlugin):
             return "anomaly", states
         return "review", states
 
-    def cloud_decide_batch(
+    @staticmethod
+    def _cloud_records(events: Sequence[SemanticEvent]) -> Dict[str, Dict[str, Any]]:
+        records: Dict[str, Dict[str, Any]] = {}
+        for event in events:
+            modality = str(event.metadata.get("modality"))
+            if modality in records:
+                raise ValueError(
+                    "industrial cloud group contains a duplicate {} member".format(
+                        modality
+                    )
+                )
+            records[modality] = {
+                "score": float(event.metadata["score"]),
+                "review_low": float(event.metadata["review_low"]),
+                "review_high": float(event.metadata["review_high"]),
+                "state": str(
+                    event.metadata.get(
+                        "edge_decision", event.metadata.get("local_state")
+                    )
+                ),
+            }
+        return records
+
+    def _cloud_group_decisions(
         self,
         events: Sequence[SemanticEvent],
-    ) -> Sequence[DecisionEnvelope]:
-        if not events:
-            return []
-        sample_keys = {
-            (str(event.metadata.get("product")), str(event.metadata.get("sample_id")))
-            for event in events
-        }
-        if len(sample_keys) != 1:
-            raise ValueError("industrial cloud batch must contain one product/sample group")
+    ) -> List[DecisionEnvelope]:
         state, modality_states = self._joint_state(events)
         complete = set(modality_states) == set(EXPECTED_MODALITIES)
+        product = str(events[0].metadata["product"])
         confidence = min(event.prediction.confidence for event in events)
+        source = "industrial_cloud_cross_modal"
+        reason = (
+            "RGB and infrared decisions agree on {}".format(state)
+            if state in {"normal", "anomaly"} and complete
+            else "cross-modal disagreement or incomplete evidence requires review"
+        )
+        model_name = "deterministic_cross_modal_policy"
+        model_metadata: Dict[str, Any] = {}
+        review_policy = {
+            "eligible": False,
+            "reason": "industrial_cloud_extratrees_not_configured",
+            "expected_gain": 0.0,
+            "minimum_expected_gain": self.cloud_llm_min_expected_gain,
+            "legacy_risk_trigger_used": False,
+        }
+
+        if complete and self._cloud_coordinator is not None:
+            try:
+                prediction = self._cloud_coordinator.predict(
+                    product, self._cloud_records(events)
+                )
+                state = prediction.decision
+                confidence = prediction.confidence
+                source = "industrial_cloud_extratrees_coordinator"
+                model_name = "industrial_extratrees"
+                reason = (
+                    "industrial ExtraTrees fused RGB and infrared score margins "
+                    "into {}".format(state)
+                )
+                contains_review = "review" in modality_states.values()
+                state_conflict = len(set(modality_states.values())) > 1
+                uncertainty = max(0.0, 1.0 - confidence)
+                expected_gain = min(
+                    1.0,
+                    uncertainty + (0.05 if state_conflict else 0.0),
+                )
+                review_candidate = (
+                    contains_review
+                    or state_conflict
+                    or confidence < self.cloud_llm_review_confidence_threshold
+                )
+                eligible = (
+                    review_candidate
+                    and expected_gain >= self.cloud_llm_min_expected_gain
+                )
+                review_policy = {
+                    "eligible": eligible,
+                    "reason": (
+                        "industrial_extratrees_uncertainty_with_expected_gain"
+                        if eligible
+                        else (
+                            "industrial_extratrees_expected_gain_below_threshold"
+                            if review_candidate
+                            else "industrial_extratrees_high_confidence_consensus"
+                        )
+                    ),
+                    "explicit_requested": False,
+                    "model_uncertainty_requires_review": review_candidate,
+                    "model_uncertainty_requires_synchronous_review": review_candidate,
+                    "expected_gain": round(expected_gain, 6),
+                    "expected_gain_source": "industrial_extratrees_confidence",
+                    "minimum_expected_gain": self.cloud_llm_min_expected_gain,
+                    "legacy_risk_trigger_used": False,
+                }
+                model_metadata = {
+                    "cloud_model_id": self._cloud_coordinator.describe()["model_id"],
+                    "cloud_llm_review_group_key": "industrial:{}:{}".format(
+                        product, events[0].metadata["sample_id"]
+                    ),
+                    "cloud_model_confidence": round(confidence, 9),
+                    "cloud_model_probabilities": {
+                        key: round(value, 9)
+                        for key, value in prediction.probabilities.items()
+                    },
+                    "cloud_review_context": {
+                        "product": product,
+                        "modality_states": dict(modality_states),
+                        "modality_scores": {
+                            modality: round(
+                                float(record["score"]), 12
+                            )
+                            for modality, record in prediction.feature_context.items()
+                        },
+                        "extratrees_decision": state,
+                        "extratrees_confidence": round(confidence, 9),
+                    },
+                }
+                self._cloud_model_last_error = None
+            except ValueError as exc:
+                # The v1 artifact is deliberately capsule-only.  Unsupported
+                # products retain the deterministic safe policy instead of
+                # pretending the model generalizes beyond its frozen data.
+                if "does not support product" not in str(exc):
+                    self._cloud_model_last_error = "{}: {}".format(
+                        type(exc).__name__, exc
+                    )
+                    state = "review"
+                    confidence = max(0.5, min(0.85, confidence))
+                    reason = "industrial ExtraTrees failed closed to review"
+                    model_name = "industrial_extratrees_runtime_fallback"
+                else:
+                    model_metadata["cloud_model_fallback_reason"] = (
+                        "unsupported_product"
+                    )
+                    review_policy["reason"] = (
+                        "industrial_extratrees_product_not_supported"
+                    )
+            except Exception as exc:  # noqa: BLE001
+                self._cloud_model_last_error = "{}: {}".format(
+                    type(exc).__name__, exc
+                )
+                state = "review"
+                confidence = max(0.5, min(0.85, confidence))
+                reason = "industrial ExtraTrees failed closed to review"
+                model_name = "industrial_extratrees_runtime_fallback"
+
         if state == "review":
             confidence = max(0.5, min(0.85, confidence))
         results: List[DecisionEnvelope] = []
@@ -782,12 +964,8 @@ class IndustrialAnomalyPlugin(ScenePlugin):
                     cloud_final=True,
                 ),
                 confidence=confidence,
-                reason=(
-                    "RGB and infrared decisions agree on {}".format(state)
-                    if state in {"normal", "anomaly"} and complete
-                    else "cross-modal disagreement or incomplete evidence requires review"
-                ),
-                source="industrial_cloud_cross_modal",
+                reason=reason,
+                source=source,
                 policy_version=self.policy_version,
             )
             metadata = dict(decision.metadata)
@@ -798,14 +976,66 @@ class IndustrialAnomalyPlugin(ScenePlugin):
                     "modality_states": dict(modality_states),
                     "cross_modal_complete": complete,
                     "evidence_escalation_required": state == "review",
-                    "cloud_model": "deterministic_cross_modal_policy",
+                    "cloud_model": model_name,
+                    "cloud_llm_review_policy": dict(review_policy),
+                    **model_metadata,
                 }
             )
             results.append(replace(decision, metadata=metadata))
         return results
 
+    def cloud_decide_batch(
+        self,
+        events: Sequence[SemanticEvent],
+    ) -> Sequence[DecisionEnvelope]:
+        if not events:
+            return []
+        grouped: Dict[Tuple[str, str], List[int]] = {}
+        for index, event in enumerate(events):
+            key = (
+                str(event.metadata.get("product")),
+                str(event.metadata.get("sample_id")),
+            )
+            grouped.setdefault(key, []).append(index)
+        decisions: List[Optional[DecisionEnvelope]] = [None] * len(events)
+        for indices in grouped.values():
+            group_decisions = self._cloud_group_decisions(
+                [events[index] for index in indices]
+            )
+            for index, decision in zip(indices, group_decisions):
+                decisions[index] = decision
+        if any(decision is None for decision in decisions):
+            raise RuntimeError("industrial cloud batch left an event undecided")
+        return [decision for decision in decisions if decision is not None]
+
     def cloud_decide(self, event: SemanticEvent) -> DecisionEnvelope:
         return list(self.cloud_decide_batch([event]))[0]
+
+    def apply_cloud_llm_review(
+        self,
+        event: SemanticEvent,
+        baseline: DecisionEnvelope,
+        review: Dict[str, Any],
+    ) -> DecisionEnvelope:
+        """Record Qwen's advisory review without replacing ExtraTrees authority.
+
+        This intentionally matches the traffic scene: the scene-specific tree
+        ensemble owns the online decision, while the full cloud model provides
+        a structured audit signal for monitoring and future model updates.
+        """
+
+        del event
+        metadata = dict(baseline.metadata)
+        metadata["cloud_llm_review"] = dict(review)
+        challenged = review.get("verdict") == "challenge"
+        metadata["cloud_llm_challenged"] = challenged
+        metadata["cloud_llm_baseline_preserved"] = True
+        metadata["cloud_llm_review_role"] = "advisory_non_authoritative"
+        if challenged:
+            metadata["cloud_llm_advisory_recommendation"] = review.get(
+                "recommended_decision"
+            )
+        return replace(baseline, metadata=metadata)
 
     def action_conflict(self, left: Action, right: Action) -> Tuple[bool, str]:
         if left.action_type == right.action_type and left.resource_ids == right.resource_ids:

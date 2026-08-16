@@ -14,6 +14,11 @@
     "artifacts": "/home/scw/cloud-edge-deploy-51d796d/runtime/full_traffic/cloud_artifacts",
     "aggregations": "/home/scw/cloud-edge-deploy-51d796d/runtime/full_traffic/cloud_aggregations.sqlite3"
   },
+  "cloud_llm": {
+    "enabled": true,
+    "runtime_config": "scenes/freeway_traffic/deployment/full/cloud_qwen9b_ollama.json",
+    "min_risk_level": "severe"
+  },
   "idempotency": {
     "ttl_seconds": 86400,
     "max_entries": 100000

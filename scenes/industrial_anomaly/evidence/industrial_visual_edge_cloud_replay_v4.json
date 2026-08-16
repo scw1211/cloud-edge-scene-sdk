@@ -1,0 +1,142 @@
+{
+  "all_gates_passed": true,
+  "cloud_final": {
+    "aggregation": {
+      "completion_reason": "all_expected_members",
+      "evidence_complete": true,
+      "finality": "final",
+      "global_confirmation": true,
+      "group_id": "aggregation_ef9259cd45ef9d7ef2a9",
+      "missing_members": [],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "result_revision": 2,
+      "state": "completed"
+    },
+    "cloud_model": "industrial_extratrees",
+    "cloud_model_confidence": 0.990578365,
+    "decisions": [
+      "anomaly",
+      "anomaly"
+    ],
+    "source": "industrial_cloud_extratrees_coordinator"
+  },
+  "edge_provisional": {
+    "client_group_wall_ms": 227.847182,
+    "events": [
+      {
+        "accounted_closed_loop_ms": 103.140763,
+        "client_request_bytes": 1501,
+        "client_response_bytes": 2713,
+        "client_wall_ms": 43.484796,
+        "edge_preliminary_decision_ms": 77.292762,
+        "edge_service_wall_ms": 30.415919,
+        "event_id": "industrial-visual-v4-1786849279689626707-infrared",
+        "framework_runtime_ms": 27.427058,
+        "local_decision": "anomaly",
+        "modality": "infrared",
+        "pipeline_stage_ms": {
+          "data_plane_preparation": 0.984926,
+          "edge_decision": 0.237672,
+          "normalization": 1.341385,
+          "route_execution": 24.694238,
+          "scheduling": 0.168837
+        },
+        "qwen_latency_ms": null,
+        "qwen_output_tokens": null,
+        "qwen_prediction": null,
+        "qwen_prompt_tokens": null,
+        "qwen_rule_agreement": null,
+        "qwen_selected": false,
+        "qwen_selection_reason": "deterministic_normal_or_anomaly",
+        "qwen_token": null,
+        "reference": "anomaly",
+        "request_reduction_ratio": 0.164853,
+        "response_decision": "anomaly",
+        "response_detail": "compact",
+        "response_route": "cloud_async",
+        "response_status": "provisional",
+        "schedule_route": "cloud_async",
+        "selected_request_bytes": 4605
+      },
+      {
+        "accounted_closed_loop_ms": 275.800481,
+        "client_request_bytes": 1465,
+        "client_response_bytes": 2837,
+        "client_wall_ms": 227.201671,
+        "edge_preliminary_decision_ms": 192.366246,
+        "edge_service_wall_ms": 212.600065,
+        "event_id": "industrial-visual-v4-1786849279689626707-rgb",
+        "framework_runtime_ms": 186.057929,
+        "local_decision": "review",
+        "modality": "rgb",
+        "pipeline_stage_ms": {
+          "data_plane_preparation": 1.0352,
+          "edge_decision": 101.563917,
+          "normalization": 1.059777,
+          "route_execution": 82.205845,
+          "scheduling": 0.19319
+        },
+        "qwen_latency_ms": 100.8123,
+        "qwen_output_tokens": 1,
+        "qwen_prediction": "review",
+        "qwen_prompt_tokens": 16,
+        "qwen_rule_agreement": true,
+        "qwen_selected": true,
+        "qwen_selection_reason": "review_requires_corroboration",
+        "qwen_token": "B",
+        "reference": "review",
+        "request_reduction_ratio": 0.164154,
+        "response_decision": "review",
+        "response_detail": "compact",
+        "response_route": "cloud_async",
+        "response_status": "provisional",
+        "schedule_route": "cloud_async",
+        "selected_request_bytes": 4547
+      }
+    ],
+    "sample_id": "industrial-visual-v4-1786849279689626707"
+  },
+  "gates": {
+    "authoritative_final_complete": true,
+    "edge_provisional_complete": true,
+    "extratrees_is_online_authority": true,
+    "globally_consistent": true,
+    "qwen_not_selected_for_high_confidence": true,
+    "visual_model_metadata_preserved": true
+  },
+  "run_id": "industrial-visual-v4-1786849279689626707",
+  "schema_version": "industrial-visual-edge-cloud-replay/v4",
+  "source_events": {
+    "infrared": {
+      "inference_ms": 61.423000996001065,
+      "model": {
+        "backbone_sha256": "f4efdd64d4ab91c0d538bde497f47d255ef47b40be5edccabcbea898cd60075e",
+        "memory_bank_sha256": "dc494dc2ea03765e77a7197543fb0758d6c973a2694157ed8b03f904ebe74a77",
+        "name": "vit-small-patch8-160-onnx-patchcore",
+        "onnx_inference_ms": 26.94623000570573,
+        "patchcore_ms": 20.169164999970235,
+        "version": "f4efdd64d4ab"
+      },
+      "preprocessing_latency_ms": 14.290703998995014,
+      "raw_uri": "file:///home/scw/industrial_data/mulsen_ad_new_capsule/MulSen_AD/capsule/Infrared/test/broken_inside/0.png",
+      "score": 0.009267804648276241
+    },
+    "rgb": {
+      "inference_ms": 65.52986000315286,
+      "model": {
+        "backbone_sha256": "f4efdd64d4ab91c0d538bde497f47d255ef47b40be5edccabcbea898cd60075e",
+        "memory_bank_sha256": "6301280ac20f68f3f34f1340a6cbef09419559765ba8dc335bb72413763eb66a",
+        "name": "vit-small-patch8-160-onnx-patchcore",
+        "onnx_inference_ms": 25.92972198908683,
+        "patchcore_ms": 15.372497990028933,
+        "version": "f4efdd64d4ab"
+      },
+      "preprocessing_latency_ms": 24.212692005676217,
+      "raw_uri": "file:///home/scw/industrial_data/mulsen_ad_new_capsule/MulSen_AD/capsule/RGB/test/broken_inside/0.png",
+      "score": 0.007613921270400893
+    }
+  }
+}

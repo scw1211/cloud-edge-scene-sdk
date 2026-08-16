@@ -1,0 +1,935 @@
+{
+  "all_gates_passed": true,
+  "cloud_url": "http://127.0.0.1:18100",
+  "gates": {
+    "all_pairs_cross_modal_final": true,
+    "all_results_globally_consistent": true,
+    "completed_18_pairs": true,
+    "extratrees_accuracy_is_1": true,
+    "heldout_identity_matches_training_evidence": true,
+    "population_cloud_runtime_mean_under_200ms": true,
+    "population_http_mean_under_200ms": true,
+    "qwen_selection_rate_at_most_0_20": true,
+    "selected_reviews_are_group_deduplicated": true
+  },
+  "inputs": {
+    "infrared": {
+      "bytes": 6695,
+      "path": "/home/scw/industrial_data/perception_evidence/nano_full_trt_v1/nano_full_infrared_trt_v1/predictions.csv",
+      "sha256": "48f20ebe0b16a92acbe077f7f02ab918a86a787790abd620d327cf9626f8fc2e"
+    },
+    "rgb": {
+      "bytes": 6415,
+      "path": "/home/scw/industrial_data/perception_evidence/nano_full_trt_v1/nano_full_rgb_trt_v1/predictions.csv",
+      "sha256": "7a485739a5e2630237a69497efc16a0b90619aed298bc695e750b6385a236517"
+    }
+  },
+  "measured_at": "2026-08-16T02:54:44.963472+00:00",
+  "model": {
+    "bytes": 108466,
+    "path": "/home/scw/cloud-edge-scene-sdk/scenes/industrial_anomaly/assets/models/industrial_cloud_extratrees_capsule_v1.joblib",
+    "sha256": "f733bb4e983ab9e1be3e29bcfad8abca755563e6795a7ee4e75bda9718959ab4"
+  },
+  "records": [
+    {
+      "cloud_runtime_ms": 10.759384,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 0.917390199,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 0.917390199,
+        "normal": 0.082609801
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 33.721007,
+      "identity": "broken_inside/1",
+      "name": "heldout-00",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.13261,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": true,
+        "model_uncertainty_requires_synchronous_review": true,
+        "reason": "industrial_extratrees_expected_gain_below_threshold"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-00-1786848883604065405",
+      "scores": {
+        "infrared": 0.0084739,
+        "rgb": 0.0073726
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 10.732877,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 0.980854527,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 0.980854527,
+        "normal": 0.019145473
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 33.495065,
+      "identity": "broken_inside/2",
+      "name": "heldout-01",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.069145,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": true,
+        "model_uncertainty_requires_synchronous_review": true,
+        "reason": "industrial_extratrees_expected_gain_below_threshold"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-01-1786848883641574314",
+      "scores": {
+        "infrared": 0.00926352,
+        "rgb": 0.00781144
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 10.434217,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 1.0,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 1.0,
+        "normal": 0.0
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 32.777321,
+      "identity": "broken_outside/2",
+      "name": "heldout-02",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.0,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-02-1786848883675505194",
+      "scores": {
+        "infrared": 0.0084149,
+        "rgb": 0.00910179
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 9.501637,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 0.997257314,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 0.997257314,
+        "normal": 0.002742686
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 33.274715,
+      "identity": "color/1",
+      "name": "heldout-03",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.002743,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-03-1786848883708664056",
+      "scores": {
+        "infrared": 0.0112631,
+        "rgb": 0.00934756
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 722.568402,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 0.841159021,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 0.841159021,
+        "normal": 0.158840979
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 751.257406,
+      "identity": "color/3",
+      "name": "heldout-04",
+      "qwen_review": {
+        "confidence": 0.6,
+        "latency_ms": 712.4686,
+        "model": "qwen3.5:9b",
+        "output_tokens": 35,
+        "prompt_tokens": 612,
+        "provider": "ollama",
+        "reason": "RGB modality disagrees with anomaly; low confidence requires review.",
+        "recommended_decision": "hold_for_review",
+        "verdict": "challenge"
+      },
+      "qwen_review_policy": {
+        "eligible": true,
+        "expected_gain": 0.208841,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": true,
+        "model_uncertainty_requires_synchronous_review": true,
+        "reason": "industrial_extratrees_uncertainty_with_expected_gain"
+      },
+      "qwen_review_present": [
+        true,
+        true
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": true,
+      "sample_id": "industrial-cloud-heldout-04-1786848883742320514",
+      "scores": {
+        "infrared": 0.00807575,
+        "rgb": 0.00775767
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 9.903593,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 1.0,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 1.0,
+        "normal": 0.0
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 32.851205,
+      "identity": "color/4",
+      "name": "heldout-05",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.0,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-05-1786848884493985110",
+      "scores": {
+        "infrared": 0.0107857,
+        "rgb": 0.0101999
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 12.616077,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 0.950185962,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 0.950185962,
+        "normal": 0.049814038
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 34.293606,
+      "identity": "color/5",
+      "name": "heldout-06",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.049814,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-06-1786848884527223207",
+      "scores": {
+        "infrared": 0.0102793,
+        "rgb": 0.00913791
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 9.958308,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 1.0,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 1.0,
+        "normal": 0.0
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 32.991102,
+      "identity": "color/6",
+      "name": "heldout-07",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.0,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-07-1786848884561963668",
+      "scores": {
+        "infrared": 0.0106793,
+        "rgb": 0.00987736
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 9.491994,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 0.979361287,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 0.979361287,
+        "normal": 0.020638713
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 33.483386,
+      "identity": "crack/5",
+      "name": "heldout-08",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.020639,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-08-1786848884595347843",
+      "scores": {
+        "infrared": 0.008515,
+        "rgb": 0.00858753
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 10.972876,
+      "decisions": [
+        "normal",
+        "normal"
+      ],
+      "expected": "normal",
+      "extratrees_confidence": 0.896789953,
+      "extratrees_correct": true,
+      "extratrees_decision": "normal",
+      "extratrees_probabilities": {
+        "anomaly": 0.103210047,
+        "normal": 0.896789953
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 34.324261,
+      "identity": "good/3",
+      "name": "heldout-09",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.10321,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": true,
+        "model_uncertainty_requires_synchronous_review": true,
+        "reason": "industrial_extratrees_expected_gain_below_threshold"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-09-1786848884629254049",
+      "scores": {
+        "infrared": 0.00802344,
+        "rgb": 0.00714487
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 10.165183,
+      "decisions": [
+        "normal",
+        "normal"
+      ],
+      "expected": "normal",
+      "extratrees_confidence": 0.904996009,
+      "extratrees_correct": true,
+      "extratrees_decision": "normal",
+      "extratrees_probabilities": {
+        "anomaly": 0.095003991,
+        "normal": 0.904996009
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 32.854317,
+      "identity": "good/4",
+      "name": "heldout-10",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.145004,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": true,
+        "model_uncertainty_requires_synchronous_review": true,
+        "reason": "industrial_extratrees_expected_gain_below_threshold"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-10-1786848884663974088",
+      "scores": {
+        "infrared": 0.00799501,
+        "rgb": 0.00625583
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 9.517098,
+      "decisions": [
+        "normal",
+        "normal"
+      ],
+      "expected": "normal",
+      "extratrees_confidence": 0.822164325,
+      "extratrees_correct": true,
+      "extratrees_decision": "normal",
+      "extratrees_probabilities": {
+        "anomaly": 0.177835675,
+        "normal": 0.822164325
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 33.560155,
+      "identity": "good/6",
+      "name": "heldout-11",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.177836,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": true,
+        "model_uncertainty_requires_synchronous_review": true,
+        "reason": "industrial_extratrees_expected_gain_below_threshold"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-11-1786848884697274379",
+      "scores": {
+        "infrared": 0.00799617,
+        "rgb": 0.00729191
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 11.80168,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 0.997017329,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 0.997017329,
+        "normal": 0.002982671
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 33.118678,
+      "identity": "hole/3",
+      "name": "heldout-12",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.052983,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": true,
+        "model_uncertainty_requires_synchronous_review": true,
+        "reason": "industrial_extratrees_expected_gain_below_threshold"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-12-1786848884731361270",
+      "scores": {
+        "infrared": 0.00798929,
+        "rgb": 0.0101295
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 9.478243,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 1.0,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 1.0,
+        "normal": 0.0
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 33.821387,
+      "identity": "hole/5",
+      "name": "heldout-13",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.0,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-13-1786848884764856380",
+      "scores": {
+        "infrared": 0.00820147,
+        "rgb": 0.00877427
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 9.560594,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 1.0,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 1.0,
+        "normal": 0.0
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 32.892408,
+      "identity": "hole/7",
+      "name": "heldout-14",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.0,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-14-1786848884799083104",
+      "scores": {
+        "infrared": 0.00852934,
+        "rgb": 0.00921726
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 9.30755,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 1.0,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 1.0,
+        "normal": 0.0
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 32.273201,
+      "identity": "squeeze/0",
+      "name": "heldout-15",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.0,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-15-1786848884832377343",
+      "scores": {
+        "infrared": 0.00842274,
+        "rgb": 0.00818198
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 23.636858,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 0.998388672,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 0.998388672,
+        "normal": 0.001611328
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 64.190132,
+      "identity": "squeeze/3",
+      "name": "heldout-16",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.001611,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-16-1786848884865028459",
+      "scores": {
+        "infrared": 0.00815802,
+        "rgb": 0.00930883
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    },
+    {
+      "cloud_runtime_ms": 9.931646,
+      "decisions": [
+        "anomaly",
+        "anomaly"
+      ],
+      "expected": "anomaly",
+      "extratrees_confidence": 0.987589345,
+      "extratrees_correct": true,
+      "extratrees_decision": "anomaly",
+      "extratrees_probabilities": {
+        "anomaly": 0.987589345,
+        "normal": 0.012410655
+      },
+      "global_confirmation": true,
+      "globally_consistent": true,
+      "http_wall_ms": 33.364948,
+      "identity": "squeeze/5",
+      "name": "heldout-17",
+      "qwen_review": null,
+      "qwen_review_policy": {
+        "eligible": false,
+        "expected_gain": 0.012411,
+        "expected_gain_source": "industrial_extratrees_confidence",
+        "explicit_requested": false,
+        "legacy_risk_trigger_used": false,
+        "minimum_expected_gain": 0.2,
+        "model_uncertainty_requires_review": false,
+        "model_uncertainty_requires_synchronous_review": false,
+        "reason": "industrial_extratrees_high_confidence_consensus"
+      },
+      "qwen_review_present": [
+        false,
+        false
+      ],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "resolution_success_rate": 1.0,
+      "same_qwen_review_reused_for_both_modalities": false,
+      "sample_id": "industrial-cloud-heldout-17-1786848884929594352",
+      "scores": {
+        "infrared": 0.00923279,
+        "rgb": 0.0108881
+      },
+      "source": "industrial_cloud_extratrees_coordinator"
+    }
+  ],
+  "schema_version": "industrial-cloud-heldout-http-evidence/v1",
+  "split": {
+    "heldout_fraction": 0.31,
+    "heldout_identity_sha256": "cda56e8a5553bdad05ea707aa7211e4fcf23540ff11e7228ec841274ced6a5e3",
+    "heldout_pairs": 18,
+    "seed": 42
+  },
+  "summary": {
+    "cloud_runtime_ms": {
+      "count": 18,
+      "max": 722.568402,
+      "mean": 50.574345,
+      "p50": 10.061746,
+      "p95": 128.47659
+    },
+    "extratrees_accuracy": 1.0,
+    "http_final_latency_ms": {
+      "count": 18,
+      "max": 751.257406,
+      "mean": 74.919128,
+      "p50": 33.424167,
+      "p95": 167.250223
+    },
+    "qwen_selected_pairs": 1,
+    "qwen_selection_rate": 0.055555556
+  }
+}

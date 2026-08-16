@@ -29,13 +29,15 @@ Nano222 不兼容，仓库内 engine 已在 Nano222/Orin 上从绑定 ONNX 重�
 - 原图到分数：RGB/红外均值 `103.96/110.88 ms`；
 - Nano TensorRT 58+58：图像 AUROC `0.940/0.833`，tensor-to-event 均值
   `53.35/34.26 ms`；
-- 一组真实 RGB+红外图片进入正式 18101 后，本地为 `review/anomaly`，云端收到 2/2
-  模态并输出权威 `review`，全局一致、残余冲突 0；两事件平均图片到 provisional
-  `195.09 ms`。
+- 一组真实 RGB+红外图片进入正式 18101 后，本地为 `review/anomaly`；在当前 v4 云端
+  重新回放相同视觉模型分数与模型身份后，云端收到 2/2 模态，由 ExtraTrees 输出权威
+  `anomaly`，全局一致、无缺失成员；两事件平均图片到 provisional 为 `189.47 ms`。
 
 原始数据不提交 Git；摘要以路径、字节数和 SHA-256 绑定本机逐图报告、Nano 预测热图
-及 HTTP 响应。旧 `current_release_full_matrix_summary.json` 仍是受控 score 输入下的
-180 事件弱网/冲突矩阵，两类证据的输入口径不混写。
+及 HTTP 响应。最新真实图片回放证据为
+`evidence/industrial_visual_edge_cloud_replay_v4.json`。旧
+`current_release_full_matrix_summary.json` 是受控 score 输入下的 180 事件弱网/冲突
+矩阵，两类证据的输入口径不混写。
 
 ## 统一入口
 
@@ -59,11 +61,92 @@ POST /api/v1/collaboration/decide
 TensorRT RGB/红外结果
   -> /decide 严格 Schema 校验
   -> review-band 本地初判（provisional）
-  -> 摘要/必要热力图写入公共 Outbox
+  -> 边缘静态 Q4 仅对 review-band 样本做 1-token 复核
+  -> 公共调度器选择 edge_only / cloud_async / cloud_sync
+  -> 摘要/必要热力图写入公共持久 Outbox
   -> 云端按 product + sample_id 持久等待 RGB/红外
-  -> 一致正常=normal，一致异常=anomaly，其余=review
+  -> 完整双模态分数进入工业 ExtraTrees 专用协调器
+  -> ExtraTrees 输出 normal/anomaly 主判与置信度
+  -> 仅预期收益足够的低置信结果交给 Qwen3.5 9B 非权威复核
+  -> 公共冲突协调器检查并消解跨边缘动作冲突
   -> 完整两模态为权威 final；超时缺失为非确认 partial_final
   -> results/batch 回填边缘 review 状态
+```
+
+这里严格采用“边缘感知不同，感知后的协同链路与交通一致”的边界：工业特有部分只有
+RGB/红外 TensorRT 感知、工业事件适配、RGB/红外聚合成员、工业动作/冲突语义和工业
+ExtraTrees 特征；进入公共 `SemanticEvent` 后，调度器、证据规划、持久 Outbox、云端
+聚合、ExtraTrees 主判、按预期收益选择 9B、全局冲突协调、权威 final 与结果回填都复用
+交通的同一套框架实现，不维护第二条工业专用传输或调度链路。
+
+两场景的云端权威关系也完全一致：场景专用 ExtraTrees 是在线主判，全量 Qwen 9B 是
+低频、非权威的结构化审计器。Qwen 返回 `accept` 或 `challenge` 都保留 ExtraTrees 的
+decision/actions；challenge 只记录 `cloud_llm_advisory_recommendation`，用于监控、人工
+审计和后续模型更新，不能在线改写 final。相同 `product/sample_id` 的两条模态决策共用
+一次 Qwen 复核。Qwen 失败或输出不合法时仍保留 ExtraTrees 基线，普通业务不依赖大
+模型可用性。
+
+当前 `industrial-capsule-cross-modal-extratrees-v1` 只声明支持真实感知已经落地的
+`capsule`，其他产品继续使用原确定性安全策略，不伪称跨产品泛化。模型使用配对的
+Nano TensorRT RGB/红外分数：40 对拟合，18 对固定分层留出且从未参与拟合；留出集
+准确率、平衡准确率和宏 F1 均为 `1.0`。原“一致才裁决”策略在相同留出集只能覆盖
+`61.11%`，其余为 `review`。冻结结果见
+`evidence/industrial_cloud_extratrees_capsule_v1.json`。正式 `18100` 的成对 HTTP
+闭环证据见 `evidence/industrial_cloud_chain_formal_18100_v4.json`：高置信样本由
+ExtraTrees 直接完成；低置信样本才选择 Qwen 9B，同一 RGB/红外组只复核一次，且实测
+challenge 后 final 仍保持 ExtraTrees 的 `normal`。selected-only 9B 时延单独报告，
+不用来替代全体样本平均时延。Nano222 `18101` 到正式云
+`18100` 的真实 final 回填见
+`evidence/industrial_edge_to_cloud_extratrees_qwen_v4.json`，其中两路 final 都明确记录
+`source=industrial_cloud_extratrees_coordinator`、`cloud_llm_baseline_preserved=true`
+和 `cloud_llm_review_role=advisory_non_authoritative`，并共用同一份 Qwen 复核。
+
+固定 18 对未参与拟合的留出集也已逐对通过正式 HTTP 接口复测，结果见
+`evidence/industrial_cloud_heldout_http_v2.json`：ExtraTrees 准确率 `100%`，仅
+`1/18 = 5.56%` 的低置信对调用 Qwen；包含该慢路径后的 final HTTP 总体平均为
+`74.92 ms`，云端运行总体平均为 `50.57 ms`。selected-only 最大值和总体 P95 仍在
+证据中单独披露，不以平均值掩盖长尾。
+
+可复现训练命令：
+
+```bash
+python scenes/industrial_anomaly/train_industrial_cloud_coordinator.py \
+  --rgb-predictions /path/to/nano_full_rgb_trt_v1/predictions.csv \
+  --infrared-predictions /path/to/nano_full_infrared_trt_v1/predictions.csv \
+  --thresholds scenes/industrial_anomaly/industrial_anomaly/review_bands.json \
+  --output-model scenes/industrial_anomaly/assets/models/industrial_cloud_extratrees_capsule_v1.joblib \
+  --output-metrics /path/to/fresh_metrics.json
+```
+
+服务启动后，可复跑与正式证据同口径的两条 HTTP 链路：
+
+```bash
+python scenes/industrial_anomaly/benchmark_industrial_cloud_chain.py \
+  --cloud-url http://127.0.0.1:18100 \
+  --output /path/to/new-industrial-cloud-chain-evidence.json
+```
+
+固定留出集总体均值复测：
+
+```bash
+python scenes/industrial_anomaly/benchmark_industrial_cloud_heldout_http.py \
+  --cloud-url http://127.0.0.1:18100 \
+  --rgb-predictions /path/to/rgb/predictions.csv \
+  --infrared-predictions /path/to/infrared/predictions.csv \
+  --output /path/to/new-industrial-heldout-http-evidence.json
+```
+
+该脚本会 fail-closed 核对：双场景服务健康、ExtraTrees 模型身份、高置信快速路径不
+调用 Qwen、低置信路径按成本门选择 Qwen、两模态共用一份复核结果，以及 Qwen
+challenge 只能形成非权威审计建议、不能改写 ExtraTrees final。
+
+真实 Nano→云端语义对齐复测：
+
+```bash
+python scenes/industrial_anomaly/benchmark_industrial_edge_cloud_alignment.py \
+  --edge-url http://192.168.31.222:18101 \
+  --cloud-url http://127.0.0.1:18100 \
+  --output /path/to/new-industrial-edge-cloud-alignment.json
 ```
 
 阈值已由原 `summary_f1_review_bands.xlsx` 转为不依赖 pandas/openpyxl 的
@@ -92,26 +175,26 @@ python scenes/industrial_anomaly/demo_dual_scene.py \
 脚本会先后发送工业 RGB/红外和交通两个成员，打印两组本地 `provisional` 与云端
 `final`。每次运行生成新的 `event_id/sample_id`，不会与 Outbox 幂等记录冲突。
 
-当前正式版本是同一个静态融合 Q5_K_M 模型同时服务交通和工业，不加载运行时 LoRA。
-插件在完成 Schema 校验后，为交通 16 位输入加 `T` 前缀、为工业 16 位输入加 `I`
-前缀，形成严格 17-token 输入；模型仍只返回一个动作 token。`llama-server` 的
+当前正式版本是同一个静态融合 Q4_K_M 模型同时服务交通和工业，不加载运行时 LoRA。
+两个插件在完成 Schema 校验后，各自用冻结 action codec 生成原生 16 位输入；模型只
+返回一个动作 token。`llama-server` 的
 `/lora-adapters` 在启动、请求和结束后都必须为 `[]`，请求体也不得携带 LoRA 字段。
-这样既避免模型猜场景，也避免双 Adapter 交替带来的调度和内存峰值。
+这样避免双 Adapter 交替带来的调度和内存峰值，同时不改变两个场景已有的输入合同。
 
-正式配置位于 `deployment/joint_static_formal_v1/`，候选生成模板位于
-`deployment/joint_static_candidate_v3/`。该 release 绑定：
+正式配置位于 `deployment/joint_static_raw16_formal_v2/`。该 release 绑定：
 
-- release `traffic-industrial-joint-static-v2-q5km`；
-- 静态 Q5 SHA-256 `308daa980c7ca295e18bd76e8dcf6dc1ed725ded32ada535a0c5c1910c695ce2`；
-- 规范编码器 `scene-prefixed-decimal17@v1`；
-- Nano 500 次严格交替门禁峰值 `1,047,126,016 B`、平均时延 `132.610802 ms`；
+- release `traffic-industrial-joint-static-v3-q4km-raw16`；
+- 静态 Q4 SHA-256 `828f839873c7505005101544d8febb7408bc0443c153c4ba97ec4b3603445526`；
+- 规范编码器 `scene-native-decimal16@v1`；
+- Nano 500 次严格交替门禁峰值 `998,445,056 B`、平均时延 `73.374464 ms`；
 - 交通准确率 `72.8%`、工业准确率/宏 F1/加权 F1 均为 `100%`；
-- 统一边缘接口旁路已验证交通、工业 RGB 和红外，工业被选模型平均时延
-  `132.36455 ms`。
+- 运行时 LoRA 数量为 `0`，同一常驻模型直接处理交通和工业 16-token 输入。
 
-正式云端 `0.0.0.0:18100` 与 Nano222 边缘 `18101/18190` 已切换并托管。当前 release
-完整工业弱网、冲突和并发矩阵的可提交摘要位于
-`evidence/current_release_full_matrix_summary.json`；摘要用 SHA-256 绑定逐事件原始报告。
+正式云端 `0.0.0.0:18100` 与 Nano222 边缘 `18101/18190` 已切换并托管。受控 score
+输入下的工业弱网、冲突和并发矩阵摘要位于
+`evidence/current_release_full_matrix_summary.json`；该文件保留其测试时 release 身份，
+不冒充当前真实图片或当前云端 v4 的重跑结果。当前云端和真实边云结果以本节上方 v4
+证据为准。
 
 工业模型的输入是由插件从 `score/review_low/review_high` 提取的 16-token 相对阈值距离，
 输出为单 token：`A=normal`、`B=review`、`C=anomaly`。它学习的是既有 review-band
@@ -121,10 +204,10 @@ python scenes/industrial_anomaly/demo_dual_scene.py \
 - `shadow`：模型只旁路记录，不改变决策；
 - `corroborate`：模型与规则一致时记录为学习模型路径，不一致、超时或运行失败时安全
   回退到确定性规则；
-- `selective`：`normal/anomaly` 直接走确定性快速路径，仅 `review` 调用共享静态 Q5；
+- `selective`：`normal/anomaly` 直接走确定性快速路径，仅 `review` 调用共享静态 Q4；
   模型调用预算固定不超过 180 ms，超时、运行失败或规则分歧时仍回退到 `review`。
 
-因此接入 LoRA 不改变工业的安全动作边界，也不改变公共 Outbox、云端跨模态协调和
+因此接入边缘模型不改变工业的安全动作边界，也不改变公共 Outbox、云端跨模态协调和
 final 回填流程。
 
 ## 旧版双 LoRA 交替稳定性门禁

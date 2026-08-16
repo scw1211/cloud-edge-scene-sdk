@@ -1,0 +1,158 @@
+{
+  "all_gates_passed": true,
+  "cloud_final": {
+    "aggregation": {
+      "completion_reason": "all_expected_members",
+      "evidence_complete": true,
+      "finality": "final",
+      "global_confirmation": true,
+      "group_id": "aggregation_fa8b9d42ef646a122f1a",
+      "missing_members": [],
+      "received_members": [
+        "infrared",
+        "rgb"
+      ],
+      "result_revision": 1,
+      "state": "completed"
+    },
+    "cloud_model": "industrial_extratrees",
+    "cloud_model_confidence": 0.637612073,
+    "decisions": [
+      "normal",
+      "normal"
+    ],
+    "qwen_baseline_preserved": true,
+    "qwen_review": {
+      "confidence": 0.95,
+      "latency_ms": 633.4637,
+      "model": "qwen3.5:9b",
+      "output_tokens": 37,
+      "prompt_tokens": 491,
+      "provider": "ollama",
+      "reason": "High risk score contradicts baseline normal decision despite low anomaly scores.",
+      "recommended_decision": "hold_for_review",
+      "verdict": "challenge"
+    },
+    "qwen_review_role": "advisory_non_authoritative",
+    "source": "industrial_cloud_extratrees_coordinator"
+  },
+  "cloud_url": "http://127.0.0.1:18100",
+  "edge_observed_cloud_url": "http://192.168.31.135:18100",
+  "edge_provisional": {
+    "client_group_wall_ms": 234.168392,
+    "events": [
+      {
+        "accounted_closed_loop_ms": 219.385555,
+        "client_request_bytes": 1117,
+        "client_response_bytes": 2986,
+        "client_wall_ms": 233.19527,
+        "edge_preliminary_decision_ms": 181.534846,
+        "edge_service_wall_ms": 245.549823,
+        "event_id": "industrial-traffic-aligned-1786849338690256914-0000-infrared",
+        "framework_runtime_ms": 219.385555,
+        "local_decision": "review",
+        "modality": "infrared",
+        "pipeline_stage_ms": {
+          "data_plane_preparation": 1.007391,
+          "edge_decision": 180.612641,
+          "normalization": 0.922205,
+          "route_execution": 36.670353,
+          "scheduling": 0.172965
+        },
+        "qwen_latency_ms": 179.8807,
+        "qwen_output_tokens": 1,
+        "qwen_prediction": "review",
+        "qwen_prompt_tokens": 16,
+        "qwen_rule_agreement": true,
+        "qwen_selected": true,
+        "qwen_selection_reason": "review_requires_corroboration",
+        "qwen_token": "B",
+        "reference": "review",
+        "request_reduction_ratio": 0.105152,
+        "response_decision": "review",
+        "response_detail": "compact",
+        "response_route": "cloud_async",
+        "response_status": "provisional",
+        "schedule_route": "cloud_async",
+        "selected_request_bytes": 4255
+      },
+      {
+        "accounted_closed_loop_ms": 90.008584,
+        "client_request_bytes": 1082,
+        "client_response_bytes": 2949,
+        "client_wall_ms": 92.595101,
+        "edge_preliminary_decision_ms": 85.105584,
+        "edge_service_wall_ms": 92.694874,
+        "event_id": "industrial-traffic-aligned-1786849338690256914-0000-rgb",
+        "framework_runtime_ms": 90.008584,
+        "local_decision": "review",
+        "modality": "rgb",
+        "pipeline_stage_ms": {
+          "data_plane_preparation": 1.004223,
+          "edge_decision": 83.707332,
+          "normalization": 1.398252,
+          "route_execution": 3.729268,
+          "scheduling": 0.169509
+        },
+        "qwen_latency_ms": 82.9694,
+        "qwen_output_tokens": 1,
+        "qwen_prediction": "review",
+        "qwen_prompt_tokens": 16,
+        "qwen_rule_agreement": true,
+        "qwen_selected": true,
+        "qwen_selection_reason": "review_requires_corroboration",
+        "qwen_token": "B",
+        "reference": "review",
+        "request_reduction_ratio": 0.103677,
+        "response_decision": "review",
+        "response_detail": "compact",
+        "response_route": "cloud_async",
+        "response_status": "provisional",
+        "schedule_route": "cloud_async",
+        "selected_request_bytes": 4193
+      }
+    ],
+    "sample_id": "industrial-traffic-aligned-1786849338690256914-0000"
+  },
+  "edge_url": "http://192.168.31.222:18101",
+  "flow_contract": {
+    "scene_specific": "RGB/infrared perception and industrial action semantics",
+    "shared_with_traffic": [
+      "semantic event ingress",
+      "collaboration scheduler",
+      "evidence planning",
+      "durable outbox",
+      "persistent cloud aggregation",
+      "scene ExtraTrees primary decision",
+      "cost-gated advisory Qwen review",
+      "global conflict coordination",
+      "authoritative final backfill"
+    ]
+  },
+  "gates": {
+    "both_events_reach_authoritative_final": true,
+    "cloud_ready_with_two_scenes": true,
+    "edge_observes_cloud_available": true,
+    "edge_provisional_is_review": true,
+    "edge_ready_with_two_scenes": true,
+    "edge_routes_to_formal_cloud_18100": true,
+    "extratrees_is_online_authority": true,
+    "qwen_challenge_does_not_replace_extratrees": true,
+    "qwen_is_advisory_and_non_authoritative": true,
+    "qwen_review_is_group_deduplicated": true
+  },
+  "inputs": {
+    "event_ids": [
+      "industrial-traffic-aligned-1786849338690256914-0000-rgb",
+      "industrial-traffic-aligned-1786849338690256914-0000-infrared"
+    ],
+    "product": "capsule",
+    "scores": {
+      "infrared": 0.00802,
+      "rgb": 0.00745
+    }
+  },
+  "measured_at": "2026-08-16T03:02:19.866054+00:00",
+  "run_id": "industrial-traffic-aligned-1786849338690256914",
+  "schema_version": "industrial-traffic-aligned-edge-cloud-evidence/v1"
+}
