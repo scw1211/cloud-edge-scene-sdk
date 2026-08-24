@@ -11,11 +11,11 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "MANIFEST.json"
 EXCLUDED_ASSETS = [
-    "PEMS08 prepared inference array (downloaded by traffic asset installer)",
-    "traffic Edge-Qwen GGUF (downloaded by traffic asset installer)",
-    "traffic benchmark results",
-    "Qwen 9B weights (installed from the official Ollama registry)",
-    "Qwen base weights (manifest only)",
+    (
+        "Large runtime models and final evidence are governed by the "
+        "repository-local model catalogs and SHA256SUMS envelopes, not this "
+        "source-file manifest"
+    ),
 ]
 
 
@@ -26,15 +26,16 @@ def _files():
         check=True,
         stdout=subprocess.PIPE,
     )
-    values = []
+    values = {}
     for raw_name in completed.stdout.split(b"\0"):
         name = os.fsdecode(raw_name)
         if not name or name == "MANIFEST.json":
             continue
         path = ROOT / name
         if path.is_file():
-            values.append((name, path))
-    return sorted(values)
+            values[name] = path
+
+    return sorted(values.items())
 
 
 def _record(name, path):

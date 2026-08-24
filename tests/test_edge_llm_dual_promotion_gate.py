@@ -176,7 +176,7 @@ def sync_runtime_artifact(payload):
 
 def evidence(root):
     root = Path(root)
-    candidate_model_path = root / "candidate-q6.gguf"
+    candidate_model_path = root / "candidate-q4.gguf"
     candidate_model_path.write_bytes(b"candidate-model-binary-v2")
     candidate_model_sha = sha256(candidate_model_path)
 

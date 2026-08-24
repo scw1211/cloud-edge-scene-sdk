@@ -10,6 +10,12 @@ from typing import Any, Dict
 
 import numpy as np
 
+from traffic_system.overlap_observations import (
+    OVERLAP_PREPROCESS_VERSION,
+    OVERLAP_SCHEMA_VERSION,
+)
+from traffic_system.road_sets import build_road_set_catalog
+
 
 SCENE_ROOT = Path(__file__).resolve().parent
 
@@ -35,6 +41,8 @@ def prepare_partition_data(
     output_directory.mkdir(parents=True, exist_ok=True)
 
     rule_config = json.loads(rule_config_path.read_text(encoding="utf-8"))
+    topology = json.loads(topology_path.read_text(encoding="utf-8"))
+    road_set_catalog = build_road_set_catalog(topology)
     partitions = [
         [int(node) for node in partition]
         for partition in rule_config["partitions"]
@@ -42,8 +50,18 @@ def prepare_partition_data(
     flattened = sorted(node for partition in partitions for node in partition)
     if flattened != list(range(len(flattened))):
         raise ValueError("METIS partitions must cover every node exactly once")
+    region_to_partition = {
+        "region_{}".format(partition_id): partition_id
+        for partition_id in range(len(partitions))
+    }
+    partition_sets = [set(nodes) for nodes in partitions]
+    source_sha256 = _sha256(source_path)
+    source_bytes = source_path.stat().st_size
+    rule_config_sha256 = _sha256(rule_config_path)
+    topology_sha256 = _sha256(topology_path)
 
     records = []
+    overlap_records = []
     with np.load(source_path, allow_pickle=False) as source:
         required = {
             "train_x",
@@ -102,22 +120,150 @@ def prepare_partition_data(
                 }
             )
 
+        for road_set in road_set_catalog["road_sets"]:
+            road_set_id = str(road_set["road_set_id"])
+            required_regions = [
+                str(region) for region in road_set["required_regions"]
+            ]
+            if len(required_regions) != 2 or any(
+                region not in region_to_partition
+                for region in required_regions
+            ):
+                raise ValueError(
+                    "road set {} has an invalid two-owner region mapping".format(
+                        road_set_id
+                    )
+                )
+            required_partition_ids = sorted(
+                region_to_partition[region] for region in required_regions
+            )
+            required_partitions = [
+                "edge_node_{}".format(partition_id)
+                for partition_id in required_partition_ids
+            ]
+            if len(set(required_partition_ids)) != 2:
+                raise ValueError(
+                    "road set {} must map to two distinct partitions".format(
+                        road_set_id
+                    )
+                )
+            for region in required_regions:
+                partition_id = region_to_partition[region]
+                declared_nodes = {
+                    int(node)
+                    for node in road_set["member_nodes_by_region"][region]
+                }
+                if not declared_nodes or not declared_nodes.issubset(
+                    partition_sets[partition_id]
+                ):
+                    raise ValueError(
+                        "road set {} topology nodes do not belong to {}".format(
+                            road_set_id, region
+                        )
+                    )
+
+            global_node_ids = [
+                int(node) for node in road_set["member_nodes"]
+            ]
+            if global_node_ids != sorted(set(global_node_ids)):
+                raise ValueError(
+                    "road set {} nodes must be a sorted unique union".format(
+                        road_set_id
+                    )
+                )
+            node_ids = np.asarray(global_node_ids, dtype=np.int64)
+            filename = "pems08_metis4_overlap_{}.npz".format(road_set_id)
+            final_path = output_directory / filename
+            temporary = output_directory / (
+                ".{}.tmp.{}.npz".format(filename, os.getpid())
+            )
+            payload = {
+                "schema_version": np.asarray(
+                    OVERLAP_SCHEMA_VERSION, dtype=np.int64
+                ),
+                "kind": np.asarray(
+                    "canonical_shared_overlap_subscription"
+                ),
+                "dataset": np.asarray("PEMS08"),
+                "road_set_id": np.asarray(road_set_id),
+                "required_regions": np.asarray(required_regions),
+                "required_partition_ids": np.asarray(
+                    required_partition_ids, dtype=np.int64
+                ),
+                "required_partitions": np.asarray(required_partitions),
+                "global_node_ids": node_ids,
+                "preprocess_version": np.asarray(
+                    OVERLAP_PREPROCESS_VERSION
+                ),
+                "source_dataset_sha256": np.asarray(source_sha256),
+                "source_dataset_bytes": np.asarray(
+                    source_bytes, dtype=np.int64
+                ),
+                "model_artifact_sha256": np.asarray(
+                    rule_config_sha256
+                ),
+                "topology_sha256": np.asarray(topology_sha256),
+                "mean": np.asarray(source["mean"]),
+                "std": np.asarray(source["std"]),
+                "feature_names": np.asarray(source["feature_names"]),
+            }
+            for split in ("train", "val", "test"):
+                payload["{}_x".format(split)] = np.asarray(
+                    source["{}_x".format(split)][:, node_ids, :, :]
+                )
+                timestamp_key = "{}_timestamp".format(split)
+                if timestamp_key in source.files:
+                    payload[timestamp_key] = np.asarray(source[timestamp_key])
+            try:
+                np.savez_compressed(temporary, **payload)
+                os.replace(str(temporary), str(final_path))
+            finally:
+                if temporary.exists():
+                    temporary.unlink()
+            overlap_records.append(
+                {
+                    "road_set_id": road_set_id,
+                    "required_regions": required_regions,
+                    "required_partition_ids": required_partition_ids,
+                    "required_partitions": required_partitions,
+                    "global_node_ids": global_node_ids,
+                    "node_count": len(global_node_ids),
+                    "file": filename,
+                    "bytes": final_path.stat().st_size,
+                    "sha256": _sha256(final_path),
+                }
+            )
+
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "format": "pems08_preassigned_metis_edge_partitions",
         "source": {
             "file": str(source_path),
-            "bytes": source_path.stat().st_size,
-            "sha256": _sha256(source_path),
+            "bytes": source_bytes,
+            "sha256": source_sha256,
         },
         "partition_contract": {
             "method": "frozen_metis",
             "partition_count": len(partitions),
-            "rule_config_sha256": _sha256(rule_config_path),
-            "topology_sha256": _sha256(topology_path),
+            "rule_config_sha256": rule_config_sha256,
+            "topology_sha256": topology_sha256,
             "runtime_repartition_allowed": False,
         },
+        "overlap_contract": {
+            "schema_version": OVERLAP_SCHEMA_VERSION,
+            "kind": "canonical_shared_overlap_subscription",
+            "dataset": "PEMS08",
+            "subscription_count": len(overlap_records),
+            "owners_per_subscription": 2,
+            "preprocess_version": OVERLAP_PREPROCESS_VERSION,
+            "source_dataset_sha256": source_sha256,
+            "model_artifact_sha256": rule_config_sha256,
+            "topology_sha256": topology_sha256,
+            "primary_sensor_ownership_changed": False,
+            "sidecar_nodes_are_managed_nodes": False,
+        },
         "partitions": records,
+        "road_sets": overlap_records,
     }
     manifest_path = output_directory / "manifest.json"
     temporary_manifest = output_directory / (

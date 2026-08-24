@@ -1,0 +1,575 @@
+{
+  "action_mapping": {
+    "path": "action_mapping.json",
+    "sha256": "61595d62e7ac0dfbdcf98187dbb2e33dae84bbd32c67fbad492216764ec260e0"
+  },
+  "adapter_artifact": {
+    "bytes": 25584224,
+    "format": "safetensors",
+    "path": "adapter_model.safetensors",
+    "sha256": "413bebd6d7a9ad8ae58301016ea51872049ec0f8ad60f29b6197ea542a78c4de"
+  },
+  "adapter_id": "joint-traffic-industrial-static-q4km-raw16",
+  "base": {
+    "base_id": "qwen35-0.8b-text@2fc06364",
+    "fingerprint": "4c9fedaef396fb9cf6c8a97c57ee53397b1bd3f9c2a321ab4233e253a233c876"
+  },
+  "deployment": {
+    "artifact_bytes": 529289216,
+    "artifact_sha256": "828f839873c7505005101544d8febb7408bc0443c153c4ba97ec4b3603445526",
+    "format": "gguf",
+    "input_tokens": 16,
+    "max_input_tokens": 16,
+    "max_output_tokens": 1,
+    "model_mode": "joint_static_fusion",
+    "output_tokens": 1,
+    "quantization": "Q4_K_M",
+    "request_level_lora_switching": false,
+    "runtime": "llama.cpp",
+    "runtime_adapters": [],
+    "runtime_lora_count": 0,
+    "scene_prefixes": {
+      "industrial": "",
+      "traffic": ""
+    },
+    "thinking": false
+  },
+  "evaluation": {
+    "evidence": {
+      "q4_static_raw16_gate_summary": {
+        "path": "evidence/q4_static_raw16_gate_summary.json",
+        "sha256": "7b39fbb7f2aa2b95e910b158b351ff926c34e539add6c36d9fb4a8f278b5469d"
+      }
+    },
+    "gate_results": [
+      {
+        "actual": 3360.0,
+        "metric": "bf16_completed_requests",
+        "operator": "==",
+        "passed": true,
+        "value": 3360.0
+      },
+      {
+        "actual": 0.67625,
+        "metric": "bf16_traffic_accuracy",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.66
+      },
+      {
+        "actual": 0.686506,
+        "metric": "bf16_traffic_weighted_f1",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.65
+      },
+      {
+        "actual": 1.0,
+        "metric": "bf16_industrial_accuracy",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 1.0,
+        "metric": "bf16_industrial_macro_f1",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 1.0,
+        "metric": "bf16_industrial_weighted_f1",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 3360.0,
+        "metric": "static_completed_requests",
+        "operator": "==",
+        "passed": true,
+        "value": 3360.0
+      },
+      {
+        "actual": 0.6775,
+        "metric": "static_traffic_accuracy",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.66
+      },
+      {
+        "actual": 0.6866164318487836,
+        "metric": "static_traffic_weighted_f1",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.65
+      },
+      {
+        "actual": 1.0,
+        "metric": "static_traffic_valid_output_rate",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 1.0,
+        "metric": "static_industrial_accuracy",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 1.0,
+        "metric": "static_industrial_macro_f1",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 1.0,
+        "metric": "static_industrial_weighted_f1",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 1.0,
+        "metric": "static_industrial_valid_output_rate",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 500.0,
+        "metric": "nano_completed_requests",
+        "operator": "==",
+        "passed": true,
+        "value": 500.0
+      },
+      {
+        "actual": 998445056.0,
+        "metric": "nano_strict_peak_bytes",
+        "operator": "<=",
+        "passed": true,
+        "value": 1500000000.0
+      },
+      {
+        "actual": 299008.0,
+        "metric": "nano_growth_100_to_500_bytes",
+        "operator": "<=",
+        "passed": true,
+        "value": 33554432.0
+      },
+      {
+        "actual": 1726160896.0,
+        "metric": "nano_minimum_mem_available_bytes",
+        "operator": ">=",
+        "passed": true,
+        "value": 268435456.0
+      },
+      {
+        "actual": 0.0,
+        "metric": "nano_oom_kill_delta",
+        "operator": "==",
+        "passed": true,
+        "value": 0.0
+      },
+      {
+        "actual": 0.0,
+        "metric": "nano_inference_longest_d_samples",
+        "operator": "<",
+        "passed": true,
+        "value": 5.0
+      },
+      {
+        "actual": 73.374463536,
+        "metric": "nano_overall_mean_latency_ms",
+        "operator": "<",
+        "passed": true,
+        "value": 200.0
+      },
+      {
+        "actual": 0.704,
+        "metric": "nano_traffic_accuracy",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.66
+      },
+      {
+        "actual": 0.7119010159731486,
+        "metric": "nano_traffic_weighted_f1",
+        "operator": ">=",
+        "passed": true,
+        "value": 0.65
+      },
+      {
+        "actual": 1.0,
+        "metric": "nano_industrial_accuracy",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 1.0,
+        "metric": "nano_industrial_macro_f1",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 1.0,
+        "metric": "nano_industrial_weighted_f1",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      },
+      {
+        "actual": 1.0,
+        "metric": "nano_valid_output_rate",
+        "operator": "==",
+        "passed": true,
+        "value": 1.0
+      }
+    ],
+    "gates": [
+      {
+        "metric": "bf16_completed_requests",
+        "operator": "==",
+        "value": 3360.0
+      },
+      {
+        "metric": "bf16_traffic_accuracy",
+        "operator": ">=",
+        "value": 0.66
+      },
+      {
+        "metric": "bf16_traffic_weighted_f1",
+        "operator": ">=",
+        "value": 0.65
+      },
+      {
+        "metric": "bf16_industrial_accuracy",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "bf16_industrial_macro_f1",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "bf16_industrial_weighted_f1",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "static_completed_requests",
+        "operator": "==",
+        "value": 3360.0
+      },
+      {
+        "metric": "static_traffic_accuracy",
+        "operator": ">=",
+        "value": 0.66
+      },
+      {
+        "metric": "static_traffic_weighted_f1",
+        "operator": ">=",
+        "value": 0.65
+      },
+      {
+        "metric": "static_traffic_valid_output_rate",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "static_industrial_accuracy",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "static_industrial_macro_f1",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "static_industrial_weighted_f1",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "static_industrial_valid_output_rate",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "nano_completed_requests",
+        "operator": "==",
+        "value": 500.0
+      },
+      {
+        "metric": "nano_strict_peak_bytes",
+        "operator": "<=",
+        "value": 1500000000.0
+      },
+      {
+        "metric": "nano_growth_100_to_500_bytes",
+        "operator": "<=",
+        "value": 33554432.0
+      },
+      {
+        "metric": "nano_minimum_mem_available_bytes",
+        "operator": ">=",
+        "value": 268435456.0
+      },
+      {
+        "metric": "nano_oom_kill_delta",
+        "operator": "==",
+        "value": 0.0
+      },
+      {
+        "metric": "nano_inference_longest_d_samples",
+        "operator": "<",
+        "value": 5.0
+      },
+      {
+        "metric": "nano_overall_mean_latency_ms",
+        "operator": "<",
+        "value": 200.0
+      },
+      {
+        "metric": "nano_traffic_accuracy",
+        "operator": ">=",
+        "value": 0.66
+      },
+      {
+        "metric": "nano_traffic_weighted_f1",
+        "operator": ">=",
+        "value": 0.65
+      },
+      {
+        "metric": "nano_industrial_accuracy",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "nano_industrial_macro_f1",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "nano_industrial_weighted_f1",
+        "operator": "==",
+        "value": 1.0
+      },
+      {
+        "metric": "nano_valid_output_rate",
+        "operator": "==",
+        "value": 1.0
+      }
+    ],
+    "metric_sources": {
+      "bf16_completed_requests": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.bf16_completed_requests"
+      },
+      "bf16_industrial_accuracy": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.bf16_industrial_accuracy"
+      },
+      "bf16_industrial_macro_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.bf16_industrial_macro_f1"
+      },
+      "bf16_industrial_valid_output_rate": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.bf16_industrial_valid_output_rate"
+      },
+      "bf16_industrial_weighted_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.bf16_industrial_weighted_f1"
+      },
+      "bf16_traffic_accuracy": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.bf16_traffic_accuracy"
+      },
+      "bf16_traffic_macro_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.bf16_traffic_macro_f1"
+      },
+      "bf16_traffic_valid_output_rate": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.bf16_traffic_valid_output_rate"
+      },
+      "bf16_traffic_weighted_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.bf16_traffic_weighted_f1"
+      },
+      "nano_completed_requests": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_completed_requests"
+      },
+      "nano_growth_100_to_500_bytes": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_growth_100_to_500_bytes"
+      },
+      "nano_industrial_accuracy": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_industrial_accuracy"
+      },
+      "nano_industrial_macro_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_industrial_macro_f1"
+      },
+      "nano_industrial_weighted_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_industrial_weighted_f1"
+      },
+      "nano_inference_longest_d_samples": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_inference_longest_d_samples"
+      },
+      "nano_minimum_mem_available_bytes": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_minimum_mem_available_bytes"
+      },
+      "nano_oom_kill_delta": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_oom_kill_delta"
+      },
+      "nano_overall_mean_latency_ms": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_overall_mean_latency_ms"
+      },
+      "nano_strict_peak_bytes": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_strict_peak_bytes"
+      },
+      "nano_traffic_accuracy": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_traffic_accuracy"
+      },
+      "nano_traffic_weighted_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_traffic_weighted_f1"
+      },
+      "nano_valid_output_rate": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.nano_valid_output_rate"
+      },
+      "static_completed_requests": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.static_completed_requests"
+      },
+      "static_industrial_accuracy": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.static_industrial_accuracy"
+      },
+      "static_industrial_macro_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.static_industrial_macro_f1"
+      },
+      "static_industrial_valid_output_rate": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.static_industrial_valid_output_rate"
+      },
+      "static_industrial_weighted_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.static_industrial_weighted_f1"
+      },
+      "static_traffic_accuracy": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.static_traffic_accuracy"
+      },
+      "static_traffic_macro_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.static_traffic_macro_f1"
+      },
+      "static_traffic_valid_output_rate": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.static_traffic_valid_output_rate"
+      },
+      "static_traffic_weighted_f1": {
+        "evidence": "q4_static_raw16_gate_summary",
+        "path": "metrics.static_traffic_weighted_f1"
+      }
+    },
+    "metrics": {
+      "bf16_completed_requests": 3360.0,
+      "bf16_industrial_accuracy": 1.0,
+      "bf16_industrial_macro_f1": 1.0,
+      "bf16_industrial_valid_output_rate": 1.0,
+      "bf16_industrial_weighted_f1": 1.0,
+      "bf16_traffic_accuracy": 0.67625,
+      "bf16_traffic_macro_f1": 0.618003,
+      "bf16_traffic_valid_output_rate": 1.0,
+      "bf16_traffic_weighted_f1": 0.686506,
+      "nano_completed_requests": 500.0,
+      "nano_growth_100_to_500_bytes": 299008.0,
+      "nano_industrial_accuracy": 1.0,
+      "nano_industrial_macro_f1": 1.0,
+      "nano_industrial_weighted_f1": 1.0,
+      "nano_inference_longest_d_samples": 0.0,
+      "nano_minimum_mem_available_bytes": 1726160896.0,
+      "nano_oom_kill_delta": 0.0,
+      "nano_overall_mean_latency_ms": 73.374463536,
+      "nano_strict_peak_bytes": 998445056.0,
+      "nano_traffic_accuracy": 0.704,
+      "nano_traffic_weighted_f1": 0.7119010159731486,
+      "nano_valid_output_rate": 1.0,
+      "static_completed_requests": 3360.0,
+      "static_industrial_accuracy": 1.0,
+      "static_industrial_macro_f1": 1.0,
+      "static_industrial_valid_output_rate": 1.0,
+      "static_industrial_weighted_f1": 1.0,
+      "static_traffic_accuracy": 0.6775,
+      "static_traffic_macro_f1": 0.6161214548803952,
+      "static_traffic_valid_output_rate": 1.0,
+      "static_traffic_weighted_f1": 0.6866164318487836
+    }
+  },
+  "input_contract": {
+    "context_encoder": "scene-disjoint-decimal16@v2",
+    "data_schema": "https://cloud-edge.local/schemas/scenes/traffic-edge-event-v1.json",
+    "direct_media_to_llm": false,
+    "event_type": "com.cloudedge.traffic.edge-event.v1",
+    "llm_input_type": "compact_text_code",
+    "max_input_tokens": 16
+  },
+  "lora": {
+    "alpha": 32,
+    "dropout": 0.05,
+    "modules_to_save": [],
+    "peft_type": "LORA",
+    "rank": 16,
+    "target_modules": [
+      "down_proj",
+      "gate_proj",
+      "k_proj",
+      "o_proj",
+      "q_proj",
+      "up_proj",
+      "v_proj"
+    ],
+    "task_type": "CAUSAL_LM"
+  },
+  "package_kind": "joint-static-raw16-model-release",
+  "runtime_adapters": [],
+  "scene": "freeway_traffic_management",
+  "schema_version": "edge-llm-adapter/v1",
+  "training": {
+    "methods": [
+      "sft"
+    ],
+    "teacher_model": "Qwen3.5-9B-offline-teacher",
+    "test_dataset_id": "traffic-frozen-2400+industrial-frozen-960",
+    "test_set_used_for_training": false,
+    "train_dataset_id": "joint-traffic-industrial-scene-disjoint-raw16-v2"
+  },
+  "training_lineage": {
+    "peft_artifact_runtime_loaded": false,
+    "role": "joint_training_and_static_merge_provenance_only"
+  },
+  "version": "2.0.0"
+}

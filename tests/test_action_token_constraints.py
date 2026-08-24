@@ -82,10 +82,11 @@ class ActionTokenConstraintTests(unittest.TestCase):
         decoder = ActionDecoder(
             read_json_object(traffic / "assets" / "edge_llm" / "base_manifest.json"),
             read_json_object(
-                traffic
-                / "assets"
-                / "edge_llm"
-                / "adapter_package_current_state_v2"
+                REPOSITORY_ROOT
+                / "model_bundle"
+                / "final"
+                / "qwen3_5_0p8b_q4"
+                / "adapter_package"
                 / "action_mapping.json"
             ),
         )

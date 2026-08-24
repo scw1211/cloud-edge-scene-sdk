@@ -338,7 +338,7 @@ class ReviewLifecycleStoreTest(unittest.TestCase):
         self.assertEqual(snapshot["corrections"], 1)
         store.close()
 
-    def test_non_authoritative_stages_are_not_final_or_routing_samples(self) -> None:
+    def test_non_authoritative_stages_are_not_final_corrections(self) -> None:
         store = ReviewLifecycleStore()
         for index, stage in enumerate(
             ("lightweight_final", "partial_final", "local_only_timeout"), start=1
@@ -379,10 +379,6 @@ class ReviewLifecycleStoreTest(unittest.TestCase):
         self.assertEqual(snapshot["latency_ms"]["local_only_timeout"]["count"], 1)
         self.assertEqual(snapshot["corrections"], 1)
         self.assertEqual(snapshot["cloud_correction_rate"], 1.0)
-        dataset = store.routing_dataset()
-        self.assertEqual(dataset["schema_version"], 2)
-        self.assertEqual(dataset["sample_count"], 1)
-        self.assertEqual(dataset["samples"][0]["event_id"], "terminal-1")
         store.close()
 
 

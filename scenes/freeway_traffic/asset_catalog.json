@@ -1,14 +1,7 @@
 {
   "schema_version": "traffic-full-assets/v1",
-  "bundle_version": "0.13.1-current-state-v2",
+  "bundle_version": "1.0.0-final-q4",
   "downloaded_assets": {
-    "edge_qwen_gguf": {
-      "role": "edge",
-      "file": "assets/downloads/qwen35_0_8b_current_state_future_v2_q6_k.gguf",
-      "url": "https://github.com/scw1211/cloud-edge-scene-sdk/releases/download/traffic-assets-v0.13.1/qwen35_0_8b_current_state_future_v2_q6_k.gguf",
-      "bytes": 629735968,
-      "sha256": "ee7180eb41ea6d606b723e459d7a67198603b5a55e80849a5855e382686d291e"
-    },
     "pems08_inference_array": {
       "role": "edge",
       "startup_required": false,
@@ -19,6 +12,11 @@
     }
   },
   "embedded_assets": {
+    "final_edge_q4": {
+      "file": "../../model_bundle/final/qwen3_5_0p8b_q4/joint_static_raw16.Q4_K_M.gguf",
+      "bytes": 529289216,
+      "sha256": "828f839873c7505005101544d8febb7408bc0443c153c4ba97ec4b3603445526"
+    },
     "joint_astgcn_checkpoint": {
       "file": "assets/models/joint_risk_astgcn_metis4_flowprio2_frozen.pt",
       "bytes": 867237,
@@ -43,11 +41,6 @@
       "file": "assets/models/edge_qwen_gain_router_current_state_v1.json",
       "bytes": 1656,
       "sha256": "9de5979e82ef6d16b392c547b86d6d1c44d8539f930050bd4dd4fce0815d39b0"
-    },
-    "defer_gate": {
-      "file": "assets/models/edge_defer_gate.npz",
-      "bytes": 676016,
-      "sha256": "f4191ab8212cf6c42b5a9c04adb07a12874b645e788c3371a81b3b3eef056a41"
     },
     "tree_feature_codec": {
       "file": "assets/models/traffic_tree_feature_codec_topology_v1.npz",

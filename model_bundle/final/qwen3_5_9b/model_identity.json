@@ -1,0 +1,53 @@
+{
+  "schema_version": "final-cloud-model-identity/v2",
+  "roles": {
+    "production_runtime": "low_frequency_async_audit_non_blocking",
+    "reference_model": "Qwen3.5-9B Q4_K_M for the final scored 828f edge-model evaluation"
+  },
+  "model": "Qwen3.5-9B",
+  "source_repository": "Qwen/Qwen3.5-9B",
+  "source_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+  "distribution": {
+    "runtime_name": "qwen3.5:9b",
+    "ollama_manifest_sha256": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7"
+  },
+  "artifact": {
+    "name": "sha256-dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c",
+    "bytes": 6594462816,
+    "sha256": "dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c",
+    "quantization": "Q4_K_M",
+    "parameters": 9653104368,
+    "artifact_retained_in_submission": false
+  },
+  "runtime": {
+    "engine": "llama.cpp",
+    "build": "8c146a836",
+    "binary_sha256": "dbfeea380cdc1de9bbfe32399befbcd8381a3c5ac83e573d79d0fa41bdc40037"
+  },
+  "license": "Apache-2.0",
+  "retained_metadata": {
+    "config": {"path": "model_bundle/final/qwen3_5_9b/config.json", "bytes": 3126, "sha256": "d0883072e01861ed0b2d47be3c16c36a8e81c224c7ffaa310c6558fb3f932b05"},
+    "tensor_index": {"path": "model_bundle/final/qwen3_5_9b/model.safetensors.index.json", "bytes": 79657, "sha256": "26d3539b516be613f39563617cb9d33b3f83d401298125be392c80cefb8f7fe5"},
+    "chat_template": {"path": "model_bundle/final/qwen3_5_9b/chat_template.jinja", "bytes": 7756, "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"},
+    "tokenizer_config": {"path": "model_bundle/final/qwen3_5_9b/tokenizer_config.json", "bytes": 16710, "sha256": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8"}
+  },
+  "evaluation": {
+    "formal_ttft_requests_per_arm": 240,
+    "scored_edge_model_sha256": "828f839873c7505005101544d8febb7408bc0443c153c4ba97ec4b3603445526",
+    "fair_ttft_status": "FINAL_TTFT_PASS",
+    "fair_ttft_reduction": 0.8676741363772513,
+    "capability_samples_per_arm": 80,
+    "capability_scope": "elementary millisecond-scale business tasks",
+    "capability_pairing_status": "FINAL_BASIC_CAPABILITY_PASS",
+    "semantic_retention": {
+      "math": 0.9655172413793104,
+      "code": 1.0,
+      "natural_language_reasoning": 0.9
+    },
+    "optional_difficult_task_candidate": {
+      "model_sha256": "d4f248ee8e6403bb2c2ba25242a7832fe8fb593256eeb09d1b206b272d0f5eb4",
+      "included_in_final_scoring": false,
+      "release_qualified": false
+    }
+  }
+}

@@ -22,6 +22,9 @@ from cloud_edge_framework.registry import SceneRegistry  # noqa: E402
 from cloud_edge_framework.runtime import CloudRuntime  # noqa: E402
 from freeway_traffic_full.edge_llm import TrafficEdgeLLMController  # noqa: E402
 from freeway_traffic_full.plugin_impl import TrafficPlugin  # noqa: E402
+from traffic_system.current_state_perception_runtime import (  # noqa: E402
+    CurrentStateTrafficPerceptionRuntime,
+)
 
 
 def _raw_event(**overrides):
@@ -152,9 +155,8 @@ class TrafficConstructorCompatibilityTests(unittest.TestCase):
         self.assertEqual(controller.runtime_failure_cooldown_seconds, 9.0)
         self.assertEqual(controller.min_expected_gain, 0.05)
 
-    def test_plugin_old_positional_arguments_keep_policy_version(self):
+    def test_plugin_positional_arguments_keep_policy_version(self):
         plugin = TrafficPlugin(
-            None,
             None,
             None,
             None,
@@ -577,10 +579,12 @@ class TrafficSemanticTests(unittest.TestCase):
             "traffic_explicit_cloud_llm_review",
         )
 
-    def test_defer_preparation_preserves_student_confidence_and_disagreement(self):
+    def test_local_uncertainty_preserves_student_confidence_and_disagreement(self):
         plugin = TrafficPlugin(edge_student_path=Path("student-not-loaded.json"))
         event = plugin.normalize(SceneEventEnvelope.from_dict(_raw_event()))
-        prepared = plugin._apply_defer_gate(event, _student(event, 0.91, "reroute"))
+        prepared = plugin._attach_local_uncertainty(
+            event, _student(event, 0.91, "reroute")
+        )
 
         self.assertEqual(prepared.metadata["traffic_student_candidate_confidence"], 0.91)
         self.assertTrue(prepared.metadata["traffic_student_rule_disagreement"])
@@ -641,14 +645,32 @@ class TrafficCloudBatchDecisionTests(unittest.TestCase):
             ),
         )
         self.plugin.warmup()
+        canonical_runtime = CurrentStateTrafficPerceptionRuntime(
+            TRAFFIC_ROOT
+            / "assets"
+            / "downloads"
+            / "PEMS08_r1_d0_w0_astcgn_multitask.npz",
+            model_root / "current_state_perception_v1.json",
+            model_root / "traffic_region_topology_metis4.json",
+            split="test",
+            top_k=10,
+        )
+        canonical_by_partition = {
+            event["partition_id"]: event
+            for event in canonical_runtime.infer_sample(200).events
+        }
         self.events = []
         for partition_id in range(4):
+            canonical = canonical_by_partition[partition_id]
             raw = _raw_event(
                 sample_id=200,
                 region_id="region_{}".format(partition_id),
                 partition_id=partition_id,
                 num_partitions=4,
-                managed_node_ids=[partition_id * 4 + value for value in (1, 2, 3, 4)],
+                managed_node_ids=canonical["managed_node_ids"],
+                road_set_overlap_observations=canonical[
+                    "road_set_overlap_observations"
+                ],
             )
             raw["id"] = "traffic-cloud-batch-{}".format(partition_id)
             raw["edgeid"] = "edge_node_{}".format(partition_id)
@@ -674,6 +696,18 @@ class TrafficCloudBatchDecisionTests(unittest.TestCase):
         self.assertTrue(
             all(item.metadata["cloud_inference_batch_size"] == 4 for item in batched)
         )
+
+    def test_cloud_event_keeps_only_data_plane_fields(self):
+        event = self.events[0]
+
+        self.assertFalse(
+            {"scene", "task", "event_id"}.intersection(event.scene_payload)
+        )
+        self.assertEqual(event.metadata["data_plane"], "task_feature_evidence")
+        self.assertIn("regional_state", event.metadata)
+        self.assertIn("aggregation", event.metadata)
+        self.assertNotIn("reference_edge_decision", event.metadata)
+        self.assertNotIn("ingress_dataschema", event.metadata)
 
     def test_cloud_runtime_runs_one_probability_batch_for_four_regions(self):
         model = self.plugin._cloud_model["model"]

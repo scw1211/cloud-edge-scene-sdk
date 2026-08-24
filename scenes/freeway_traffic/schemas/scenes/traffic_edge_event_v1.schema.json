@@ -104,6 +104,35 @@
          ],
          "type" : "object"
       },
+      "neighborContext" : {
+         "additionalProperties" : false,
+         "properties" : {
+            "neighbor_planned_action" : {
+               "enum" : ["A", "B", "C", "D", "E", "F"]
+            },
+            "neighbor_remaining_capacity" : {
+               "$ref" : "#/$defs/unitScore"
+            },
+            "neighbor_risk_max" : {
+               "$ref" : "#/$defs/riskLevel"
+            },
+            "neighbor_risk_trend" : {
+               "enum" : ["falling", "stable", "rising"]
+            },
+            "snapshot_age_ms" : {
+               "minimum" : 0,
+               "type" : "integer"
+            }
+         },
+         "required" : [
+            "neighbor_risk_max",
+            "neighbor_risk_trend",
+            "neighbor_remaining_capacity",
+            "neighbor_planned_action",
+            "snapshot_age_ms"
+         ],
+         "type" : "object"
+      },
       "expectedGain" : {
          "maximum" : 1,
          "minimum" : -1,
@@ -147,6 +176,19 @@
          },
          "type" : "array",
          "uniqueItems" : true
+      },
+      "neighbor_context" : {
+         "oneOf" : [
+            { "$ref" : "#/$defs/neighborContext" },
+            {
+               "items" : { "type" : "object" },
+               "type" : "array"
+            }
+         ]
+      },
+      "coordination_policy_version" : {
+         "minLength" : 1,
+         "type" : "string"
       },
       "model" : {
          "minLength" : 1,

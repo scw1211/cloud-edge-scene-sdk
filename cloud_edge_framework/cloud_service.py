@@ -3,6 +3,7 @@
 import argparse
 from dataclasses import replace
 from pathlib import Path
+import queue
 import threading
 import time
 from typing import Any, Dict, List, Mapping, Tuple
@@ -21,6 +22,12 @@ from cloud_edge_framework.metrics import FrameworkMetrics
 from cloud_edge_framework.plugin_manager import PluginRuntimeManager
 from cloud_edge_framework.reliability import SQLiteIdempotencyStore
 from cloud_edge_framework.service_config import FrameworkServiceConfig, load_service_config
+from cloud_edge_framework.selective_evidence_pull import (
+    HttpEvidencePullClient,
+    SelectiveEvidencePullPlanner,
+    fetch_pull_plan,
+    merge_pulled_evidence,
+)
 from cloud_edge_framework.version import FRAMEWORK_VERSION
 
 
@@ -68,6 +75,41 @@ class CloudApiService:
                 min_risk_level=config.cloud_llm.min_risk_level,
             )
         feedback_store = DecisionFeedbackStore(config.storage.feedback)
+        feedback_path = config.storage.feedback
+        audit_path = (
+            feedback_path.with_name(
+                feedback_path.stem + "_cloud_llm_audits.jsonl"
+            )
+            if feedback_path is not None
+            else self.project_root
+            / "runtime"
+            / "framework_cloud_llm_audits.jsonl"
+        )
+        self.cloud_audit_store = DecisionFeedbackStore(audit_path)
+        self._cloud_audit_completed_ids = {
+            str(record.get("feedback_id", ""))
+            for record in self.cloud_audit_store.records()
+        }
+        self._cloud_audit_queue: queue.Queue = queue.Queue(maxsize=256)
+        self._cloud_audit_pending = set()
+        self._cloud_audit_lock = threading.RLock()
+        self._cloud_audit_stop = threading.Event()
+        self._cloud_audit_accepting = True
+        self._cloud_audit_state: Dict[str, Any] = {
+            "running": True,
+            "queued": 0,
+            "completed": 0,
+            "failed": 0,
+            "dropped": 0,
+            "shutdown_incomplete": False,
+            "errors": [],
+            "business_result_blocking": False,
+        }
+        self._cloud_audit_worker = threading.Thread(
+            target=self._cloud_audit_loop,
+            name="cloud-llm-async-audit",
+            daemon=True,
+        )
         self.manager = PluginRuntimeManager(
             project_root=self.project_root,
             config_path=config.plugin_config,
@@ -84,6 +126,18 @@ class CloudApiService:
             max_entries=config.idempotency.max_entries,
         )
         self.metrics = FrameworkMetrics(self.role)
+        self.evidence_pull_client = None
+        self.evidence_pull_planner = None
+        evidence_pull = config.evidence_pull
+        if evidence_pull is not None and evidence_pull.enabled:
+            self.evidence_pull_client = HttpEvidencePullClient(
+                evidence_pull.allowed_edge_base_urls,
+                timeout_seconds=evidence_pull.fetch_timeout_seconds,
+                max_response_bytes=evidence_pull.max_response_bytes,
+            )
+            self.evidence_pull_planner = SelectiveEvidencePullPlanner(
+                evidence_pull.max_members_per_group
+            )
         self._aggregation_stop = threading.Event()
         self._aggregation_wakeup = threading.Event()
         self._aggregation_worker_state: Dict[str, Any] = {
@@ -97,7 +151,144 @@ class CloudApiService:
             name="cloud-aggregation-timeout-flusher",
             daemon=True,
         )
+        self._cloud_audit_worker.start()
         self._aggregation_worker.start()
+
+    def _cloud_audit_loop(self) -> None:
+        """Run optional LLM audits after the business result is available."""
+
+        try:
+            while True:
+                try:
+                    task = self._cloud_audit_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                if task is None:
+                    self._cloud_audit_queue.task_done()
+                    break
+                audit_id = str(task["audit_id"])
+                try:
+                    review = self.cloud_reviewer.review(
+                        task["event"], task["decision"]
+                    ).to_dict()
+                    self.cloud_audit_store.append_record(
+                        {
+                            "schema_version": 1,
+                            "feedback_id": audit_id,
+                            "record_type": "cloud_llm_async_audit",
+                            "created_at_ms": int(time.time() * 1000),
+                            "group_id": task["group_id"],
+                            "group_key": task["group_key"],
+                            "event_id": task["event"].event_id,
+                            "scene": task["event"].scene,
+                            "business_decision_id": task["decision"].decision_id,
+                            "business_decision": task["decision"].decision,
+                            "business_result_changed": False,
+                            "review": review,
+                            "audit_latency_ms": review.get("latency_ms"),
+                        }
+                    )
+                    with self._cloud_audit_lock:
+                        self._cloud_audit_completed_ids.add(audit_id)
+                        self._cloud_audit_state["completed"] += 1
+                except Exception as exc:  # noqa: BLE001
+                    with self._cloud_audit_lock:
+                        self._cloud_audit_state["failed"] += 1
+                        self._cloud_audit_state["errors"] = (
+                            self._cloud_audit_state["errors"]
+                            + ["{}: {}".format(type(exc).__name__, exc)]
+                        )[-10:]
+                finally:
+                    with self._cloud_audit_lock:
+                        self._cloud_audit_pending.discard(audit_id)
+                    self._cloud_audit_queue.task_done()
+        finally:
+            with self._cloud_audit_lock:
+                self._cloud_audit_state["running"] = False
+                self._cloud_audit_state["shutdown_incomplete"] = False
+
+    def _enqueue_cloud_audits(
+        self,
+        group_ids: List[str],
+        event_groups: List[List[SemanticEvent]],
+        coordination_groups: List[Dict[str, Any]],
+    ) -> None:
+        """Queue at most one audit for each fused group without delaying it."""
+
+        if getattr(self, "cloud_reviewer", None) is None:
+            return
+        for group_id, events, coordination in zip(
+            group_ids, event_groups, coordination_groups
+        ):
+            raw_decisions = coordination.get("decisions", [])
+            if not isinstance(raw_decisions, list):
+                continue
+            for event, raw_decision in zip(events, raw_decisions):
+                decision = DecisionEnvelope.from_dict(raw_decision)
+                if decision.metadata.get("cloud_llm_audit_requested") is not True:
+                    continue
+                group_key = str(
+                    decision.metadata.get("cloud_llm_review_group_key", group_id)
+                )
+                audit_id = stable_id(
+                    "cloud_llm_async_audit", group_key, decision.decision_id
+                )
+                with self._cloud_audit_lock:
+                    if not self._cloud_audit_accepting:
+                        self._cloud_audit_state["dropped"] += 1
+                        break
+                    if (
+                        audit_id in self._cloud_audit_pending
+                        or audit_id in self._cloud_audit_completed_ids
+                    ):
+                        break
+                    self._cloud_audit_pending.add(audit_id)
+                    try:
+                        self._cloud_audit_queue.put_nowait(
+                            {
+                                "audit_id": audit_id,
+                                "group_id": group_id,
+                                "group_key": group_key,
+                                "event": event,
+                                "decision": decision,
+                            }
+                        )
+                    except queue.Full:
+                        self._cloud_audit_pending.discard(audit_id)
+                        self._cloud_audit_state["failed"] += 1
+                        self._cloud_audit_state["dropped"] += 1
+                        self._cloud_audit_state["errors"] = (
+                            self._cloud_audit_state["errors"]
+                            + ["async audit queue is full"]
+                        )[-10:]
+                    else:
+                        self._cloud_audit_state["queued"] += 1
+                break
+
+    def _try_enqueue_cloud_audits(
+        self,
+        group_ids: List[str],
+        event_groups: List[List[SemanticEvent]],
+        coordination_groups: List[Dict[str, Any]],
+    ) -> None:
+        """Keep audit bookkeeping outside the business-result failure path."""
+
+        try:
+            self._enqueue_cloud_audits(
+                group_ids,
+                event_groups,
+                coordination_groups,
+            )
+        except Exception as audit_exc:  # noqa: BLE001
+            audit_lock = getattr(self, "_cloud_audit_lock", None)
+            audit_state = getattr(self, "_cloud_audit_state", None)
+            if audit_lock is not None and audit_state is not None:
+                with audit_lock:
+                    audit_state["failed"] += 1
+                    audit_state["errors"] = (
+                        audit_state["errors"]
+                        + ["{}: {}".format(type(audit_exc).__name__, audit_exc)]
+                    )[-10:]
 
     def _aggregation_flush_loop(self) -> None:
         while not self._aggregation_stop.is_set():
@@ -129,6 +320,7 @@ class CloudApiService:
             wakeup.set()
 
     def health(self) -> Dict[str, Any]:
+        evidence_pull_client = getattr(self, "evidence_pull_client", None)
         return {
             "status": "ok",
             "ready": True,
@@ -143,9 +335,27 @@ class CloudApiService:
                 **self._aggregation_worker_state,
                 "running": self._aggregation_worker.is_alive(),
             },
+            "cloud_llm_async_audit": {
+                **self._cloud_audit_state,
+                "running": self._cloud_audit_worker.is_alive(),
+                "pending": self._cloud_audit_queue.unfinished_tasks,
+                "records": self.cloud_audit_store.count(),
+            },
+            "selective_evidence_pull": {
+                "enabled": evidence_pull_client is not None,
+                "normal_path": "summary_only_no_pull",
+                "owners_per_road_set": 2,
+                "unique_member_cap_per_group": 4,
+                "allowed_edge_base_urls": sorted(
+                    evidence_pull_client.allowed_edge_base_urls
+                )
+                if evidence_pull_client is not None
+                else [],
+            },
         }
 
     def protocol(self) -> Dict[str, Any]:
+        evidence_pull_client = getattr(self, "evidence_pull_client", None)
         return {
             "schema_version": SCHEMA_VERSION,
             "role": self.role,
@@ -163,6 +373,19 @@ class CloudApiService:
                 "aggregate_results_batch": AGGREGATE_RESULTS_BATCH_ENDPOINT,
                 "flush_aggregations": AGGREGATE_FLUSH_ENDPOINT,
                 "aggregations": AGGREGATIONS_ENDPOINT,
+                "selective_evidence_pull": (
+                    "edge capability callback after a shared road-set trigger"
+                ),
+            },
+            "selective_evidence_pull": {
+                "enabled": evidence_pull_client is not None,
+                "owners_per_road_set": 2,
+                "unique_member_cap_per_group": 4,
+                "allowed_edge_base_urls": sorted(
+                    evidence_pull_client.allowed_edge_base_urls
+                )
+                if evidence_pull_client is not None
+                else [],
             },
         }
 
@@ -210,6 +433,12 @@ class CloudApiService:
         result["trace_id"] = str(headers.get("x-trace-id", "")) or str(
             event.get("metadata", {}).get("trace_id", "")
         )
+        if getattr(self, "cloud_reviewer", None) is not None:
+            self._try_enqueue_cloud_audits(
+                [stable_id("direct_cloud_decision", event_id)],
+                [[SemanticEvent.from_dict(event)]],
+                [{"decisions": [result["decision"]]}],
+            )
         self.metrics.record_cloud_request("cloud_decision", elapsed_ms, replayed)
         return result
 
@@ -247,6 +476,12 @@ class CloudApiService:
         result["idempotency_replay"] = replayed
         result.setdefault("cloud_accepted_at_ms", cloud_accepted_at_ms)
         result["trace_id"] = str(headers.get("x-trace-id", ""))
+        if getattr(self, "cloud_reviewer", None) is not None:
+            self._try_enqueue_cloud_audits(
+                [stable_id("direct_coordinate", *sorted(event_ids))],
+                [[SemanticEvent.from_dict(event) for event in events]],
+                [result],
+            )
         self.metrics.record_cloud_request("coordinate", elapsed_ms, replayed)
         self.metrics.record_coordination_result(result, replayed)
         return result
@@ -256,6 +491,188 @@ class CloudApiService:
         if errors:
             raise RuntimeError(errors[0]["error"])
         return completed[0]
+
+    @staticmethod
+    def _coordinate_runtime_groups(
+        runtime: Any,
+        groups: List[List[SemanticEvent]],
+    ) -> List[Dict[str, Any]]:
+        if hasattr(runtime, "coordinate_groups"):
+            return list(runtime.coordinate_groups(groups))
+        return [runtime.coordinate(events) for events in groups]
+
+    def _coordinate_with_selective_evidence_pull(
+        self,
+        runtime: Any,
+        trusted_groups: List[List[SemanticEvent]],
+    ) -> Tuple[List[Dict[str, Any]], List[List[SemanticEvent]]]:
+        """Run summary coordination, then rerun after all missing targets arrive.
+
+        Pulling is deliberately absent from the normal path.  A malformed,
+        expired, missing, or timed-out two-member callback keeps the complete
+        first-pass coordination result and never grants additional authority.
+        """
+
+        coordinated = self._coordinate_runtime_groups(runtime, trusted_groups)
+        evidence_pull_client = getattr(self, "evidence_pull_client", None)
+        evidence_pull_planner = getattr(self, "evidence_pull_planner", None)
+        if evidence_pull_client is None or evidence_pull_planner is None:
+            return coordinated, trusted_groups
+
+        effective_groups = list(trusted_groups)
+        final_results: List[Dict[str, Any]] = []
+        for group_index, (events, initial) in enumerate(
+            zip(trusted_groups, coordinated)
+        ):
+            try:
+                plan = evidence_pull_planner.plan(events, initial)
+            except Exception as exc:  # noqa: BLE001
+                # Selective enrichment is not allowed to discard a completed
+                # first pass.  Treat an unexpected planner failure as a
+                # required-but-incomplete pull so finality remains conservative.
+                selected_result = dict(initial)
+                selected_result["evidence_pull"] = {
+                    "schema_version": 1,
+                    "triggered": True,
+                    "trigger_reasons": ["pull_planner_failure"],
+                    "road_set_ids": [],
+                    "road_set_members": {},
+                    "road_set_levels": {},
+                    "requested_members": [],
+                    "fetch_target_members": [],
+                    "requested_level": None,
+                    "initial_evidence_sufficient": False,
+                    "budgets": {
+                        "owners_per_road_set": 2,
+                        "unique_members_per_group": 4,
+                        "road_sets_per_group": 5,
+                    },
+                    "attempted": 0,
+                    "succeeded": 0,
+                    "failed": 0,
+                    "rerun_applied": False,
+                    "fallback": "initial_summary_coordination",
+                    "no_pull_reason": "pull_planner_failed",
+                    "errors": ["{}: {}".format(type(exc).__name__, exc)],
+                }
+                self.metrics.increment("evidence_pull_groups_total")
+                self.metrics.increment("evidence_pull_triggered_groups_total")
+                self.metrics.increment("evidence_pull_fail_closed_total")
+                final_results.append(selected_result)
+                continue
+            diagnostics: Dict[str, Any] = {
+                "schema_version": 1,
+                "triggered": plan.triggered,
+                "trigger_reasons": list(plan.trigger_reasons),
+                "road_set_ids": list(plan.road_set_ids),
+                "road_set_members": dict(plan.road_set_members),
+                "road_set_levels": dict(plan.road_set_levels),
+                "requested_members": list(plan.requested_members),
+                "fetch_target_members": [
+                    target.member for target in plan.targets
+                ],
+                "requested_level": plan.requested_level,
+                "initial_evidence_sufficient": (
+                    plan.initial_evidence_sufficient
+                ),
+                "budgets": {
+                    "owners_per_road_set": 2,
+                    "unique_members_per_group": 4,
+                    "road_sets_per_group": 5,
+                },
+                "attempted": 0,
+                "succeeded": 0,
+                "failed": 0,
+                "rerun_applied": False,
+                "fallback": None,
+                "no_pull_reason": plan.no_pull_reason,
+                "errors": [],
+            }
+            self.metrics.increment("evidence_pull_groups_total")
+            selected_result = dict(initial)
+            if not plan.triggered:
+                self.metrics.increment("evidence_pull_no_trigger_total")
+                selected_result["evidence_pull"] = diagnostics
+                final_results.append(selected_result)
+                continue
+
+            self.metrics.increment("evidence_pull_triggered_groups_total")
+            if not plan.targets:
+                if plan.initial_evidence_sufficient:
+                    self.metrics.increment(
+                        "evidence_pull_already_present_total"
+                    )
+                    selected_result["evidence_pull"] = diagnostics
+                    final_results.append(selected_result)
+                    continue
+                diagnostics["fallback"] = "initial_summary_coordination"
+                self.metrics.increment("evidence_pull_fail_closed_total")
+                selected_result["evidence_pull"] = diagnostics
+                final_results.append(selected_result)
+                continue
+
+            diagnostics["attempted"] = len(plan.targets)
+            self.metrics.increment(
+                "evidence_pull_fetch_attempts_total", amount=len(plan.targets)
+            )
+            pull_started = time.perf_counter()
+            pulled, errors = fetch_pull_plan(evidence_pull_client, plan)
+            diagnostics["succeeded"] = len(pulled)
+            diagnostics["failed"] = len(plan.targets) - len(pulled)
+            diagnostics["errors"] = list(errors)
+            self.metrics.increment(
+                "evidence_pull_fetch_successes_total", amount=len(pulled)
+            )
+            self.metrics.increment(
+                "evidence_pull_fetch_failures_total",
+                amount=len(plan.targets) - len(pulled),
+            )
+            self.metrics.observe(
+                "evidence_pull_pair_latency_ms",
+                (time.perf_counter() - pull_started) * 1000.0,
+            )
+            self.metrics.observe(
+                "evidence_pull_response_bytes",
+                sum(value.response_bytes for value in pulled.values()),
+            )
+            if errors or len(pulled) != len(plan.targets):
+                diagnostics["fallback"] = "initial_summary_coordination"
+                diagnostics["no_pull_reason"] = "fetch_targets_incomplete"
+                self.metrics.increment("evidence_pull_fail_closed_total")
+                selected_result["evidence_pull"] = diagnostics
+                final_results.append(selected_result)
+                continue
+
+            try:
+                enriched = merge_pulled_evidence(events, pulled)
+                rerun = self._coordinate_runtime_groups(runtime, [enriched])[0]
+            except Exception as exc:  # noqa: BLE001
+                diagnostics["errors"] = [
+                    "rerun:{}: {}".format(type(exc).__name__, exc)
+                ]
+                diagnostics["fallback"] = "initial_summary_coordination"
+                diagnostics["no_pull_reason"] = "evidence_rerun_failed"
+                self.metrics.increment("evidence_pull_fail_closed_total")
+            else:
+                effective_groups[group_index] = enriched
+                selected_result = dict(rerun)
+                diagnostics["rerun_applied"] = True
+                diagnostics["no_pull_reason"] = ""
+                diagnostics["initial_summary_result"] = {
+                    "initial_conflict_count": int(
+                        initial.get("initial_conflict_count", 0)
+                    ),
+                    "residual_conflict_count": int(
+                        initial.get("residual_conflict_count", 0)
+                    ),
+                    "globally_consistent": bool(
+                        initial.get("globally_consistent", False)
+                    ),
+                }
+                self.metrics.increment("evidence_pull_reruns_total")
+            selected_result["evidence_pull"] = diagnostics
+            final_results.append(selected_result)
+        return final_results, effective_groups
 
     def _complete_aggregation_leases_batch(
         self,
@@ -279,14 +696,11 @@ class CloudApiService:
                     )
                     for lease in leases
                 ]
-                if hasattr(runtime, "coordinate_groups"):
-                    coordinated = runtime.coordinate_groups(
-                        trusted_groups
+                coordinated, audit_groups = (
+                    self._coordinate_with_selective_evidence_pull(
+                        runtime, trusted_groups
                     )
-                else:
-                    coordinated = [
-                        runtime.coordinate(events) for events in trusted_groups
-                    ]
+                )
             if len(coordinated) != len(leases):
                 raise ValueError(
                     "cloud group batch changed aggregation result count"
@@ -307,6 +721,13 @@ class CloudApiService:
             else:
                 for lease, result in zip(leases, marked):
                     self.aggregator.complete(lease.group_id, result)
+            # The business result is durable before any optional 9B work is
+            # queued.  Audit failures therefore cannot delay or replace it.
+            self._try_enqueue_cloud_audits(
+                [lease.group_id for lease in leases],
+                audit_groups,
+                marked,
+            )
         except Exception as exc:
             if len(leases) > 1:
                 middle = len(leases) // 2
@@ -438,8 +859,20 @@ class CloudApiService:
         observed_members_consistent = bool(
             coordination.get("globally_consistent", False)
         )
+        evidence_pull = coordination.get("evidence_pull", {})
+        evidence_pull = (
+            dict(evidence_pull) if isinstance(evidence_pull, dict) else {}
+        )
+        selective_pull_required = bool(evidence_pull.get("triggered", False))
+        selective_pull_complete = bool(
+            not selective_pull_required
+            or evidence_pull.get("rerun_applied", False)
+            or evidence_pull.get("initial_evidence_sufficient", False)
+        )
         global_confirmation = bool(
-            evidence_complete and observed_members_consistent
+            evidence_complete
+            and observed_members_consistent
+            and selective_pull_complete
         )
         aggregation_metadata = {
             "group_id": lease.group_id,
@@ -453,6 +886,8 @@ class CloudApiService:
             "completeness_basis": "expected_aggregation_members",
             "cloud_confirmed": global_confirmation,
             "global_confirmation": global_confirmation,
+            "selective_evidence_pull_required": selective_pull_required,
+            "selective_evidence_pull_complete": selective_pull_complete,
             "result_revision": int(lease.result_revision),
         }
         decisions = []
@@ -823,10 +1258,42 @@ class CloudApiService:
         self.metrics.record_failure("{} {}".format(method, path))
 
     def close(self) -> None:
+        with self._cloud_audit_lock:
+            self._cloud_audit_accepting = False
         self._aggregation_stop.set()
         self._aggregation_wakeup.set()
         self._aggregation_worker.join(timeout=1.0)
         self._aggregation_worker_state["running"] = False
+        self._cloud_audit_stop.set()
+        dropped_ids = []
+        with self._cloud_audit_lock:
+            while True:
+                try:
+                    task = self._cloud_audit_queue.get_nowait()
+                except queue.Empty:
+                    break
+                self._cloud_audit_queue.task_done()
+                if task is not None:
+                    audit_id = str(task["audit_id"])
+                    dropped_ids.append(audit_id)
+                    self._cloud_audit_pending.discard(audit_id)
+            if dropped_ids:
+                self._cloud_audit_state["dropped"] += len(dropped_ids)
+                self._cloud_audit_state["errors"] = (
+                    self._cloud_audit_state["errors"]
+                    + [
+                        "shutdown dropped {} queued async audit(s)".format(
+                            len(dropped_ids)
+                        )
+                    ]
+                )[-10:]
+            if self._cloud_audit_worker.is_alive():
+                self._cloud_audit_queue.put_nowait(None)
+        self._cloud_audit_worker.join(timeout=1.0)
+        with self._cloud_audit_lock:
+            worker_alive = self._cloud_audit_worker.is_alive()
+            self._cloud_audit_state["running"] = worker_alive
+            self._cloud_audit_state["shutdown_incomplete"] = worker_alive
         self.manager.close()
         self.aggregator.close()
         self.idempotency.close()

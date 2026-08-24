@@ -1,0 +1,239 @@
+{
+  "schema_version": "traffic-final-mainline/v1",
+  "mode": "FINAL_SUBMISSION",
+  "effective_at": "2026-08-22T22:41:47+08:00",
+  "scope": "formal_submission_traffic_evaluation_mainline",
+  "stages": [
+    {
+      "id": "input",
+      "business_label": "输入",
+      "contents": [
+        "四区域交通时序数据",
+        "四区域交通状态数据"
+      ]
+    },
+    {
+      "id": "edge_intelligence",
+      "business_label": "边缘智能",
+      "contents": [
+        "专业感知",
+        "Student主判",
+        "规则约束",
+        "Q4全事件建议（提交计分路径）"
+      ]
+    },
+    {
+      "id": "cloud_edge_collaboration",
+      "business_label": "云边协同",
+      "contents": [
+        "compact摘要上传",
+        "CollaborationScheduler路径调度",
+        "云端四区域聚合",
+        "ExtraTrees主判",
+        "必要时9B低频审计",
+        "弱网本地自治与恢复补传"
+      ]
+    },
+    {
+      "id": "output",
+      "business_label": "最终输出",
+      "contents": [
+        "各区域局部态势",
+        "全局风险状态",
+        "重点区域",
+        "最终协调或复核结果",
+        "实际处理路径与时延"
+      ]
+    }
+  ],
+  "decision_authorities": {
+    "route": "CollaborationScheduler",
+    "cloud_primary": "ExtraTrees",
+    "cloud_9b": "optional_low_frequency_audit_non_blocking"
+  },
+  "degradation_and_delivery": {
+    "offline_behavior": "local_autonomy",
+    "delivery": "durable_outbox_and_replay_after_recovery",
+    "stale_result_behavior": "reject_expired_result"
+  },
+  "excluded_from_formal_online_mainline": [
+    "experimental automatic control"
+  ],
+  "ui_contract": {
+    "main_view": "business_language_only",
+    "technical_details": [
+      "Student",
+      "Q4",
+      "CollaborationScheduler",
+      "ExtraTrees",
+      "9B"
+    ],
+    "stage_labels": [
+      "输入",
+      "边缘智能",
+      "云边协同",
+      "最终输出"
+    ]
+  },
+  "evidence_boundary": {
+    "traffic_demo": "冻结界面示意",
+    "edge_request_and_cloud_closed_loop_same_batch": false,
+    "formal_e2e": "全Qwen primary 400个单节点事件请求正式运行；每事件含感知均值作为赛事单位",
+    "actual_path_completion": "cloud_sync计到云端最终结果；edge_only和cloud_async在首个可用边缘业务结果形成时完成",
+    "rule": "界面示意不作为单样本时延证据；正式E2E只读取冻结400条汇总",
+    "sumo_control_claim": "ALINEA只进入附加仿真证据，不进入正式在线生产主链"
+  },
+  "formal_perception_inclusive_e2e": {
+    "count": 400,
+    "mean_ms": 159.70311,
+    "p95_ms": 232.50152,
+    "under_200ms_count": 331,
+    "under_200ms_rate": 0.8275,
+    "start": "resident windowed PEMS input before current-state perception",
+    "environment": "WSL2 loopback",
+    "measurement_type": "direct formal all-Qwen primary execution",
+    "candidate_direct_service_run": true,
+    "production_changed": false,
+    "sample_max_of_four_partitions_mean_ms": 227.446264,
+    "sample_max_of_four_partitions_under_200ms": "41/100",
+    "sample_window_role": "non-scoring concurrency diagnostic",
+    "q4_invocations": "400/400",
+    "q4_actions_accepted": 242,
+    "deterministic_safety_fallbacks": 158
+  },
+  "legacy_perception_inclusive_e2e_reference": {
+    "count": 400,
+    "mean_ms": 107.057783,
+    "p95_ms": 559.577185,
+    "under_200ms_count": 372,
+    "role": "legacy frozen batch reference only"
+  },
+  "final_scored_all_qwen_primary": {
+    "evidence": "results/final_traffic_all_qwen_primary_v1/summary.json",
+    "formal_q4_invocations": "400/400",
+    "q4_actions_accepted": 242,
+    "deterministic_safety_fallbacks": 158,
+    "event_mean_ms_including_perception": 159.70311,
+    "four_partition_window_mean_ms_including_perception": 227.446264,
+    "event_p95_ms_including_perception": 232.50152,
+    "event_under_200ms": "331/400",
+    "contest_scoring_unit": "one edge-node event request",
+    "superseded_source_verdict": "NO_GO_AS_FINAL_PRIMARY",
+    "final_contest_metric_decision": "PASS_ALL_QWEN_PRIMARY_PER_NODE_E2E",
+    "four_partition_window_is_non_scoring_concurrency_diagnostic": true,
+    "production_changed": false,
+    "policy": "Qwen suggestion on every event + deterministic rule hard authorization + Student fallback",
+    "live_production_switched": false
+  },
+  "dedicated_scene_capability_evidence": {
+    "official_scope": "TRAFFIC_ONLY",
+    "evidence": "results/final_0p8bq4_vs_traffic_extratrees_v1/summary.json",
+    "official_formula": "edge Qwen3.5-0.8B Q4 / traffic ExtraTrees",
+    "official_comparison_events": 1600,
+    "network_states": [
+      "normal",
+      "weak"
+    ],
+    "cloud_extratrees_accuracy_macro_f1_weighted_f1": [
+      0.7075,
+      0.561555328486,
+      0.696609254184
+    ],
+    "edge_q4_accuracy_macro_f1_weighted_f1": [
+      0.6475,
+      0.538883870924,
+      0.663793918732
+    ],
+    "traffic_retention_accuracy_macro_f1_weighted_f1": [
+      0.91519434628975,
+      0.9596273841384,
+      0.95289276555701
+    ],
+    "all_three_gates_passed": true,
+    "comparison_contract": "same 1600 normal-and-weak event IDs/targets; ExtraTrees uses 226-dimensional float32 features and Q4 uses deployment-native raw16; not byte-identical inputs",
+    "qwen_9b_role": "teacher-label generation and optional low-frequency audit mechanism only; not used in this experiment or its capability denominator",
+    "production_changed": false
+  },
+  "framework_innovations": {
+    "compact_semantic_codec": {
+      "title": "模型绑定的紧凑语义编码与单token推理",
+      "raw16_task_abi": {
+        "long_semantic_prompt_tokens_mean": 167.295833,
+        "raw16_prompt_tokens_mean": 16.0,
+        "long_semantic_ttft_mean_ms": 359.997237,
+        "raw16_ttft_mean_ms": 35.644454,
+        "ttft_reduction": 0.900986868,
+        "paired_events": 240,
+        "action_consistency_count": 32,
+        "boundary": "system-level paired input-contract effect; not pure token-count-only causality"
+      },
+      "tree_ir_secondary": {
+        "active_float32_payload_bytes_mean": 484.0,
+        "threshold_ir_payload_bytes_mean": 233.6975,
+        "prediction_exact_count": 1600,
+        "prediction_total": 1600,
+        "tree_leaf_path_exact_count": 80000,
+        "tree_path_total": 80000,
+        "boundary": "model-specific decision-boundary IR; not generic lossless numeric reconstruction and not a communication-only claim"
+      }
+    },
+    "progressive_evidence_scheduling": {
+      "title": "面向关联任务冲突感知的摘要先行渐进证据调度方法",
+      "summary_first": {
+        "full_raw_bytes": 11328303,
+        "communication_reference_bytes": 11328303,
+        "business_equivalence_reference_bytes": 11113184,
+        "selective_bytes": 8896732,
+        "reduction_percent": 21.464565,
+        "initial_summary_count": 400,
+        "feature_pull_count": 380,
+        "ordinary_raw_pull_count": 0,
+        "equivalence_matches": {
+          "cloud_final": 400,
+          "conflict": 400,
+          "final_business": 400,
+          "risk": 400,
+          "route": 400
+        },
+        "required_per_category": 400
+      },
+      "controlled_conflict_pull": {
+        "repair_case_count": 3,
+        "exact_raw_owner_count_per_repair": 2,
+        "all_repairs_use_exact_two_raw_owners": true,
+        "failure_case_count": 3,
+        "failed_evidence_action_authorization_count": 0
+      }
+    },
+    "safe_dual_timescale_revisioned_finality": {
+      "title": "安全门控的双时标响应与可修订终态框架",
+      "paired_endpoint": {
+        "events": 400,
+        "blocking_mean_ms": 561.247314,
+        "safe_response_mean_ms": 159.70311,
+        "premature_cloud_action_authorization_count": 0,
+        "experiment_kind": "counterfactual_endpoint_pairing_not_independent_live_ab"
+      },
+      "revisioned_arm_c": {
+        "groups": 100,
+        "first_result_count": 100,
+        "authoritative_final_count": 75,
+        "post_deadline_late_recovery_count": 25,
+        "false_final_count": 0,
+        "dangerous_incomplete_authorization_count": 0,
+        "eventually_complete_groups": 75,
+        "arm_a_false_final_count": 50,
+        "arm_b_permanent_first_result_blocks": 25,
+        "experiment_kind": "independent_controlled_state_machine_three_arm_experiment"
+      }
+    }
+  },
+  "immutable_scopes": [
+    "industrial algorithms",
+    "industrial models",
+    "industrial policies",
+    "industrial routing",
+    "production configuration",
+    "production services"
+  ]
+}

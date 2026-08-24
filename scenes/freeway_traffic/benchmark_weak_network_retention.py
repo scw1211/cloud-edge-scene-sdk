@@ -49,6 +49,7 @@ from run_partitioned_current_state_edges import (  # noqa: E402
     _edge_worker,
     _launch_isolated_edge_services,
     _stop_edge_services,
+    _validate_cloud_evidence_pull_allowlist,
 )
 from traffic_system.network_fault_proxy import (  # noqa: E402
     CONTROL_PROFILE_PATH,
@@ -195,7 +196,6 @@ def _model_ids(scene_root: Path) -> Dict[str, str]:
             / "models"
             / "edge_student_freeway_current_state_future_v1.json"
         ),
-        "edge_defer_gate": scene_root / "assets" / "models" / "edge_defer_gate.npz",
         "edge_feature_codec": (
             scene_root
             / "assets"
@@ -1177,6 +1177,22 @@ def main() -> None:
         ):
             raise ValueError("weak-network run requires four METIS partitions")
         _get_json(args.cloud_url, HEALTH_PATH, args.request_timeout_seconds)
+        evidence_pull = edge_service_template.get("evidence_pull", {})
+        if isinstance(evidence_pull, Mapping) and evidence_pull.get("enabled") is True:
+            if args.edge_port_base < 1 or args.edge_port_base + 3 > 65535:
+                raise ValueError("edge port range is invalid")
+            _validate_cloud_evidence_pull_allowlist(
+                args.cloud_url,
+                [
+                    "http://127.0.0.1:{}".format(
+                        args.edge_port_base + partition_id
+                    )
+                    for partition_id in range(4)
+                ],
+                timeout_seconds=min(
+                    2.0, max(0.1, args.request_timeout_seconds)
+                ),
+            )
 
         dataset_id = "pems08_metis4:{}".format(_sha256(manifest_path))
         model_ids = _model_ids(scene_root)

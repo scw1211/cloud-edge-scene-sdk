@@ -636,6 +636,15 @@ class IndustrialAnomalyPluginTests(unittest.TestCase):
             self.assertEqual(decision.metadata["cloud_model"], "industrial_extratrees")
             self.assertTrue(decision.metadata["cloud_llm_review_policy"]["eligible"])
             self.assertEqual(
+                decision.metadata["cloud_llm_review_policy"]["execution_mode"],
+                "async_advisory",
+            )
+            self.assertFalse(
+                decision.metadata["cloud_llm_review_policy"][
+                    "model_uncertainty_requires_synchronous_review"
+                ]
+            )
+            self.assertEqual(
                 decision.metadata["cloud_review_context"]["extratrees_decision"],
                 "anomaly",
             )
@@ -718,7 +727,7 @@ class IndustrialAnomalyPluginTests(unittest.TestCase):
         self.assertTrue(reviewed.metadata["cloud_llm_baseline_preserved"])
         self.assertEqual(
             reviewed.metadata["cloud_llm_review_role"],
-            "advisory_non_authoritative",
+            "async_advisory",
         )
         self.assertEqual(
             reviewed.metadata["cloud_llm_advisory_recommendation"],

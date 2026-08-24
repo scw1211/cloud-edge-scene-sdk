@@ -495,45 +495,6 @@ class ReviewLifecycleStore:
             ).fetchall()
         return [self._record(row) for row in rows]
 
-    def routing_dataset(self, limit: int = 10000) -> Dict[str, Any]:
-        if limit <= 0:
-            raise ValueError("routing dataset limit must be positive")
-        with self._lock:
-            rows = self._connection.execute(
-                "SELECT * FROM review_lifecycle "
-                "WHERE state='completed' AND routing_features_json!='{}' "
-                "AND completion_stage NOT IN ('partial_final','local_only_timeout') "
-                "ORDER BY completed_at_ms DESC LIMIT ?",
-                (int(limit),),
-            ).fetchall()
-        samples = []
-        for row in rows:
-            record = self._record(row)
-            samples.append(
-                {
-                    "event_id": record["event_id"],
-                    "scene": record["scene"],
-                    "features": record["routing_features"],
-                    "observed_route": record["requested_route"],
-                    "outcome": {
-                        "cloud_changed_decision": bool(record["decision_changed"]),
-                        "cloud_receipt_latency_ms": record[
-                            "cloud_receipt_latency_ms"
-                        ],
-                        "eventual_completion_ms": record["eventual_completion_ms"],
-                        "completion_mode": record["completion_mode"],
-                        "completion_stage": record["completion_stage"],
-                    },
-                }
-            )
-        return {
-            "schema_version": 2,
-            "sample_count": len(samples),
-            "selection": "cloud-reviewed events only; use controlled probes to reduce selection bias",
-            "target": "cloud_changed_decision is a defer proxy, not task ground truth",
-            "samples": samples,
-        }
-
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:
             rows = self._connection.execute(

@@ -16,6 +16,12 @@ from cloud_edge_framework.registry import SceneRegistry, build_default_registry
 from cloud_edge_framework.review_queue import PendingReviewStore
 from cloud_edge_framework.review_tracking import ReviewLifecycleStore
 from cloud_edge_framework.monitoring import CalibrationDriftMonitor
+from cloud_edge_framework.routing_pipeline import (
+    apply_route_selection,
+    execution_failover,
+    feasible_action_filter,
+    route_selector,
+)
 from cloud_edge_framework.scheduling import (
     CollaborationScheduler,
     NetworkSnapshot,
@@ -93,6 +99,24 @@ class CloudRuntime:
                     if hasattr(self.reviewer, "should_review_decision")
                     else self.reviewer.should_review(event)
                 )
+                if should_review:
+                    policy = decision.metadata.get("cloud_llm_review_policy")
+                    execution_mode = (
+                        str(policy.get("execution_mode", "synchronous"))
+                        if isinstance(policy, dict)
+                        else "synchronous"
+                    )
+                    if execution_mode == "async_advisory":
+                        metadata = dict(decision.metadata)
+                        metadata.update(
+                            {
+                                "cloud_llm_audit_requested": True,
+                                "cloud_llm_audit_status": "queued",
+                                "cloud_llm_business_result_blocked": False,
+                            }
+                        )
+                        decision = replace(decision, metadata=metadata)
+                        should_review = False
                 if should_review:
                     review_stage = "inference"
                     cache_key = decision.metadata.get("cloud_llm_review_group_key")
@@ -329,8 +353,8 @@ class EdgeRuntime:
         feedback_store: Optional[DecisionFeedbackStore] = None,
         review_tracker: Optional[ReviewLifecycleStore] = None,
         calibration_monitor: Optional[CalibrationDriftMonitor] = None,
-        utility_router: Optional[Any] = None,
         durable_handoff: Optional[Any] = None,
+        evidence_cache: Optional[Any] = None,
     ) -> None:
         self.registry = registry or build_default_registry()
         self.cloud = cloud or CloudRuntime(self.registry)
@@ -341,8 +365,8 @@ class EdgeRuntime:
         self.feedback_store = feedback_store or DecisionFeedbackStore()
         self.review_tracker = review_tracker or ReviewLifecycleStore()
         self.calibration_monitor = calibration_monitor
-        self.utility_router = utility_router
         self.durable_handoff = durable_handoff
+        self.evidence_cache = evidence_cache
 
     @property
     def pending_reviews(self) -> List[SemanticEvent]:
@@ -1080,6 +1104,19 @@ class EdgeRuntime:
             + scene_edge_inference_ms
             + (edge_decision_done - started) * 1000.0
         )
+        evidence_pull_locator = None
+        evidence_cache_error = ""
+        if self.evidence_cache is not None:
+            try:
+                # Cache the full normalized evidence set before the normal
+                # summary-first planner removes feature/raw items.  Cache
+                # failure is auxiliary and must not break local autonomy or
+                # the durable summary Outbox.
+                evidence_pull_locator = self.evidence_cache.store(event)
+            except Exception as exc:  # noqa: BLE001
+                evidence_cache_error = "{}: {}".format(
+                    type(exc).__name__, exc
+                )
         evidence_plan = self._plan_evidence(
             self.evidence_planner,
             event,
@@ -1103,14 +1140,16 @@ class EdgeRuntime:
         cloud_event = plugin.prepare_cloud_event(
             selected_event, evidence_plan.required_level
         )
-        cloud_event = replace(
-            cloud_event,
-            metadata={
-                **cloud_event.metadata,
-                _SOURCE_ENVELOPE_SHA256_KEY: source_envelope_sha256,
-                _SOURCE_BUSINESS_CONTEXT_KEY: source_business_context,
-            },
-        )
+        cloud_metadata = {
+            **cloud_event.metadata,
+            _SOURCE_ENVELOPE_SHA256_KEY: source_envelope_sha256,
+            _SOURCE_BUSINESS_CONTEXT_KEY: source_business_context,
+        }
+        if evidence_pull_locator is not None:
+            cloud_metadata["evidence_pull_locator"] = evidence_pull_locator
+        if evidence_cache_error:
+            cloud_metadata["evidence_cache_error"] = evidence_cache_error
+        cloud_event = replace(cloud_event, metadata=cloud_metadata)
         aggregation_spec = plugin.aggregation_spec(cloud_event)
         if aggregation_spec is not None and not isinstance(aggregation_spec, dict):
             raise ValueError("scene aggregation_spec must return an object or None")
@@ -1208,14 +1247,6 @@ class EdgeRuntime:
             routing_model_disagreement,
             bool(event.metadata.get("monitoring_force_cloud_review", False)),
         )
-        utility_route_prediction = None
-        if self.utility_router is not None:
-            utility_route_prediction = self.utility_router.predict(routing_features)
-            if (
-                utility_route_prediction.mode == "active"
-                and utility_route_prediction.request_cloud
-            ):
-                cloud_review_requested = True
         explicit_routing_risk_level = routing_advice.get("routing_risk_level")
         if explicit_routing_risk_level is None:
             operational_safety_risk = event.metadata.get(
@@ -1243,12 +1274,6 @@ class EdgeRuntime:
             # and later returns the authoritative result through the result
             # channel.  Direct cloud decisions complete in one request.
             cloud_round_trips=2 if aggregation_spec is not None else 1,
-            selective_defer=bool(
-                routing_advice.get("selective_defer", False)
-            ),
-            defer_recommended=bool(
-                routing_advice.get("defer_recommended", False)
-            ),
             routing_risk_level=(
                 str(explicit_routing_risk_level)
                 if explicit_routing_risk_level is not None
@@ -1257,39 +1282,54 @@ class EdgeRuntime:
         )
         scheduler_selected_route = schedule.route
         scheduler_selected_wait = bool(schedule.waits_for_cloud)
+        effective_cloud_available = bool(
+            snapshot.available and snapshot.loss_rate < 0.95
+        )
+        business_prohibitions: Dict[str, str] = {}
+        if return_provisional_immediately:
+            business_prohibitions[
+                "cloud_sync"
+            ] = "CALLER_REQUIRES_PROVISIONAL_FIRST"
+        if summary_delivery_required and effective_cloud_available:
+            business_prohibitions[
+                "edge_only"
+            ] = "SUMMARY_DELIVERY_REQUIRED"
+        if _requires_cloud_confirmation(local) and effective_cloud_available:
+            business_prohibitions[
+                "edge_only"
+            ] = "ACTION_REQUIRES_CLOUD_CONFIRMATION"
+
+        # A >=20% measured loss rate is the existing scheduler's documented
+        # inability boundary for a deadline-bound synchronous exchange.  It is
+        # represented here as an unsatisfiable predicted synchronous time, not
+        # as a second packet-loss policy layer.
+        predicted_sync_ms = float(schedule.predicted_closed_loop_ms)
+        if snapshot.loss_rate >= 0.20:
+            predicted_sync_ms = max(
+                predicted_sync_ms, float(schedule.deadline_ms) + 1.0
+            )
+        feasibility = feasible_action_filter(
+            cloud_available=effective_cloud_available,
+            predicted_sync_ms=predicted_sync_ms,
+            sync_deadline_ms=schedule.deadline_ms,
+            prohibited_actions=business_prohibitions,
+        )
+        route_selection = route_selector(
+            rule_decision=schedule,
+            feasibility=feasibility,
+        )
         provisional_first_override = bool(
             return_provisional_immediately
-            and schedule.route == "cloud_sync"
-            and schedule.cloud_requested
+            and route_selection.preferred_action == "cloud_sync"
+            and route_selection.selected_action == "cloud_async"
         )
-        if provisional_first_override:
-            schedule = replace(
-                schedule,
-                route="cloud_async",
-                reason=(
-                    "{}; the caller requested provisional-first delivery, so "
-                    "the cloud review remains mandatory for action authorization "
-                    "but runs on the independent result channel"
-                ).format(schedule.reason),
-                waits_for_cloud=False,
-            )
-        if (
-            summary_delivery_required
-            and snapshot.available
-            and snapshot.loss_rate < 0.95
-            and schedule.route == "edge_only"
-        ):
-            schedule = replace(
-                schedule,
-                route="cloud_async",
-                reason=(
-                    "return the provisional decision immediately, durably upload "
-                    "the lightweight summary, and observe the independent cloud "
-                    "result channel"
-                ),
-                cloud_requested=True,
-                waits_for_cloud=False,
-            )
+        initial_failover = execution_failover(
+            route_selection.selected_action,
+            cloud_available=effective_cloud_available,
+        )
+        schedule = apply_route_selection(
+            schedule, route_selection, initial_failover
+        )
         warning = ""
         if schedule.cloud_requested and not evidence_plan.complete:
             warning = "required {} evidence is unavailable".format(evidence_plan.missing_level)
@@ -1608,11 +1648,20 @@ class EdgeRuntime:
                         "cloud_error": "{}: {}".format(type(exc).__name__, exc),
                     }
                 )
+                failed_execution = execution_failover(
+                    route_selection.selected_action,
+                    cloud_available=effective_cloud_available,
+                    cloud_execution_failed=True,
+                    failure_reason_code="CLOUD_SYNC_EXECUTION_FAILED",
+                )
                 final = replace(
                     local,
-                    route="local_autonomy",
+                    route=failed_execution.execution_route,
                     status="provisional",
-                    metadata=metadata,
+                    metadata={
+                        **metadata,
+                        "execution_failover": failed_execution.to_dict(),
+                    },
                 )
                 final = _with_action_authorization(final, cloud_confirmed=False)
         elif schedule.route == "cloud_async":
@@ -1852,6 +1901,12 @@ class EdgeRuntime:
                     "scheduler_selected_wait": scheduler_selected_wait,
                     "provisional_first_override": provisional_first_override,
                 },
+                "routing_pipeline": {
+                    "selected_action": route_selection.selected_action,
+                    "execution_route": initial_failover.execution_route,
+                    "selector_authority": route_selection.selector_authority,
+                    "reason_code": route_selection.reason_code,
+                },
                 "framework_runtime_ms": round(runtime_ms, 6),
                 "closed_loop_accounting": {
                     "edge_preliminary_decision_ms": round(
@@ -1910,15 +1965,16 @@ class EdgeRuntime:
                 "inline_encoded_evidence_bytes": evidence_plan.inline_encoded_bytes,
                 "referenced_source_bytes": evidence_plan.referenced_source_bytes,
                 "uncompressed_source_bytes": evidence_plan.uncompressed_source_bytes,
+                "selective_evidence_cached": evidence_pull_locator is not None,
+                "selective_evidence_cache_error": evidence_cache_error,
                 "performance_profile": profile.to_dict() if profile is not None else None,
             },
             "evidence_warning": warning,
             "monitoring": monitoring_status,
-            "utility_routing": (
-                utility_route_prediction.to_dict()
-                if utility_route_prediction is not None
-                else {"enabled": False}
-            ),
+            "routing_pipeline": {
+                "selection": route_selection.to_dict(),
+                "execution_failover": initial_failover.to_dict(),
+            },
             "local_decision": local.to_dict(),
             "final_decision": final.to_dict(),
             "review": review_response,
@@ -2630,7 +2686,12 @@ class EdgeRuntime:
                         event_id,
                         replace(
                             local,
-                            route="local_autonomy",
+                            route=execution_failover(
+                                "cloud_async",
+                                cloud_available=True,
+                                cloud_execution_failed=True,
+                                failure_reason_code="AGGREGATION_TIMEOUT",
+                            ).execution_route,
                             status="provisional",
                             metadata=metadata,
                         ),

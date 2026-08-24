@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from jsonschema import Draft202012Validator
 
@@ -104,17 +104,23 @@ class MonitoringConfig:
 
 
 @dataclass(frozen=True)
-class UtilityRouterConfig:
-    enabled: bool
-    artifact: Optional[Path]
-    mode: str
-
-
-@dataclass(frozen=True)
 class ReleaseWatchConfig:
     enabled: bool
     registry: Optional[Path]
     interval_seconds: float
+
+
+@dataclass(frozen=True)
+class EvidencePullConfig:
+    enabled: bool
+    public_base_url: Optional[str]
+    allowed_edge_base_urls: List[str]
+    ttl_seconds: float
+    max_entries: int
+    max_bytes: int
+    fetch_timeout_seconds: float
+    max_response_bytes: int
+    max_members_per_group: int
 
 
 @dataclass(frozen=True)
@@ -132,7 +138,7 @@ class FrameworkServiceConfig:
     release_watch: Optional[ReleaseWatchConfig] = None
     cloud_llm: Optional[CloudLLMConfig] = None
     monitoring: Optional[MonitoringConfig] = None
-    utility_router: Optional[UtilityRouterConfig] = None
+    evidence_pull: Optional[EvidencePullConfig] = None
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -192,7 +198,7 @@ def load_service_config(
     release_watch_raw = value.get("release_watch")
     cloud_llm_raw = value.get("cloud_llm")
     monitoring_raw = value.get("monitoring")
-    utility_router_raw = value.get("utility_router")
+    evidence_pull_raw = value.get("evidence_pull")
 
     cloud = None
     if cloud_raw is not None:
@@ -265,23 +271,41 @@ def load_service_config(
         ),
     )
 
-    utility_router = None
-    if utility_router_raw is not None:
-        if role != "edge":
-            raise ValueError("utility_router may only be configured on the edge service")
-        router_data = dict(utility_router_raw)
-        router_enabled = bool(router_data.get("enabled", False))
-        router_artifact = _resolve_path(project_root, router_data.get("artifact"))
-        router_mode = str(router_data.get("mode", "shadow"))
-        if router_mode not in {"shadow", "active"}:
-            raise ValueError("utility_router mode must be shadow or active")
-        if router_enabled and router_artifact is None:
-            raise ValueError("enabled utility_router requires artifact")
-        utility_router = UtilityRouterConfig(
-            enabled=router_enabled,
-            artifact=router_artifact,
-            mode=router_mode,
+    evidence_pull_data = dict(evidence_pull_raw or {})
+    evidence_pull_enabled = bool(evidence_pull_data.get("enabled", False))
+    public_base_url_raw = evidence_pull_data.get("public_base_url")
+    public_base_url = (
+        str(public_base_url_raw).rstrip("/")
+        if public_base_url_raw not in {None, ""}
+        else None
+    )
+    allowed_raw = evidence_pull_data.get("allowed_edge_base_urls", [])
+    if not isinstance(allowed_raw, list):
+        raise ValueError("evidence_pull allowed_edge_base_urls must be a list")
+    allowed_edge_base_urls = [str(value).rstrip("/") for value in allowed_raw]
+    if evidence_pull_enabled and role == "edge" and public_base_url is None:
+        raise ValueError("enabled edge evidence_pull requires public_base_url")
+    if evidence_pull_enabled and role == "cloud" and not allowed_edge_base_urls:
+        raise ValueError(
+            "enabled cloud evidence_pull requires allowed_edge_base_urls"
         )
+    evidence_pull = EvidencePullConfig(
+        enabled=evidence_pull_enabled,
+        public_base_url=public_base_url,
+        allowed_edge_base_urls=allowed_edge_base_urls,
+        ttl_seconds=float(evidence_pull_data.get("ttl_seconds", 10.0)),
+        max_entries=int(evidence_pull_data.get("max_entries", 2048)),
+        max_bytes=int(evidence_pull_data.get("max_bytes", 64 * 1024 * 1024)),
+        fetch_timeout_seconds=float(
+            evidence_pull_data.get("fetch_timeout_seconds", 0.05)
+        ),
+        max_response_bytes=int(
+            evidence_pull_data.get("max_response_bytes", 8 * 1024 * 1024)
+        ),
+        max_members_per_group=int(
+            evidence_pull_data.get("max_members_per_group", 2)
+        ),
+    )
 
     plugin_path = _resolve_path(project_root, value["plugin_config"])
     if plugin_path is None:
@@ -362,6 +386,6 @@ def load_service_config(
         release_watch=release_watch,
         cloud_llm=cloud_llm,
         monitoring=monitoring,
-        utility_router=utility_router,
+        evidence_pull=evidence_pull,
         source_path=source_path,
     )

@@ -125,6 +125,12 @@
         "max_mean_closed_loop_ms": {"type": "number", "exclusiveMinimum": 0},
         "min_valid_output_rate": {"type": "number", "minimum": 0, "maximum": 1}
       }
+    },
+    "base_only_scene_protocols": {
+      "description": "Optional scene contracts for an official base-only GGUF release that has no adapter package.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/base_only_scene_protocol"}
     }
   },
   "$defs": {
@@ -137,6 +143,69 @@
         "path": {"type": "string", "minLength": 1},
         "sha256": {"$ref": "#/$defs/sha256"},
         "bytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "base_only_scene_protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_mapping", "input_contract", "deployment"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1},
+        "action_mapping": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "input_contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "event_type",
+            "data_schema",
+            "context_encoder",
+            "llm_input_type",
+            "max_input_tokens",
+            "direct_media_to_llm"
+          ],
+          "properties": {
+            "event_type": {"type": "string", "minLength": 1},
+            "data_schema": {"type": "string", "format": "uri"},
+            "context_encoder": {"type": "string", "minLength": 1},
+            "llm_input_type": {
+              "enum": ["natural_language", "structured_text", "compact_text_code"]
+            },
+            "max_input_tokens": {"type": "integer", "minimum": 1, "maximum": 4096},
+            "direct_media_to_llm": {"type": "boolean"}
+          }
+        },
+        "deployment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "runtime",
+            "format",
+            "quantization",
+            "artifact_sha256",
+            "artifact_bytes",
+            "max_input_tokens",
+            "max_output_tokens",
+            "thinking"
+          ],
+          "properties": {
+            "runtime": {"enum": ["llama.cpp", "llama_cpp"]},
+            "format": {"const": "gguf"},
+            "quantization": {"type": "string", "minLength": 1},
+            "artifact_sha256": {"$ref": "#/$defs/sha256"},
+            "artifact_bytes": {"type": "integer", "minimum": 1},
+            "max_input_tokens": {"type": "integer", "minimum": 1, "maximum": 4096},
+            "max_output_tokens": {"const": 1},
+            "thinking": {"const": false}
+          }
+        }
       }
     }
   }

@@ -1,4 +1,4 @@
-"""用途：下载并逐字节校验真实交通推理数组和 Edge-Qwen GGUF。"""
+"""安装并校验交通正式输入，以及仓内冻结的最终 Q4 边缘模型。"""
 
 import argparse
 import hashlib
@@ -10,6 +10,9 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parent
+SDK_ROOT = ROOT.parents[1]
+if str(SDK_ROOT) not in sys.path:
+    sys.path.insert(0, str(SDK_ROOT))
 CATALOG = ROOT / "asset_catalog.json"
 BLOCK_BYTES = 8 * 1024 * 1024
 
@@ -100,9 +103,15 @@ def _activate_edge_release(gguf_path):
 
     registry = ROOT / "runtime" / "edge_llm_release_store.json"
     result = ReleaseStore(registry).promote(
-        "freeway-traffic-current-state-v2.0.2-q6k",
+        "joint-traffic-industrial-static-q4km-raw16-final",
         ROOT / "assets" / "edge_llm" / "base_manifest.json",
-        ROOT / "assets" / "edge_llm" / "adapter_package_current_state_v2",
+        ROOT
+        / ".."
+        / ".."
+        / "model_bundle"
+        / "final"
+        / "qwen3_5_0p8b_q4"
+        / "adapter_package",
         gguf_path,
     )
     return {
@@ -141,7 +150,7 @@ def main():
                 if args.verify_only
                 else _download(record)
             )
-        gguf = ROOT / catalog["downloaded_assets"]["edge_qwen_gguf"]["file"]
+        gguf = ROOT / catalog["embedded_assets"]["final_edge_q4"]["file"]
         result["edge_release"] = _activate_edge_release(gguf)
     if use_cloud:
         command = [

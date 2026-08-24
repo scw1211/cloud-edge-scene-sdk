@@ -1,0 +1,25 @@
+{
+  "schema_version": "qwen35-distilled-general-0p8b-q4-identity/v1",
+  "role": "optional_edge_difficult_task_candidate_unscored",
+  "model": "Qwen3.5-0.8B broad three-task distilled student",
+  "training": "completed 2250-step SFT+KD LoRA on Math, Code and NLR",
+  "merge": "LoRA statically merged into official Qwen3.5-0.8B post-trained base",
+  "quantization": "Q4_K_M",
+  "path": "model_bundle/final/qwen3_5_0p8b_general_distilled_q4/distilled-0.8B.Q4_K_M.gguf",
+  "bytes": 529289216,
+  "sha256": "d4f248ee8e6403bb2c2ba25242a7832fe8fb593256eeb09d1b206b272d0f5eb4",
+  "runtime_lora_count": 0,
+  "evaluation": {
+    "formal_scoring_status": "NOT_PART_OF_FINAL_SCORED_MODEL_SET",
+    "release_qualified": false,
+    "result_scope": "historical difficult-task diagnostics retained outside the final elementary millisecond-task gate",
+    "ttft_reduction_vs_9b_q4": 0.3241718452758402,
+    "ttft_gate": "FINAL_TTFT_FAIL",
+    "general_capability_gate": "FINAL_GENERAL_EDGE_CAPABILITY_FAIL"
+  },
+  "deployment": {
+    "mode": "on_demand_mutually_exclusive_or_separate_edge_node",
+    "formally_deployed": false,
+    "concurrent_residency_with_business_model_measured": false
+  }
+}

@@ -20,9 +20,13 @@ from cloud_edge_framework.review_tracking import ReviewLifecycleStore
 from cloud_edge_framework.reliable_transport import ReliableHttpCloudClient
 from cloud_edge_framework.replay import OutboxReplayWorker
 from cloud_edge_framework.scheduling import CollaborationScheduler
+from cloud_edge_framework.selective_evidence_pull import (
+    BoundedEvidenceCache,
+    EVIDENCE_CACHE_FETCH_ENDPOINT,
+    EVIDENCE_CACHE_STATUS_ENDPOINT,
+)
 from cloud_edge_framework.service_config import FrameworkServiceConfig, load_service_config
 from cloud_edge_framework.version import FRAMEWORK_VERSION
-from cloud_edge_framework.utility_routing import LearnedUtilityRouter
 
 
 DECIDE_ENDPOINT = "/api/v1/collaboration/decide"
@@ -40,7 +44,6 @@ MONITORING_ENDPOINT = "/api/v1/collaboration/monitoring"
 MONITORING_ENDPOINT_PREFIX = MONITORING_ENDPOINT + "/"
 MONITORING_OUTCOME_ENDPOINT = MONITORING_ENDPOINT + "/outcome"
 MONITORING_REFERENCE_ENDPOINT = MONITORING_ENDPOINT + "/reference"
-ROUTING_DATASET_ENDPOINT = "/api/v1/collaboration/routing-dataset"
 
 
 class EdgeApiService:
@@ -121,14 +124,20 @@ class EdgeApiService:
             confidence_threshold=config.scheduler.confidence_threshold,
             jitter_guard=config.scheduler.jitter_guard,
         )
-        self.utility_router = None
-        if config.utility_router is not None and config.utility_router.enabled:
-            if config.utility_router.artifact is None:
-                raise ValueError("enabled utility router requires an artifact")
-            self.utility_router = LearnedUtilityRouter.load(
-                config.utility_router.artifact, mode=config.utility_router.mode
-            )
         self.metrics = FrameworkMetrics(self.role)
+        self.evidence_cache = None
+        evidence_pull = config.evidence_pull
+        if evidence_pull is not None and evidence_pull.enabled:
+            if evidence_pull.public_base_url is None:
+                raise ValueError(
+                    "enabled edge evidence pull requires public_base_url"
+                )
+            self.evidence_cache = BoundedEvidenceCache(
+                evidence_pull.public_base_url,
+                ttl_seconds=evidence_pull.ttl_seconds,
+                max_entries=evidence_pull.max_entries,
+                max_bytes=evidence_pull.max_bytes,
+            )
         self.manager = PluginRuntimeManager(
             project_root=self.project_root,
             config_path=config.plugin_config,
@@ -140,8 +149,8 @@ class EdgeApiService:
             remote_cloud=self.cloud_client,
             scheduler=self.scheduler,
             calibration_monitor=self.calibration_monitor,
-            utility_router=self.utility_router,
             durable_handoff=self.durable_handoff,
+            evidence_cache=self.evidence_cache,
         )
         self.release_watcher = None
         if config.release_watch is not None and config.release_watch.enabled:
@@ -197,6 +206,11 @@ class EdgeApiService:
             "edge_llm_release": self.release_watcher.health()
             if self.release_watcher is not None
             else {"status": "disabled"},
+            "evidence_cache": (
+                self.evidence_cache.snapshot()
+                if self.evidence_cache is not None
+                else {"enabled": False}
+            ),
         }
 
     def protocol(self) -> Dict[str, Any]:
@@ -229,7 +243,8 @@ class EdgeApiService:
                 "monitoring_scene": MONITORING_ENDPOINT_PREFIX + "{scene}",
                 "monitoring_outcome": MONITORING_OUTCOME_ENDPOINT,
                 "monitoring_reference": MONITORING_REFERENCE_ENDPOINT,
-                "routing_dataset": ROUTING_DATASET_ENDPOINT,
+                "evidence_cache": EVIDENCE_CACHE_STATUS_ENDPOINT,
+                "evidence_cache_fetch": EVIDENCE_CACHE_FETCH_ENDPOINT,
             },
         }
 
@@ -325,8 +340,12 @@ class EdgeApiService:
             return result
         if path == OUTBOX_ENDPOINT:
             return self.outbox.snapshot()
-        if path == ROUTING_DATASET_ENDPOINT:
-            return self.review_tracker.routing_dataset()
+        if path == EVIDENCE_CACHE_STATUS_ENDPOINT:
+            return (
+                self.evidence_cache.snapshot()
+                if self.evidence_cache is not None
+                else {"enabled": False}
+            )
         if path == EDGE_LLM_RELEASE_ENDPOINT:
             return (
                 self.release_watcher.health()
@@ -367,6 +386,16 @@ class EdgeApiService:
     ) -> Dict[str, Any]:
         if path == DECIDE_ENDPOINT:
             return self.decide(payload, headers)
+        if path == EVIDENCE_CACHE_FETCH_ENDPOINT:
+            if self.evidence_cache is None:
+                raise ValueError("selective evidence cache is disabled")
+            result = self.evidence_cache.fetch(payload)
+            self.metrics.increment("evidence_cache_fetch_successes_total")
+            self.metrics.observe(
+                "evidence_cache_fetch_response_bytes",
+                len(str(result).encode("utf-8")),
+            )
+            return result
         if path == FLUSH_ENDPOINT:
             return self.replay_worker.run_once()
         if path == RELOAD_ENDPOINT:

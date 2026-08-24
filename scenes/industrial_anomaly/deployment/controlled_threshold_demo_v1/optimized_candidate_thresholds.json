@@ -1,0 +1,107 @@
+{
+  "identity_authority": "USER_DECLARED_CANONICAL_BINDING",
+  "modalities": {
+    "infrared": {
+      "button_cell": {
+        "review_high": 0.007315775,
+        "review_low": 0.007254745
+      },
+      "capsule": {
+        "review_high": 0.009331434999999999,
+        "review_low": 0.008197475
+      },
+      "cotton": {
+        "review_high": 0.00863386,
+        "review_low": 0.008593165
+      },
+      "cube": {
+        "review_high": 0.007253545,
+        "review_low": 0.005598775
+      },
+      "piggy": {
+        "review_high": 0.00912524,
+        "review_low": 0.008560555000000001
+      },
+      "plastic_cylinder": {
+        "review_high": 0.006053845,
+        "review_low": 0.00551020413631
+      },
+      "screw": {
+        "review_high": 0.007487605,
+        "review_low": 0.00693365653116
+      },
+      "solar_panel": {
+        "review_high": 0.007764155,
+        "review_low": 0.00761076637407
+      },
+      "toothbrush": {
+        "review_high": 0.007500405,
+        "review_low": 0.007019414999999999
+      },
+      "zipper": {
+        "review_high": 0.008329844999999999,
+        "review_low": 0.008028495
+      }
+    },
+    "rgb": {
+      "button_cell": {
+        "review_high": 0.00851494,
+        "review_low": 0.00567639
+      },
+      "capsule": {
+        "review_high": 0.010164699999999999,
+        "review_low": 0.007332255
+      },
+      "cotton": {
+        "review_high": 0.007427355,
+        "review_low": 0.00656978
+      },
+      "cube": {
+        "review_high": 0.004655345,
+        "review_low": 0.00459529
+      },
+      "piggy": {
+        "review_high": 0.00582358,
+        "review_low": 0.00485213
+      },
+      "plastic_cylinder": {
+        "review_high": 0.003524495,
+        "review_low": 0.00336122147993
+      },
+      "screw": {
+        "review_high": 0.007562545,
+        "review_low": 0.00712836710407
+      },
+      "solar_panel": {
+        "review_high": 0.006937945,
+        "review_low": 0.00693637544508
+      },
+      "toothbrush": {
+        "review_high": 0.00475037,
+        "review_low": 0.00468045427616
+      },
+      "zipper": {
+        "review_high": 0.00838382,
+        "review_low": 0.008305015
+      }
+    }
+  },
+  "policy_name": "MULTI_OBJECTIVE_OPTIMIZED_CANDIDATE",
+  "products": [
+    "button_cell",
+    "capsule",
+    "cotton",
+    "cube",
+    "piggy",
+    "plastic_cylinder",
+    "screw",
+    "solar_panel",
+    "toothbrush",
+    "zipper"
+  ],
+  "scalar_threshold_count": 40,
+  "schema_version": "industrial-controlled-thresholds/v1",
+  "state_rule": "score < review_low => normal; review_low <= score < review_high => review; score >= review_high => anomaly",
+  "status": "DEVELOPMENT_DEMO_ONLY",
+  "version": "industrial-controlled-threshold-demo-v1.0.0"
+}

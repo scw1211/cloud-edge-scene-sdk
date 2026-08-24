@@ -2,13 +2,13 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from edge_llm_factory.adapter_package import MANIFEST_NAME
 from edge_llm_factory.contracts import ManifestError, read_json_object
 from edge_llm_factory.providers import validate_runtime_config
 from edge_llm_factory.release_store import ReleaseStore
-from edge_llm_factory.runtime import ValidatedEdgeLLM
+from edge_llm_factory.runtime import ValidatedBaseEdgeLLM, ValidatedEdgeLLM
 
 
 RUNTIME_NAMES = {
@@ -26,7 +26,7 @@ class ActiveEdgeLLM:
     revision: int
     binding_fingerprint: str
     deployment_artifact: Path
-    model: ValidatedEdgeLLM
+    model: Union[ValidatedEdgeLLM, ValidatedBaseEdgeLLM]
 
     def describe(self) -> Dict[str, Any]:
         return {
@@ -122,29 +122,77 @@ def load_active_edge_llm(
         raise ManifestError("release store 没有 active Edge LLM")
     record = status["releases"][release_id]
     base_manifest = Path(record["base_manifest"]["path"])
-    adapter_package = Path(record["adapter_package"]["path"])
     artifact = Path(record["deployment_artifact"]["path"])
-    manifest = read_json_object(adapter_package / MANIFEST_NAME)
-    if expected_scene is not None and manifest.get("scene") != expected_scene:
-        raise ManifestError(
-            "active adapter scene {!r} 与插件场景 {!r} 不一致".format(
-                manifest.get("scene"), expected_scene
-            )
-        )
     runtime = validate_runtime_config(read_json_object(Path(runtime_config_path)))
-    _runtime_matches_release(
-        runtime,
-        manifest,
-        str(release_id),
-        artifact,
-        revision=int(status["revision"]),
-        record=record,
-    )
-    model = ValidatedEdgeLLM(
-        base_manifest_path=base_manifest,
-        adapter_package=adapter_package,
-        runtime_config_path=Path(runtime_config_path),
-    )
+    if record.get("deployment_mode") == "base_only":
+        if expected_scene is None:
+            raise ManifestError("base-only active release 必须显式声明插件场景")
+        base = read_json_object(base_manifest)
+        protocols = base.get("base_only_scene_protocols")
+        if not isinstance(protocols, dict) or not isinstance(
+            protocols.get(expected_scene), dict
+        ):
+            raise ManifestError(
+                "base-only 基座缺少场景协议: {}".format(expected_scene)
+            )
+        protocol = protocols[expected_scene]
+        deployment = protocol.get("deployment")
+        if not isinstance(deployment, dict):
+            raise ManifestError("base-only 场景协议缺少 deployment")
+        artifact_record = record.get("deployment_artifact")
+        if not isinstance(artifact_record, dict):
+            raise ManifestError("base-only active release 缺少 deployment_artifact")
+        expected_deployment = {
+            "format": "gguf",
+            "artifact_sha256": artifact_record.get("sha256"),
+            "artifact_bytes": artifact_record.get("bytes"),
+        }
+        for field, expected_value in expected_deployment.items():
+            if deployment.get(field) != expected_value:
+                raise ManifestError(
+                    "base-only deployment.{} 与 active release 不一致".format(
+                        field
+                    )
+                )
+        manifest = {
+            "scene": expected_scene,
+            "deployment": deployment,
+        }
+        _runtime_matches_release(
+            runtime,
+            manifest,
+            str(release_id),
+            artifact,
+            revision=int(status["revision"]),
+            record=record,
+        )
+        model = ValidatedBaseEdgeLLM(
+            base_manifest_path=base_manifest,
+            scene=expected_scene,
+            runtime_config_path=Path(runtime_config_path),
+        )
+    else:
+        adapter_package = Path(record["adapter_package"]["path"])
+        manifest = read_json_object(adapter_package / MANIFEST_NAME)
+        if expected_scene is not None and manifest.get("scene") != expected_scene:
+            raise ManifestError(
+                "active adapter scene {!r} 与插件场景 {!r} 不一致".format(
+                    manifest.get("scene"), expected_scene
+                )
+            )
+        _runtime_matches_release(
+            runtime,
+            manifest,
+            str(release_id),
+            artifact,
+            revision=int(status["revision"]),
+            record=record,
+        )
+        model = ValidatedEdgeLLM(
+            base_manifest_path=base_manifest,
+            adapter_package=adapter_package,
+            runtime_config_path=Path(runtime_config_path),
+        )
     return ActiveEdgeLLM(
         release_id=str(release_id),
         revision=int(status["revision"]),

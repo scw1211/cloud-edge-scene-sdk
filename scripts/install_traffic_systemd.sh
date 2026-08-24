@@ -16,7 +16,7 @@ if [[ "${ROLE}" == "edge" ]]; then
   CLOUD_URL="${CLOUD_URL:-}"
   LLAMA_SERVER_PATH="${LLAMA_SERVER_PATH:-${SDK_ROOT}/runtime/bin/llama-server}"
   if [[ -z "${CLOUD_URL}" ]]; then
-    echo "边缘节点必须设置 CLOUD_URL，例如 http://192.168.31.160:18100" >&2
+    echo "边缘节点必须设置 CLOUD_URL，例如 http://<5070ti-host>:18100" >&2
     exit 2
   fi
   if [[ ! -x "${LLAMA_SERVER_PATH}" ]]; then

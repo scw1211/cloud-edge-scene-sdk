@@ -122,6 +122,49 @@ def _wait_service_ready(
     raise TimeoutError("{} readiness timed out: {}".format(endpoint, last_error))
 
 
+def _validate_cloud_evidence_pull_allowlist(
+    cloud_url: str,
+    edge_endpoints: Sequence[str],
+    timeout_seconds: float = 2.0,
+) -> None:
+    """Fail before launch when a running cloud cannot callback every edge.
+
+    The cloud may be an independently managed process, so this launcher never
+    rewrites its SSRF allowlist.  A non-default port range requires the operator
+    to update/restart the cloud configuration first.
+    """
+
+    protocol_url = (
+        str(cloud_url).rstrip("/") + "/api/v1/collaboration/schema"
+    )
+    try:
+        with urlopen(protocol_url, timeout=float(timeout_seconds)) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            "cannot verify cloud selective-evidence allowlist at {}: {}: {}".format(
+                protocol_url, type(exc).__name__, exc
+            )
+        ) from exc
+    selective = payload.get("selective_evidence_pull", {})
+    if not isinstance(selective, dict) or selective.get("enabled") is not True:
+        raise RuntimeError(
+            "isolated edges require selective evidence pull enabled on the cloud"
+        )
+    allowed = selective.get("allowed_edge_base_urls", [])
+    if not isinstance(allowed, list):
+        raise RuntimeError("cloud selective-evidence allowlist is malformed")
+    normalized_allowed = {str(value).rstrip("/") for value in allowed}
+    required = {str(value).rstrip("/") for value in edge_endpoints}
+    missing = sorted(required - normalized_allowed)
+    if missing:
+        raise RuntimeError(
+            "cloud selective-evidence allowlist is missing {}; update the cloud "
+            "evidence_pull.allowed_edge_base_urls and restart it before using "
+            "this edge port range".format(", ".join(missing))
+        )
+
+
 def _stop_edge_services(services: Sequence[Mapping[str, Any]]) -> None:
     for service in reversed(list(services)):
         process = service["process"]
@@ -166,6 +209,14 @@ def _launch_isolated_edge_services(
         config.setdefault("listen", {})
         config["listen"].update({"host": "127.0.0.1", "port": port})
         config.setdefault("cloud", {})["base_url"] = str(cloud_url).rstrip("/")
+        evidence_pull = config.get("evidence_pull")
+        if isinstance(evidence_pull, dict) and evidence_pull.get("enabled") is True:
+            # A capability is bound to the process-local cache.  Reusing the
+            # template's port would route edge_node_1..3 to edge_node_0, where
+            # the independently generated HMAC token must be rejected.
+            evidence_pull["public_base_url"] = (
+                "http://127.0.0.1:{}".format(port)
+            )
         config["storage"] = {
             "outbox": str(state_root / "outbox.sqlite3"),
             "performance_profiles": str(state_root / "performance.json"),
@@ -601,11 +652,29 @@ def main() -> None:
             )
         if args.edge_port_base < 1 or args.edge_port_base + 3 > 65535:
             raise ValueError("edge port range is invalid")
+        edge_template_path = Path(args.edge_service_config_template).resolve()
+        edge_template = json.loads(
+            edge_template_path.read_text(encoding="utf-8")
+        )
+        evidence_pull = edge_template.get("evidence_pull", {})
+        if isinstance(evidence_pull, dict) and evidence_pull.get("enabled") is True:
+            _validate_cloud_evidence_pull_allowlist(
+                args.cloud_url,
+                [
+                    "http://127.0.0.1:{}".format(
+                        args.edge_port_base + partition_id
+                    )
+                    for partition_id in partition_ids
+                ],
+                timeout_seconds=min(
+                    2.0, max(0.1, args.edge_service_startup_seconds)
+                ),
+            )
         edge_services = _launch_isolated_edge_services(
             project_root=project_root,
             scene_root=scene_root,
             experiment_id=experiment_id,
-            template_path=Path(args.edge_service_config_template).resolve(),
+            template_path=edge_template_path,
             cloud_url=args.cloud_url,
             port_base=args.edge_port_base,
             startup_timeout_seconds=args.edge_service_startup_seconds,

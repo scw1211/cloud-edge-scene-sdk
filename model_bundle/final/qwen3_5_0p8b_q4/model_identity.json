@@ -1,0 +1,27 @@
+{
+  "schema_version": "final-edge-model-identity/v1",
+  "role": "final_edge_model",
+  "model": "Qwen3.5-0.8B",
+  "source_repository": "Qwen/Qwen3.5-0.8B",
+  "source_revision": "2fc06364715b967f1860aea9cf38778875588b17",
+  "license": "Apache-2.0",
+  "parameter_count": 752393024,
+  "num_hidden_layers": 24,
+  "artifact": {
+    "path": "model_bundle/final/qwen3_5_0p8b_q4/joint_static_raw16.Q4_K_M.gguf",
+    "bytes": 529289216,
+    "sha256": "828f839873c7505005101544d8febb7408bc0443c153c4ba97ec4b3603445526",
+    "quantization": "Q4_K_M",
+    "runtime": "llama.cpp"
+  },
+  "runtime_contract": {
+    "thinking": false,
+    "max_input_tokens": 16,
+    "max_output_tokens": 1,
+    "runtime_lora_count": 0
+  },
+  "source_receipts": {
+    "base_manifest_sha256": "2832e36a971974075c14694b1e2af506d0183e6a229eff2871b0283d24179af3",
+    "release_manifest_sha256": "86f0bf2cf99fa0dd573ac03710815d680800bbce62662bf12c680af41bf1e36e"
+  }
+}

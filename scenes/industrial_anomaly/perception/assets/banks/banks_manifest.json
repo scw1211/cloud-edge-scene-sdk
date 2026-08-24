@@ -1,0 +1,184 @@
+{
+  "schema_version": "industrial-perception-banks/v1",
+  "products": [
+    "button_cell",
+    "capsule",
+    "cotton",
+    "cube",
+    "piggy",
+    "plastic_cylinder",
+    "screw",
+    "solar_panel",
+    "toothbrush",
+    "zipper"
+  ],
+  "product_count": 10,
+  "modality_count": 2,
+  "bank_count": 20,
+  "modalities": {
+    "rgb": {
+      "button_cell": {
+        "bank": "rgb/button_cell.pcbank",
+        "bytes": 1382428,
+        "sha256": "c84204e19f05380b1a2bc478e83cfa87980ab7178f2eed1bf352315b3136e09e",
+        "manifest": "rgb/button_cell.bank.json",
+        "manifest_bytes": 10278,
+        "manifest_sha256": "9a77aeff9dc444c26ec1d83f25f3e99faa9606e725c3e41c4bb1ba3620455127"
+      },
+      "capsule": {
+        "bank": "rgb/capsule.pcbank",
+        "bytes": 983068,
+        "sha256": "6301280ac20f68f3f34f1340a6cbef09419559765ba8dc335bb72413763eb66a",
+        "manifest": "rgb/capsule.bank.json",
+        "manifest_bytes": 7819,
+        "manifest_sha256": "cce91f52310fa4881adf5d75198d29b5738e93f811b542af5b3de139676af60f"
+      },
+      "cotton": {
+        "bank": "rgb/cotton.pcbank",
+        "bytes": 1198108,
+        "sha256": "00804fd86582e8635d5728d68906752ca9b0f3726d360bd099ca3682ec40f2a7",
+        "manifest": "rgb/cotton.bank.json",
+        "manifest_bytes": 9137,
+        "manifest_sha256": "ef1cc921bab46992131bfbc64dfc105444245487dcae11e1998c8c121dd693b9"
+      },
+      "cube": {
+        "bank": "rgb/cube.pcbank",
+        "bytes": 1689628,
+        "sha256": "735f7a5fa9474dfe92a1ed28bc9b8848ddd3960a3ab227e3ef6a58d05c664b35",
+        "manifest": "rgb/cube.bank.json",
+        "manifest_bytes": 12148,
+        "manifest_sha256": "c6a87c91b2c098a44ed01e259c16574a4dd446327fd48621da9d4be6258a730b"
+      },
+      "piggy": {
+        "bank": "rgb/piggy.pcbank",
+        "bytes": 1689628,
+        "sha256": "a7c3e5d47a404a952f0e1ebb0efc451b07d3b31f4e17bb05c69e7d4199bcdc0a",
+        "manifest": "rgb/piggy.bank.json",
+        "manifest_bytes": 12153,
+        "manifest_sha256": "a29c9c31e9de6140c2c44d0bce599389c60985c26fcb924a65262faed58fa549"
+      },
+      "plastic_cylinder": {
+        "bank": "rgb/plastic_cylinder.pcbank",
+        "bytes": 1382428,
+        "sha256": "1e0b3c6d03696cd60a7293e1f49d0df9e06828a49323f6d77543a3ae7b294547",
+        "manifest": "rgb/plastic_cylinder.bank.json",
+        "manifest_bytes": 10296,
+        "manifest_sha256": "30fecf9bac9f4454a961c651f6d5de81fbc9f9d53b9c343aba43d24d5e9e7f99"
+      },
+      "screw": {
+        "bank": "rgb/screw.pcbank",
+        "bytes": 1382428,
+        "sha256": "89fc8f7e947701d194681a9f19280243c4a49a77949ad617bf9ae66e16ee6c08",
+        "manifest": "rgb/screw.bank.json",
+        "manifest_bytes": 10259,
+        "manifest_sha256": "f6ade690bb6d799ad91dfd3cc65209ecf40df646f4bbd967739ab34a31ef7037"
+      },
+      "solar_panel": {
+        "bank": "rgb/solar_panel.pcbank",
+        "bytes": 1382428,
+        "sha256": "3a8218694e7a7f98f18d41056d0ee1a4835e812e8599bfe7e70cdefb19017089",
+        "manifest": "rgb/solar_panel.bank.json",
+        "manifest_bytes": 10280,
+        "manifest_sha256": "6e4c3b74cdb24543665294a7b92a8f712c9d79655040cbbbadcb29f2ca7bc91b"
+      },
+      "toothbrush": {
+        "bank": "rgb/toothbrush.pcbank",
+        "bytes": 1689628,
+        "sha256": "f277d3f0121f66f1f3ec7592e6313286eab15c03151ebd68bcc931216d4ddca5",
+        "manifest": "rgb/toothbrush.bank.json",
+        "manifest_bytes": 12171,
+        "manifest_sha256": "03f69da0e4158b1c5d7d602b7b64e6fcc906a5bb63c5ae19bbc5e3e54232e7c7"
+      },
+      "zipper": {
+        "bank": "rgb/zipper.pcbank",
+        "bytes": 1320988,
+        "sha256": "10299d8a79745617fd28416524e7221ffb951545aeb74d44716d53803ddb1799",
+        "manifest": "rgb/zipper.bank.json",
+        "manifest_bytes": 9890,
+        "manifest_sha256": "e5b6933d6d36ae74fd8a4ebc0f6c4105c0c03f49de7e3d0988a8518fc66eb2d6"
+      }
+    },
+    "infrared": {
+      "button_cell": {
+        "bank": "infrared/button_cell.pcbank",
+        "bytes": 552988,
+        "sha256": "a5cf85fee028e94b5ea328f8b4aaff886bd273d5ed0ad63d0f8aa7138cb837d8",
+        "manifest": "infrared/button_cell.bank.json",
+        "manifest_bytes": 10740,
+        "manifest_sha256": "7dbbe42d1edd651e572cffe4963d8c0628245de46c8f48e1afb2d05de5ff042f"
+      },
+      "capsule": {
+        "bank": "infrared/capsule.pcbank",
+        "bytes": 393244,
+        "sha256": "dc494dc2ea03765e77a7197543fb0758d6c973a2694157ed8b03f904ebe74a77",
+        "manifest": "infrared/capsule.bank.json",
+        "manifest_bytes": 8155,
+        "manifest_sha256": "28244c31f57b221d170930c282e250428becdf74d09c80849229c932ea42fd74"
+      },
+      "cotton": {
+        "bank": "infrared/cotton.pcbank",
+        "bytes": 479260,
+        "sha256": "d3f72fbca919f1a60070ec37dbb02c152a463d1918158a40666e5bac0fd66179",
+        "manifest": "infrared/cotton.bank.json",
+        "manifest_bytes": 9539,
+        "manifest_sha256": "9ab87760e613c5169e0130c18df3a7563e3c9f07ae750c5790caa2f904d7388f"
+      },
+      "cube": {
+        "bank": "infrared/cube.pcbank",
+        "bytes": 675868,
+        "sha256": "12f92df3456d60a2c4656ae8bd6cceadfdfe48e7a9eb3ecc0c6b1802de007116",
+        "manifest": "infrared/cube.bank.json",
+        "manifest_bytes": 12713,
+        "manifest_sha256": "08b44d08935f2848b2d81fd91178ee0de6c70c44a9af407ca1abde78606fe87b"
+      },
+      "piggy": {
+        "bank": "infrared/piggy.pcbank",
+        "bytes": 675868,
+        "sha256": "e7c606faefe918acfba010d0844ccf5750ad58a1cedcb8d717f2e659c406c23d",
+        "manifest": "infrared/piggy.bank.json",
+        "manifest_bytes": 12717,
+        "manifest_sha256": "614d3a471c768a42ea319a351f9602a15b21ab5dda1726c9b42dbf7963a71811"
+      },
+      "plastic_cylinder": {
+        "bank": "infrared/plastic_cylinder.pcbank",
+        "bytes": 552988,
+        "sha256": "bd3e3b03206086ca8a6fc3adccd67ab5cbf011c8975fe298bb8b71eebeac6f67",
+        "manifest": "infrared/plastic_cylinder.bank.json",
+        "manifest_bytes": 10755,
+        "manifest_sha256": "c4c2310b313473fdebb5a525819279830876b9332f74ebbcf895e3acaf868568"
+      },
+      "screw": {
+        "bank": "infrared/screw.pcbank",
+        "bytes": 552988,
+        "sha256": "35dd0091b347b1787ce48ef3c62f27ac4a5b6084ed043fab008e0fdbaec9611d",
+        "manifest": "infrared/screw.bank.json",
+        "manifest_bytes": 10718,
+        "manifest_sha256": "c1bad11c9636dd7bc32f94cd5958bf50504b783e4c8a20cc24cd8637fb0259c6"
+      },
+      "solar_panel": {
+        "bank": "infrared/solar_panel.pcbank",
+        "bytes": 552988,
+        "sha256": "199262a3225a29b3b0fcaebae64d14b35de49af48fed037bd902d5bc5fa743e5",
+        "manifest": "infrared/solar_panel.bank.json",
+        "manifest_bytes": 10740,
+        "manifest_sha256": "5da478f5a62ea49460e868222a958daf0345d85d863da13630f7b929b5e107c5"
+      },
+      "toothbrush": {
+        "bank": "infrared/toothbrush.pcbank",
+        "bytes": 675868,
+        "sha256": "1975a5cdfa73a3ea303255b7bea1da03ca8aefa677408bbce0379d63b5b9392e",
+        "manifest": "infrared/toothbrush.bank.json",
+        "manifest_bytes": 12731,
+        "manifest_sha256": "1b572755d526ef8b21a72fa7e1579cae858ed4c6673a7315c5d6a048bfbfc0ea"
+      },
+      "zipper": {
+        "bank": "infrared/zipper.pcbank",
+        "bytes": 528412,
+        "sha256": "9b29e0df560dacc7d9210bc62a8864c35c1620ece8e280cc0ce1917bb2d93ae3",
+        "manifest": "infrared/zipper.bank.json",
+        "manifest_bytes": 10332,
+        "manifest_sha256": "8f0e5b3bd53cb1b0511b591e4b925ba693e7ef196b0517c504762a8db1a49737"
+      }
+    }
+  }
+}

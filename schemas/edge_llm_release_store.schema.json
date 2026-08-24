@@ -36,9 +36,34 @@
           "created_at_utc",
           "binding_fingerprint",
           "base_manifest",
-          "adapter_package",
-          "deployment_artifact",
-          "adapter"
+          "deployment_artifact"
+        ],
+        "properties": {
+          "deployment_mode": {"const": "base_only"},
+          "runtime_adapters": {"type": "array"}
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"deployment_mode": {"const": "base_only"}},
+              "required": ["deployment_mode"]
+            },
+            "then": {
+              "required": ["runtime_adapters"],
+              "properties": {
+                "runtime_adapters": {"maxItems": 0}
+              },
+              "not": {
+                "anyOf": [
+                  {"required": ["adapter"]},
+                  {"required": ["adapter_package"]}
+                ]
+              }
+            },
+            "else": {
+              "required": ["adapter", "adapter_package"]
+            }
+          }
         ]
       }
     },

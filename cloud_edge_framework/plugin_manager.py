@@ -66,8 +66,8 @@ class PluginRuntimeManager:
         scheduler: Optional[CollaborationScheduler] = None,
         cloud_reviewer: Optional[Any] = None,
         calibration_monitor: Optional[CalibrationDriftMonitor] = None,
-        utility_router: Optional[Any] = None,
         durable_handoff: Optional[Any] = None,
+        evidence_cache: Optional[Any] = None,
     ) -> None:
         self.project_root = project_root.resolve()
         self.config_path = (
@@ -89,8 +89,8 @@ class PluginRuntimeManager:
         self.scheduler = scheduler
         self.cloud_reviewer = cloud_reviewer
         self.calibration_monitor = calibration_monitor
-        self.utility_router = utility_router
         self.durable_handoff = durable_handoff
+        self.evidence_cache = evidence_cache
         self._lock = threading.RLock()
         self._reload_lock = threading.Lock()
         self._active: Optional[RuntimeSnapshot] = None
@@ -124,8 +124,8 @@ class PluginRuntimeManager:
                     feedback_store=self.feedback_store,
                     review_tracker=self.review_tracker,
                     calibration_monitor=self.calibration_monitor,
-                    utility_router=self.utility_router,
                     durable_handoff=self.durable_handoff,
+                    evidence_cache=self.evidence_cache,
                 )
         except Exception:
             registry.close()
@@ -214,11 +214,6 @@ class PluginRuntimeManager:
                     self.calibration_monitor.snapshot()
                     if self.calibration_monitor is not None
                     else {"status": "disabled"}
-                ),
-                "utility_router": (
-                    self.utility_router.describe()
-                    if self.utility_router is not None
-                    else {"enabled": False}
                 ),
                 "cloud_llm": (
                     self.cloud_reviewer.describe()

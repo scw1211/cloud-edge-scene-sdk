@@ -881,6 +881,11 @@ class IndustrialAnomalyPlugin(ScenePlugin):
                 )
                 review_policy = {
                     "eligible": eligible,
+                    # Industrial 9B is an audit path.  The fused ExtraTrees
+                    # result completes the business request first; an
+                    # eligible review is queued separately and cannot replace
+                    # that result.
+                    "execution_mode": "async_advisory",
                     "reason": (
                         "industrial_extratrees_uncertainty_with_expected_gain"
                         if eligible
@@ -892,7 +897,8 @@ class IndustrialAnomalyPlugin(ScenePlugin):
                     ),
                     "explicit_requested": False,
                     "model_uncertainty_requires_review": review_candidate,
-                    "model_uncertainty_requires_synchronous_review": review_candidate,
+                    "model_uncertainty_requires_synchronous_review": False,
+                    "model_uncertainty_requires_async_audit": review_candidate,
                     "expected_gain": round(expected_gain, 6),
                     "expected_gain_source": "industrial_extratrees_confidence",
                     "minimum_expected_gain": self.cloud_llm_min_expected_gain,
@@ -1017,11 +1023,11 @@ class IndustrialAnomalyPlugin(ScenePlugin):
         baseline: DecisionEnvelope,
         review: Dict[str, Any],
     ) -> DecisionEnvelope:
-        """Record Qwen's advisory review without replacing ExtraTrees authority.
+        """Record Qwen's advisory review without replacing the ExtraTrees result.
 
-        This intentionally matches the traffic scene: the scene-specific tree
-        ensemble owns the online decision, while the full cloud model provides
-        a structured audit signal for monitoring and future model updates.
+        The scene-specific tree ensemble completes the online decision.  The
+        full cloud model only provides a later audit signal for monitoring and
+        possible follow-up revision.
         """
 
         del event
@@ -1030,7 +1036,7 @@ class IndustrialAnomalyPlugin(ScenePlugin):
         challenged = review.get("verdict") == "challenge"
         metadata["cloud_llm_challenged"] = challenged
         metadata["cloud_llm_baseline_preserved"] = True
-        metadata["cloud_llm_review_role"] = "advisory_non_authoritative"
+        metadata["cloud_llm_review_role"] = "async_advisory"
         if challenged:
             metadata["cloud_llm_advisory_recommendation"] = review.get(
                 "recommended_decision"

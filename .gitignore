@@ -17,6 +17,17 @@ results/
 *.zip
 .env
 
+# Guided deployment credentials belong in a server-side inventory outside the
+# repository.  Keep the public TEST-NET example, and ignore common local-copy
+# names so a later `git add -A` cannot publish SSH inventory by accident.
+scenes/freeway_traffic/video_demo/deployment_profiles.json
+scenes/freeway_traffic/video_demo/deployment_profiles.local.json
+scenes/freeway_traffic/video_demo/deployment_profiles.*.local.json
+scenes/freeway_traffic/video_demo/.deployment-state/
+scenes/freeway_traffic/video_demo/*.sqlite
+scenes/freeway_traffic/video_demo/*.sqlite3
+scenes/freeway_traffic/video_demo/*.db
+
 # 真实交通场景的小型已验证模型属于 SDK 交付物。
 !scenes/freeway_traffic/assets/models/
 !scenes/freeway_traffic/assets/models/**

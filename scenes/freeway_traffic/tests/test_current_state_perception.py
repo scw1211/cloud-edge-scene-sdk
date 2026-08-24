@@ -295,11 +295,25 @@ class CurrentStateRiskTests(unittest.TestCase):
             ),
             list(range(170)),
         )
+        self.assertEqual(
+            [2, 3, 2, 3],
+            [len(event["road_set_assessments"]) for event in result.events],
+        )
         plugin = TrafficPlugin()
-        for native_event in result.events:
+        for partition_id, native_event in enumerate(result.events):
             self.assertEqual(native_event["prediction_horizon_minutes"], 0)
             self.assertEqual(native_event["prediction_steps"], 0)
             self.assertEqual(native_event["output_type"], "current_state_risk")
+            self.assertTrue(
+                all(
+                    assessment["partial"] is True
+                    and assessment["member_region"]
+                    == "region_{}".format(partition_id)
+                    and assessment["aggregation_member"]
+                    == "edge_node_{}".format(partition_id)
+                    for assessment in native_event["road_set_assessments"]
+                )
+            )
             envelope = traffic_envelope_from_output(native_event)
             self.assertTrue(envelope.source.endswith(":current-state"))
             semantic = plugin.normalize(envelope)
@@ -329,7 +343,6 @@ class CurrentStateRiskTests(unittest.TestCase):
             current_state_edge_student_path=(
                 model_root / "edge_student_freeway_current_state_future_v1.json"
             ),
-            defer_gate_path=model_root / "edge_defer_gate.npz",
             feature_codec_path=(
                 model_root / "traffic_tree_feature_codec_topology_v1.npz"
             ),
@@ -356,10 +369,6 @@ class CurrentStateRiskTests(unittest.TestCase):
             all(
                 decision.metadata.get("edge_student_contract")
                 == "current_state_future_v1"
-                and decision.metadata.get(
-                    "traffic_defer_gate_skipped_for_current_state"
-                )
-                is True
                 and decision.metadata.get("edge_decision_path") == "student"
                 for decision in local_decisions
             )

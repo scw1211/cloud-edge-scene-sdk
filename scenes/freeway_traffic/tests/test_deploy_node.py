@@ -78,7 +78,7 @@ class DeployNodeConfigTests(unittest.TestCase):
             self.assertEqual(result["role"], "edge")
             self.assertEqual(
                 result["plugin_config"],
-                "scenes/freeway_traffic/deployment/full/scene_plugins_edge.json",
+                "scenes/freeway_traffic/deployment/full/scene_plugins_edge_primary_qwen.json",
             )
             self.assertEqual(result["cloud"]["base_url"], "http://192.0.2.20:18100")
 
@@ -207,7 +207,7 @@ class DeployNodeConfigTests(unittest.TestCase):
     def test_active_release_replaces_legacy_catalogued_edge_qwen(self):
         catalog = {
             "downloaded_assets": {
-                "edge_qwen_gguf": {"file": "retired-q6.gguf"},
+                "edge_qwen_gguf": {"file": "retired-edge.gguf"},
                 "pems08_inference_array": {
                     "file": "pems08.npz",
                     "startup_required": False,

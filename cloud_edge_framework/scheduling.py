@@ -69,8 +69,6 @@ class ScheduleDecision:
     cloud_round_trips: int
     profile_source: str
     network: Dict[str, Any]
-    selective_defer: bool
-    defer_recommended: bool
     routing_risk_level: str
 
     def to_dict(self) -> Dict[str, Any]:
@@ -94,8 +92,6 @@ class CollaborationScheduler:
         evidence_level: str = "summary",
         measured_cloud_path_ms: Optional[float] = None,
         cloud_round_trips: int = 1,
-        selective_defer: bool = False,
-        defer_recommended: bool = False,
         routing_risk_level: Optional[str] = None,
         decision_uncertain: Optional[bool] = None,
     ) -> ScheduleDecision:
@@ -160,44 +156,28 @@ class CollaborationScheduler:
             + cloud_path_ms
         )
         prediction_set = event.uncertainty.prediction_set or [event.risk.level]
-        if selective_defer:
-            # The scene gate already consumes model confidence. Reapplying the
-            # generic confidence threshold here would undo learning-to-defer and
-            # force nearly every traffic event back to the cloud. A conformal
-            # set, when present, remains an independent ambiguity signal.
-            uncertain = len(prediction_set) > 1 or defer_recommended
-        else:
-            generic_uncertain = (
-                event.uncertainty.confidence < self.confidence_threshold
-                or event.prediction.confidence < self.confidence_threshold
-                or len(prediction_set) > 1
-                or defer_recommended
-            )
-            uncertain = generic_uncertain
+        uncertain = (
+            event.uncertainty.confidence < self.confidence_threshold
+            or event.prediction.confidence < self.confidence_threshold
+            or len(prediction_set) > 1
+        )
         # A scene may provide an authoritative post-adjudication uncertainty
         # signal.  ``False`` is meaningful: it prevents a generic confidence
         # threshold from undoing a scene-specific Student/Qwen cascade.  A
-        # multi-label prediction set or an explicit defer remains uncertain.
+        # multi-label prediction set remains uncertain.
         if decision_uncertain is not None:
-            uncertain = bool(
-                decision_uncertain or len(prediction_set) > 1 or defer_recommended
-            )
+            uncertain = bool(decision_uncertain or len(prediction_set) > 1)
         possible_high = any(
             RISK_PRIORITY.get(level, 0) >= RISK_PRIORITY["high"]
             for level in prediction_set
         )
-        possible_severe = "severe" in prediction_set
         has_explicit_routing_risk = routing_risk_level is not None
         route_risk_level = str(routing_risk_level or event.risk.level)
         if route_risk_level not in RISK_PRIORITY:
             raise ValueError("routing_risk_level is invalid")
         route_risk_priority = RISK_PRIORITY[route_risk_level]
         point_critical = route_risk_priority >= RISK_PRIORITY["high"]
-        if selective_defer:
-            critical = (
-                route_risk_priority >= RISK_PRIORITY["severe"] or possible_severe
-            )
-        elif has_explicit_routing_risk:
+        if has_explicit_routing_risk:
             # ``routing_risk_level`` may deliberately separate operational
             # action safety from a scene's descriptive state (for example,
             # severe congestion with only an advisory action). A possible high
@@ -235,17 +215,6 @@ class CollaborationScheduler:
         elif cloud_review_requested:
             route = "cloud_async"
             reason = "the scene policy requests cloud verification outside the synchronous budget"
-        elif (
-            selective_defer
-            and possible_high
-            and not point_critical
-            and sync_feasible
-        ):
-            route = "cloud_sync"
-            reason = "the calibrated risk set includes a possible high-risk state"
-        elif selective_defer and possible_high and not point_critical:
-            route = "cloud_async"
-            reason = "possible high-risk state uses local action and asynchronous cloud review"
         elif critical and sync_feasible:
             route = "cloud_sync"
             reason = "critical event can finish cloud verification within the deadline"
@@ -258,9 +227,6 @@ class CollaborationScheduler:
         elif uncertain or model_disagreement:
             route = "cloud_async"
             reason = "uncertain result uses a provisional local action and asynchronous review"
-        elif selective_defer and route_risk_level == "high":
-            route = "edge_only"
-            reason = "calibrated high-risk state is covered by a confident local expert"
         else:
             route = "edge_only"
             reason = "stable non-critical event is handled by the edge model"
@@ -283,7 +249,5 @@ class CollaborationScheduler:
             cloud_round_trips=cloud_round_trips,
             profile_source=profile_source,
             network=asdict(network),
-            selective_defer=bool(selective_defer),
-            defer_recommended=bool(defer_recommended),
             routing_risk_level=route_risk_level,
         )

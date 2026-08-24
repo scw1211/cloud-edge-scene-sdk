@@ -1,0 +1,302 @@
+{
+  "assets": {
+    "static_q4_k_m": {
+      "bytes": 529289216,
+      "name": "joint_static_raw16.Q4_K_M.gguf",
+      "sha256": "828f839873c7505005101544d8febb7408bc0443c153c4ba97ec4b3603445526"
+    }
+  },
+  "descriptor_sha256": "e865ccb97d7e4c31f370d694a41f7eb1f9bd4f0a7034e171bc538fde53d7f104",
+  "fixed_gates": [
+    {
+      "metric": "bf16_completed_requests",
+      "operator": "==",
+      "value": 3360.0
+    },
+    {
+      "metric": "bf16_traffic_accuracy",
+      "operator": ">=",
+      "value": 0.66
+    },
+    {
+      "metric": "bf16_traffic_weighted_f1",
+      "operator": ">=",
+      "value": 0.65
+    },
+    {
+      "metric": "bf16_industrial_accuracy",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "bf16_industrial_macro_f1",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "bf16_industrial_weighted_f1",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "static_completed_requests",
+      "operator": "==",
+      "value": 3360.0
+    },
+    {
+      "metric": "static_traffic_accuracy",
+      "operator": ">=",
+      "value": 0.66
+    },
+    {
+      "metric": "static_traffic_weighted_f1",
+      "operator": ">=",
+      "value": 0.65
+    },
+    {
+      "metric": "static_traffic_valid_output_rate",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "static_industrial_accuracy",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "static_industrial_macro_f1",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "static_industrial_weighted_f1",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "static_industrial_valid_output_rate",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "nano_completed_requests",
+      "operator": "==",
+      "value": 500.0
+    },
+    {
+      "metric": "nano_strict_peak_bytes",
+      "operator": "<=",
+      "value": 1500000000.0
+    },
+    {
+      "metric": "nano_growth_100_to_500_bytes",
+      "operator": "<=",
+      "value": 33554432.0
+    },
+    {
+      "metric": "nano_minimum_mem_available_bytes",
+      "operator": ">=",
+      "value": 268435456.0
+    },
+    {
+      "metric": "nano_oom_kill_delta",
+      "operator": "==",
+      "value": 0.0
+    },
+    {
+      "metric": "nano_inference_longest_d_samples",
+      "operator": "<",
+      "value": 5.0
+    },
+    {
+      "metric": "nano_overall_mean_latency_ms",
+      "operator": "<",
+      "value": 200.0
+    },
+    {
+      "metric": "nano_traffic_accuracy",
+      "operator": ">=",
+      "value": 0.66
+    },
+    {
+      "metric": "nano_traffic_weighted_f1",
+      "operator": ">=",
+      "value": 0.65
+    },
+    {
+      "metric": "nano_industrial_accuracy",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "nano_industrial_macro_f1",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "nano_industrial_weighted_f1",
+      "operator": "==",
+      "value": 1.0
+    },
+    {
+      "metric": "nano_valid_output_rate",
+      "operator": "==",
+      "value": 1.0
+    }
+  ],
+  "metrics": {
+    "bf16_completed_requests": 3360.0,
+    "bf16_industrial_accuracy": 1.0,
+    "bf16_industrial_macro_f1": 1.0,
+    "bf16_industrial_valid_output_rate": 1.0,
+    "bf16_industrial_weighted_f1": 1.0,
+    "bf16_traffic_accuracy": 0.67625,
+    "bf16_traffic_macro_f1": 0.618003,
+    "bf16_traffic_valid_output_rate": 1.0,
+    "bf16_traffic_weighted_f1": 0.686506,
+    "nano_completed_requests": 500.0,
+    "nano_growth_100_to_500_bytes": 299008.0,
+    "nano_industrial_accuracy": 1.0,
+    "nano_industrial_macro_f1": 1.0,
+    "nano_industrial_weighted_f1": 1.0,
+    "nano_inference_longest_d_samples": 0.0,
+    "nano_minimum_mem_available_bytes": 1726160896.0,
+    "nano_oom_kill_delta": 0.0,
+    "nano_overall_mean_latency_ms": 73.374463536,
+    "nano_strict_peak_bytes": 998445056.0,
+    "nano_traffic_accuracy": 0.704,
+    "nano_traffic_weighted_f1": 0.7119010159731486,
+    "nano_valid_output_rate": 1.0,
+    "static_completed_requests": 3360.0,
+    "static_industrial_accuracy": 1.0,
+    "static_industrial_macro_f1": 1.0,
+    "static_industrial_valid_output_rate": 1.0,
+    "static_industrial_weighted_f1": 1.0,
+    "static_traffic_accuracy": 0.6775,
+    "static_traffic_macro_f1": 0.6161214548803952,
+    "static_traffic_valid_output_rate": 1.0,
+    "static_traffic_weighted_f1": 0.6866164318487836
+  },
+  "nano_sha256_manifest": {
+    "all_entries_verified": true,
+    "verified_file_count": 24
+  },
+  "release_authorized_by_packager": true,
+  "runtime_contract": {
+    "industrial_allowed_slots": [
+      "A",
+      "B",
+      "C"
+    ],
+    "industrial_prefix": "",
+    "input_tokens": 16,
+    "model_mode": "joint_static_fusion",
+    "output_tokens": 1,
+    "request_level_lora_switching": false,
+    "runtime_adapters": [],
+    "runtime_lora_count": 0,
+    "traffic_allowed_slots": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F"
+    ],
+    "traffic_prefix": ""
+  },
+  "schema_version": "edge-llm-q4-static-raw16-release-gate-summary/v1",
+  "source_evidence": {
+    "formal_gate": {
+      "bytes": 6533,
+      "name": "joint_gate.json",
+      "sha256": "24331556bf364a1035e3988afe2de81b522293e0d41e6c400b97a3fc195d8f08"
+    },
+    "formal_industrial": {
+      "bytes": 287321,
+      "name": "industrial_frozen_960.json",
+      "sha256": "92fe7da1d751e53169904ccc6563e5e22d10efa113192962a37f7511f602fd9e"
+    },
+    "formal_traffic": {
+      "bytes": 722629,
+      "name": "traffic_frozen_2400.json",
+      "sha256": "7473781d4f85d748a3d6421c13153ad5e1d446b2e071a5182a9a8d3c93b2af12"
+    },
+    "nano_gate": {
+      "bytes": 2792,
+      "name": "observed_gate_summary.json",
+      "sha256": "3988f5c1b271de9b4bb7da5a8ff5dac6205f1f5a4691129ea9b0cd6c0260ce07"
+    },
+    "nano_inference_memory": {
+      "bytes": 410080,
+      "name": "inference_memory_samples_20ms.jsonl",
+      "sha256": "8e755b01b81e81a4876ffe94ec6ded4e1270d0724d38e7f56fb0f340167a2dad"
+    },
+    "nano_lora_after": {
+      "bytes": 2,
+      "name": "lora_adapters_after.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "nano_lora_before": {
+      "bytes": 2,
+      "name": "lora_adapters_before.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "nano_observation": {
+      "bytes": 320515,
+      "name": "nano222_joint_q4_static_raw16_observed_500_v2.json",
+      "sha256": "6197e0163be52a7a3ad999c59f78c9acd6fadbe88e183192513249ce28b4cf31"
+    },
+    "nano_sha256s": {
+      "bytes": 2163,
+      "name": "SHA256SUMS.txt",
+      "sha256": "393d44d650e944c3c79265c51fcf5a8515ccb6d62e75336d31d4fada0f122393"
+    },
+    "nano_sidecar_cmdline": {
+      "bytes": 479,
+      "name": "sidecar_cmdline.txt",
+      "sha256": "32c0fcf6a2521a9e12ec4de7e114d8eff1241b3916eef182aad7b00b06e140e5"
+    },
+    "nano_startup_memory": {
+      "bytes": 41202,
+      "name": "startup_memory_samples_20ms.jsonl",
+      "sha256": "9c584997668aeac267c509ebf2038c1d8d580aeafc03a213433b61ad82c71819"
+    },
+    "static_candidate_summary": {
+      "bytes": 930,
+      "name": "final_summary.json",
+      "sha256": "18ccc4627ff64453bb84888ff9d2240787de1270db2e494d723c5fb62d171979"
+    },
+    "static_full": {
+      "bytes": 2481336,
+      "name": "q4_full_traffic2400_industrial960.json",
+      "sha256": "642b134414e8b1de3a1a7f297708345dc0dae8c120d74ecded17c50e20102b72"
+    },
+    "static_provenance": {
+      "bytes": 1689,
+      "name": "provenance_frozen.json",
+      "sha256": "2f69992f4c180addaa3a66d4ea0f785cb3366ab71a6771440e1d07431740920f"
+    }
+  },
+  "training_lineage": {
+    "joint_peft_artifacts": {
+      "config": {
+        "bytes": 1135,
+        "name": "adapter_config.json",
+        "sha256": "bb0ea12677869db58bd59b1ef0da41650a450393cca2cb040f1930fa0ff1b030"
+      },
+      "train_metrics": {
+        "bytes": 3099,
+        "name": "train_metrics.json",
+        "sha256": "0a982db29aa43e10742cf758ef12d5f120b6e4b716e383deb9442b99275cddf3"
+      },
+      "weights": {
+        "bytes": 25584224,
+        "name": "adapter_model.safetensors",
+        "sha256": "413bebd6d7a9ad8ae58301016ea51872049ec0f8ad60f29b6197ea542a78c4de"
+      }
+    },
+    "merge_method": "PEFT PeftModel.merge_and_unload",
+    "peft_artifact_runtime_loaded": false
+  }
+}

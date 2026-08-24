@@ -13,7 +13,7 @@
   "交通_Edge_Qwen_适配器": {
     "部署位置": "边缘",
     "是否为交通正式验收必需": true,
-    "交付方式": "适配器 Git 内置，Q6 GGUF 从 GitHub Release 下载并校验"
+    "交付方式": "最终 Q4_K_M GGUF 与正式适配器均在 model_bundle/final 内置并校验"
   },
   "交通_ExtraTrees": {
     "部署位置": "云端",

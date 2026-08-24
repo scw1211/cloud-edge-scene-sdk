@@ -14,9 +14,11 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
 from edge_llm_factory.adapter_package import MANIFEST_NAME, validate_adapter_package
 from edge_llm_factory.contracts import (
     ManifestError,
+    base_fingerprint,
     canonical_sha256,
     read_json_object,
     sha256_file,
+    validate_base_manifest,
 )
 
 
@@ -186,6 +188,14 @@ def _capture_runtime_adapters(value: Optional[Sequence[Any]]) -> List[Dict[str, 
 
 
 def _binding_from_record(record: Mapping[str, Any]) -> Dict[str, Any]:
+    if record.get("deployment_mode") == "base_only":
+        return {
+            "deployment_mode": "base_only",
+            "base_manifest_sha256": record["base_manifest"]["sha256"],
+            "base_fingerprint": record["base_manifest"]["fingerprint"],
+            "deployment_sha256": record["deployment_artifact"]["sha256"],
+            "runtime_adapters": [],
+        }
     binding = {
         "base_manifest_sha256": record["base_manifest"]["sha256"],
         "base_fingerprint": record["base_manifest"]["fingerprint"],
@@ -211,6 +221,7 @@ def _binding_from_record(record: Mapping[str, Any]) -> Dict[str, Any]:
 
 def _runtime_binding_audit(record: Mapping[str, Any]) -> Dict[str, Any]:
     return {
+        "deployment_mode": record.get("deployment_mode", "adapter_package"),
         "binding_fingerprint": record.get("binding_fingerprint"),
         "deployment_sha256": record.get("deployment_artifact", {}).get("sha256"),
         "runtime_adapters": [
@@ -263,6 +274,19 @@ def _validate_state(value: Mapping[str, Any]) -> Dict[str, Any]:
             raise ManifestError("release store release 条目必须是对象")
         if record.get("release_id") != release_id:
             raise ManifestError("release store release_id 与键不一致")
+        deployment_mode = record.get("deployment_mode")
+        if deployment_mode is not None and deployment_mode != "base_only":
+            raise ManifestError("release store deployment_mode 无效")
+        if deployment_mode == "base_only":
+            if "adapter" in record or "adapter_package" in record:
+                raise ManifestError("base-only release 禁止包含 adapter/package")
+            if record.get("runtime_adapters") != []:
+                raise ManifestError("base-only release 必须固定 runtime_adapters=[]")
+            for field in ("base_manifest", "deployment_artifact"):
+                if not isinstance(record.get(field), dict):
+                    raise ManifestError(
+                        "base-only release 缺少 {}".format(field)
+                    )
         if "runtime_adapters" in record:
             _validate_runtime_adapter_records(
                 record["runtime_adapters"], verify_files=False
@@ -413,22 +437,92 @@ class ReleaseStore:
         }
 
     @staticmethod
+    def _base_only_release_record(
+        release_id: str,
+        base_manifest_path: Path,
+        deployment_artifact: Path,
+    ) -> Dict[str, Any]:
+        """Capture one immutable official-base GGUF without adapter metadata."""
+        if not RELEASE_ID.fullmatch(release_id):
+            raise ManifestError("release_id 格式无效: {}".format(release_id))
+        unresolved_base = Path(base_manifest_path).expanduser()
+        _regular_file(unresolved_base, "基座 manifest")
+        base_path = unresolved_base.resolve()
+        _regular_file(base_path, "基座 manifest")
+        base = validate_base_manifest(read_json_object(base_path))
+
+        unresolved_artifact = Path(deployment_artifact).expanduser()
+        _regular_file(unresolved_artifact, "部署 GGUF")
+        artifact_path = unresolved_artifact.resolve()
+        _regular_file(artifact_path, "部署 GGUF")
+        if artifact_path.suffix.lower() != ".gguf":
+            raise ManifestError("base-only 部署产物必须是 GGUF")
+
+        base_sha = sha256_file(base_path)
+        artifact_sha = sha256_file(artifact_path)
+        binding = {
+            "deployment_mode": "base_only",
+            "base_manifest_sha256": base_sha,
+            "base_fingerprint": base_fingerprint(base),
+            "deployment_sha256": artifact_sha,
+            "runtime_adapters": [],
+        }
+        return {
+            "release_id": release_id,
+            "created_at_utc": _now_utc(),
+            "deployment_mode": "base_only",
+            "binding_fingerprint": canonical_sha256(binding),
+            "base_manifest": {
+                "path": str(base_path),
+                "sha256": base_sha,
+                "fingerprint": binding["base_fingerprint"],
+            },
+            "deployment_artifact": {
+                "path": str(artifact_path),
+                "sha256": artifact_sha,
+                "bytes": artifact_path.stat().st_size,
+                "format": "gguf",
+            },
+            "runtime_adapters": [],
+        }
+
+    @staticmethod
     def _verify_release(record: Mapping[str, Any]) -> Dict[str, Any]:
         base = Path(record["base_manifest"]["path"])
-        package = Path(record["adapter_package"]["path"])
         artifact = Path(record["deployment_artifact"]["path"])
-        if not base.is_file() or sha256_file(base) != record["base_manifest"]["sha256"]:
+        _regular_file(base, "发布版本的基座 manifest")
+        if sha256_file(base) != record["base_manifest"]["sha256"]:
             raise ManifestError("发布版本的基座 manifest 已变化")
-        package_digest = _directory_digest(package)
-        for field in ("sha256", "bytes", "file_count"):
-            if package_digest[field] != record["adapter_package"][field]:
-                raise ManifestError("发布版本的适配器包已变化: {}".format(field))
+        base_data = validate_base_manifest(read_json_object(base))
+        if base_fingerprint(base_data) != record["base_manifest"]["fingerprint"]:
+            raise ManifestError("发布版本的基座指纹已变化")
         if not artifact.is_file() or artifact.is_symlink():
             raise ManifestError("发布版本的部署 GGUF 不存在或是符号链接")
         if artifact.stat().st_size != record["deployment_artifact"]["bytes"]:
             raise ManifestError("发布版本的部署 GGUF 大小已变化")
         if sha256_file(artifact) != record["deployment_artifact"]["sha256"]:
             raise ManifestError("发布版本的部署 GGUF SHA256 已变化")
+        if record.get("deployment_mode") == "base_only":
+            if "adapter" in record or "adapter_package" in record:
+                raise ManifestError("base-only release 禁止包含 adapter/package")
+            if record.get("runtime_adapters") != []:
+                raise ManifestError("base-only release 必须固定 runtime_adapters=[]")
+            if canonical_sha256(_binding_from_record(record)) != record.get(
+                "binding_fingerprint"
+            ):
+                raise ManifestError("发布版本的绑定指纹已变化")
+            return {
+                "status": "verified",
+                "release_id": record["release_id"],
+                "binding_fingerprint": record["binding_fingerprint"],
+                "deployment_mode": "base_only",
+            }
+
+        package = Path(record["adapter_package"]["path"])
+        package_digest = _directory_digest(package)
+        for field in ("sha256", "bytes", "file_count"):
+            if package_digest[field] != record["adapter_package"][field]:
+                raise ManifestError("发布版本的适配器包已变化: {}".format(field))
         validation = validate_adapter_package(package, base, require_gates=True)
         if validation["base_fingerprint"] != record["base_manifest"]["fingerprint"]:
             raise ManifestError("发布版本的基座指纹已变化")
@@ -483,6 +577,46 @@ class ReleaseStore:
             adapter_package,
             deployment_artifact,
             runtime_adapters=runtime_adapters,
+        )
+        with self._locked():
+            state = self._read()
+            existing = state["releases"].get(release_id)
+            if existing is not None:
+                if existing.get("binding_fingerprint") != candidate["binding_fingerprint"]:
+                    raise ManifestError("同一 release_id 已绑定不同产物")
+                self._verify_release(existing)
+            else:
+                state["releases"][release_id] = candidate
+                state["release_order"].append(release_id)
+            if state["active_release_id"] == release_id:
+                return {
+                    "status": "already_active",
+                    "registry": str(self.registry_path),
+                    "active_release_id": release_id,
+                    "revision": state["revision"],
+                    "release": state["releases"][release_id],
+                }
+            self._activate(state, release_id, "promote")
+            _atomic_write(self.registry_path, state)
+            return {
+                "status": "promoted",
+                "registry": str(self.registry_path),
+                "active_release_id": release_id,
+                "revision": state["revision"],
+                "release": state["releases"][release_id],
+            }
+
+    def promote_base_only(
+        self,
+        release_id: str,
+        base_manifest_path: Path,
+        deployment_artifact: Path,
+    ) -> Dict[str, Any]:
+        """Atomically promote an immutable base GGUF with no package or LoRA."""
+        candidate = self._base_only_release_record(
+            release_id,
+            base_manifest_path,
+            deployment_artifact,
         )
         with self._locked():
             state = self._read()
@@ -667,6 +801,14 @@ def main(argv: Optional[list] = None) -> None:
         ),
     )
 
+    promote_base = subparsers.add_parser("promote-base-only")
+    promote_base.add_argument("--registry", required=True)
+    promote_base.add_argument("--release-id", "--release_id", required=True)
+    promote_base.add_argument("--base", required=True)
+    promote_base.add_argument(
+        "--deployment-artifact", "--deployment_artifact", required=True
+    )
+
     rollback = subparsers.add_parser("rollback")
     rollback.add_argument("--registry", required=True)
     rollback.add_argument("--release-id", "--release_id", default=None)
@@ -692,6 +834,12 @@ def main(argv: Optional[list] = None) -> None:
             Path(args.package),
             Path(args.deployment_artifact),
             runtime_adapters=runtime_adapters,
+        )
+    elif args.command == "promote-base-only":
+        result = store.promote_base_only(
+            args.release_id,
+            Path(args.base),
+            Path(args.deployment_artifact),
         )
     elif args.command == "rollback":
         result = store.rollback(args.release_id)

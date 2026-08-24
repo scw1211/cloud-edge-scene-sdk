@@ -1,17 +1,17 @@
 {
   "sdk_version": "0.13.1",
-  "built_at_utc": "2026-08-16T03:47:23.446087+00:00",
+  "built_at_utc": "2026-08-24T07:55:30.828350+00:00",
   "python_requires": ">=3.8",
   "included_files": [
     {
       "path": ".gitignore",
-      "bytes": 1051,
-      "sha256": "d3c4bb794aafbd28655f3999e9ff67cf666d7cd216458eca69f8afd83afaa6f3"
+      "bytes": 1652,
+      "sha256": "7b1f892b95fc5abab3f7c524d44fc95688229e7ddf67c93cf7617b96646c9425"
     },
     {
       "path": "README.md",
-      "bytes": 31230,
-      "sha256": "3cf1024592fde29f8737d1af254f622e9db4fd5edd94b0ca0d3412d0196c3f6b"
+      "bytes": 39942,
+      "sha256": "9cb8c40a63cc7f0c9c794e50c9a2d7d517d41a73421a33e4eba0501e74b3bbba"
     },
     {
       "path": "VERSION",
@@ -70,8 +70,8 @@
     },
     {
       "path": "cloud_edge_framework/cloud_service.py",
-      "bytes": 36925,
-      "sha256": "1462c0b05449fff6c044078b645d42aa0b051421d6426f2d2b9d5fe7bc9877a4"
+      "bytes": 58047,
+      "sha256": "7d2eefbbdcb76324182caf9c1431a0844e8cf532c785e938dc6e21bfb75eb0b1"
     },
     {
       "path": "cloud_edge_framework/conflicts.py",
@@ -90,8 +90,8 @@
     },
     {
       "path": "cloud_edge_framework/edge_service.py",
-      "bytes": 20029,
-      "sha256": "8254623df21087dbe6d324d1449d5be14ee08149c92493cf05e07c591c152d32"
+      "bytes": 21107,
+      "sha256": "c9a66375edd2f2d83b29bd74c8036344a513e93b04f4de849a1c0407086cc304"
     },
     {
       "path": "cloud_edge_framework/event_envelope.py",
@@ -150,8 +150,8 @@
     },
     {
       "path": "cloud_edge_framework/plugin_manager.py",
-      "bytes": 10545,
-      "sha256": "326000cfaa60953a5000ecc5ebf654fcb85c937e616d0d2e8e31665daaddacac"
+      "bytes": 10340,
+      "sha256": "fb3d60c503148b607600d2f783191cac2113e73fdfd42405611151c77ad42e8b"
     },
     {
       "path": "cloud_edge_framework/plugins/__init__.py",
@@ -195,18 +195,28 @@
     },
     {
       "path": "cloud_edge_framework/review_tracking.py",
-      "bytes": 27227,
-      "sha256": "ee73af408812e6aeda88c6afab870988cc4957e75852c537c0ea69100083ee15"
+      "bytes": 25450,
+      "sha256": "ec57cbc40b7216d16ca3cd36e2f37a101d28a84f7a86b0f9ffb27887ea0ffd41"
+    },
+    {
+      "path": "cloud_edge_framework/routing_pipeline.py",
+      "bytes": 6837,
+      "sha256": "4802e42022ea3decd46478d83ab95240d123e00c227c8c95b850c5440e8e63a1"
     },
     {
       "path": "cloud_edge_framework/runtime.py",
-      "bytes": 119542,
-      "sha256": "912bb1b2271b7f8ea81189a20f546a5b9b7964a3156858f8045406c0d496ea65"
+      "bytes": 122896,
+      "sha256": "4f61281480c45f74e797f0eee714b83722fa568954dac2023a23ebd1e42a5d9c"
     },
     {
       "path": "cloud_edge_framework/scheduling.py",
-      "bytes": 12653,
-      "sha256": "8de56c408f1877542bcd990d6ed2e801d0945ba75a6f99dee4e1dffe473a0f30"
+      "bytes": 10959,
+      "sha256": "7bf3fd5b89c79c6b81d29e790511a05df5e1f3ba0dc58cf12459229473f80fd8"
+    },
+    {
+      "path": "cloud_edge_framework/selective_evidence_pull.py",
+      "bytes": 49119,
+      "sha256": "6b090d8e64af2c8fe742436f1ee00a6df392d88d17e9d0a2a3ff07942ed79829"
     },
     {
       "path": "cloud_edge_framework/server.py",
@@ -215,18 +225,13 @@
     },
     {
       "path": "cloud_edge_framework/service_config.py",
-      "bytes": 13130,
-      "sha256": "6541393ea59965329f06a071866f0cfd88b856115dc5d61cbf5c085ce6b1ce08"
+      "bytes": 14160,
+      "sha256": "61f403c57948ead210c82dab196d71f4a746c5bbe3562037efbe2fbed7d0fa14"
     },
     {
       "path": "cloud_edge_framework/transport.py",
       "bytes": 28762,
       "sha256": "5b394a865dbb290849967518468f03c08bf0e903492c815086bbc7befd82215d"
-    },
-    {
-      "path": "cloud_edge_framework/utility_routing.py",
-      "bytes": 8797,
-      "sha256": "c3c5a416f180cb33e3d06f4ab195e1da24f6e34656e8edfabb409845856d7e08"
     },
     {
       "path": "cloud_edge_framework/version.py",
@@ -247,6 +252,26 @@
       "path": "deployment/framework/scene_plugins.json",
       "bytes": 334,
       "sha256": "33381f230ca002b2139df670cc6b60629ed7074edeabea3ee5b6e5d525aa72a3"
+    },
+    {
+      "path": "docs/final_demo_script.md",
+      "bytes": 8532,
+      "sha256": "4307b8a1ab1d0b01cd69329e92162e01849c746a1ae0f77f9faee0c7594a645e"
+    },
+    {
+      "path": "docs/final_package_readiness.md",
+      "bytes": 8017,
+      "sha256": "0599daf62bd5d88955a1f4d059c8e8eb3b54e923784f52cf3dbbc9cb826c4078"
+    },
+    {
+      "path": "docs/selective_evidence_pull_protocol.md",
+      "bytes": 6010,
+      "sha256": "3684694dcae148466e9dd87723702dd8beb3e0859f659677fa419265bc1a26eb"
+    },
+    {
+      "path": "docs/simplified_routing_architecture.md",
+      "bytes": 2080,
+      "sha256": "f9edb4c751abba7fbbb085e9209b79b402d94c047972430f76033f98cd875a84"
     },
     {
       "path": "edge_llm/base_manifest.json",
@@ -285,8 +310,8 @@
     },
     {
       "path": "edge_llm_factory/adapter_package.py",
-      "bytes": 19594,
-      "sha256": "0f9a6b42b9efd5e6f2233dd7011e0afdd3bf5d98bb80750095e1ef35e8da27ee"
+      "bytes": 19611,
+      "sha256": "d6054516d15028267dc28188bdcf76ce83d34c9c4cadd1a4cba522ee9425fe59"
     },
     {
       "path": "edge_llm_factory/base_snapshot.py",
@@ -430,28 +455,8 @@
     },
     {
       "path": "edge_llm_factory/q4_static_raw16_release.py",
-      "bytes": 51840,
-      "sha256": "edbc484847da3fd497865773fdbb314fb8a781e5b16f10878f362f0711450b94"
-    },
-    {
-      "path": "edge_llm_factory/q5_joint_release.py",
-      "bytes": 29786,
-      "sha256": "dcd56cf1e0ad89ec90859bc77652c93bad2d17add15c3e555f4b53c3736edf51"
-    },
-    {
-      "path": "edge_llm_factory/q5_static_joint_release.py",
-      "bytes": 51679,
-      "sha256": "1a64290b1a1b2e997eed6d2819b1ebfb1804e030dbf23c39485d677c8065cb83"
-    },
-    {
-      "path": "edge_llm_factory/q6_multiscene_release.py",
-      "bytes": 25293,
-      "sha256": "f2865a1eadf875580327f3778ebccb32084d8b31e71919ac362b19202e829371"
-    },
-    {
-      "path": "edge_llm_factory/record_u2_bf16_execution_receipt.py",
-      "bytes": 64088,
-      "sha256": "937ba3433804402a6e4d35e3b57d5419d19f323a8db9f3e0599143aa79b2cebd"
+      "bytes": 138841,
+      "sha256": "033a0d79240a590569e09e40e3e56cf62c6a98e207de2d391f72f2d023786b60"
     },
     {
       "path": "edge_llm_factory/record_u2_candidate_artifact.py",
@@ -460,28 +465,23 @@
     },
     {
       "path": "edge_llm_factory/release_runtime.py",
-      "bytes": 5889,
-      "sha256": "9c961712e84670c07bb25ceb9a47afb78a12e1b298d70e068c6d8ea0cc26e18b"
+      "bytes": 7993,
+      "sha256": "4294fb32c281f0748742cd13c6d3cbb7923cb100d6e373a3bf740a839c086012"
     },
     {
       "path": "edge_llm_factory/release_store.py",
-      "bytes": 29567,
-      "sha256": "59d69e6f4affc49bd2f6d0ec791a0a9f56e723e3d0d91fdb509dbd7c073dd8d4"
+      "bytes": 36202,
+      "sha256": "5dd52c20920619ef0bc742224b785d1cf23ba0b81adaf73adc2ade7223e1133b"
     },
     {
       "path": "edge_llm_factory/runtime.py",
-      "bytes": 12325,
-      "sha256": "d857ed1ac02c1c4d040be3ced5cd531d73ec38014a50a922807a23ec9ac11472"
+      "bytes": 17605,
+      "sha256": "4b34e1aff11bf536db279d52f17d81c1e785265afb107dd338de524522f41239"
     },
     {
       "path": "edge_llm_factory/serve_release.py",
       "bytes": 78582,
       "sha256": "ad821d9ca372600de15fd341ce45430179a113ce956d54bc9d324c71be01338f"
-    },
-    {
-      "path": "edge_llm_factory/summarize_ceval_specialty_eval.py",
-      "bytes": 60305,
-      "sha256": "a84e5f9f800b6b3dbbcb2e430bb469d3fc4bf49b0f49eee1521bb7275e456cdc"
     },
     {
       "path": "edge_llm_factory/text_base.py",
@@ -515,8 +515,8 @@
     },
     {
       "path": "edge_llm_factory/update_loop_evidence.py",
-      "bytes": 43374,
-      "sha256": "b0712b249dabaef0c55f5fe53c53ac19f3ed156a775a76e8c3a7cd4d80288985"
+      "bytes": 43300,
+      "sha256": "4ac10d220c8e0218f65201eed4eb997977245a1ab9315617215f9dd8963dd61b"
     },
     {
       "path": "model_bundle/APACHE-2.0.txt",
@@ -530,13 +530,88 @@
     },
     {
       "path": "model_bundle/catalog.json",
-      "bytes": 1629,
-      "sha256": "81a705d8283d66146375993ccb1042148f9269126d7e6cd5f20fa10aec4377d0"
+      "bytes": 4251,
+      "sha256": "fc4b69cb570f4c2e4e607c70f739781cdf786b5eac62757fbaf9efaac18f905e"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_0p8b_general_distilled_q4/SHA256SUMS",
+      "bytes": 93,
+      "sha256": "7d1054d6a5e1e593c97464fa19fb8f8331b2349bf387a0a995e3d87bc5f08d6f"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_0p8b_general_distilled_q4/model_identity.json",
+      "bytes": 1179,
+      "sha256": "4a80165e74754df1b6a3e4c333aa254a6bba3312ae71da7b10aeae0ac6e044db"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_0p8b_q4/SHA256SUMS",
+      "bytes": 253,
+      "sha256": "254934dbc652267f93de66c71b117ab3cc7c5844341f98af634f13891556f5b3"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_0p8b_q4/adapter_package/README.md",
+      "bytes": 556,
+      "sha256": "7b40ec0221b97537a7be1e148bfdb6fc0116b50ec5845293955c6f6e24ac3272"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_0p8b_q4/adapter_package/action_mapping.json",
+      "bytes": 2063,
+      "sha256": "61595d62e7ac0dfbdcf98187dbb2e33dae84bbd32c67fbad492216764ec260e0"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_0p8b_q4/adapter_package/adapter_config.json",
+      "bytes": 1135,
+      "sha256": "bb0ea12677869db58bd59b1ef0da41650a450393cca2cb040f1930fa0ff1b030"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_0p8b_q4/adapter_package/evidence/q4_static_raw16_gate_summary.json",
+      "bytes": 8354,
+      "sha256": "7b39fbb7f2aa2b95e910b158b351ff926c34e539add6c36d9fb4a8f278b5469d"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_0p8b_q4/adapter_package/scene_adapter_manifest.json",
+      "bytes": 16231,
+      "sha256": "86f0bf2cf99fa0dd573ac03710815d680800bbce62662bf12c680af41bf1e36e"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_0p8b_q4/model_identity.json",
+      "bytes": 930,
+      "sha256": "a4fe3cfc7064c5b44997163572cf8f3f50300b229fedfca0304c6b65e53f1ffd"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_9b/SHA256SUMS",
+      "bytes": 433,
+      "sha256": "d6a72138fbd692a83e8cefe607f32b26e9910ee89279481743ca752842637b29"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_9b/chat_template.jinja",
+      "bytes": 7756,
+      "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_9b/config.json",
+      "bytes": 3126,
+      "sha256": "d0883072e01861ed0b2d47be3c16c36a8e81c224c7ffaa310c6558fb3f932b05"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_9b/model.safetensors.index.json",
+      "bytes": 79657,
+      "sha256": "26d3539b516be613f39563617cb9d33b3f83d401298125be392c80cefb8f7fe5"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_9b/model_identity.json",
+      "bytes": 2535,
+      "sha256": "3a87c5a3670b7eb1f442d07efc908673ef405dea7f8acbddd6412fd73388c42d"
+    },
+    {
+      "path": "model_bundle/final/qwen3_5_9b/tokenizer_config.json",
+      "bytes": 16710,
+      "sha256": "316230d6a809701f4db5ea8f8fc862bc3a6f3229c937c174e674ff3ca0a64ac8"
     },
     {
       "path": "model_bundle/install_models.py",
-      "bytes": 9107,
-      "sha256": "84fc8ec937e15c0f81b06cf1b2b8aefabf7604086add16910a0e912ec3343a20"
+      "bytes": 7109,
+      "sha256": "2d6ec07fe97adc0919b50a72a3ba2622f1ca585cef6d94a122a965c1a7b60286"
     },
     {
       "path": "pyproject.toml",
@@ -620,8 +695,8 @@
     },
     {
       "path": "scenes/freeway_traffic/asset_catalog.json",
-      "bytes": 3674,
-      "sha256": "e9d008da507f1ec235952f5f66e4da68d536a5e2fbbcff54b59c46af915b430b"
+      "bytes": 3316,
+      "sha256": "cd38eeb1d0cad95ad175ae8032d56ac8318b243a4538afad98bdfa10b4d54a0a"
     },
     {
       "path": "scenes/freeway_traffic/assets/data/PEMS08.csv",
@@ -629,89 +704,9 @@
       "sha256": "e5ab2a62f275741e6b07d3fba1623883ff9d692d406a44724d26efddc5e24b20"
     },
     {
-      "path": "scenes/freeway_traffic/assets/edge_llm/action_mapping.json",
-      "bytes": 2063,
-      "sha256": "61595d62e7ac0dfbdcf98187dbb2e33dae84bbd32c67fbad492216764ec260e0"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/action_mapping.json",
-      "bytes": 2066,
-      "sha256": "8c842896d91ef92e19c070c300f914bd858cc615406199c7abad3a81d07b28ba"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/adapter_config.json",
-      "bytes": 1096,
-      "sha256": "2f5e14f0c852f8c74310efb68d0dafb43f546b15ff389fac78923e83f010ccbe"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/adapter_model.safetensors",
-      "bytes": 25584224,
-      "sha256": "639a1edf13f9c41c6d19c6c7c33ee4a30eb83cbc313971081410d5f5d9c69924"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/evidence/deployment.json",
-      "bytes": 1983,
-      "sha256": "d683181f9c5b5bdf0f94d686d2877681757e8d5dacc8a63878bedef7357aa869"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/evidence/distillation.json",
-      "bytes": 3032,
-      "sha256": "8017a5505cf513b458028eabb8239d50ade4f1a2bb00d1db05a36d176d14e4c4"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package/scene_adapter_manifest.json",
-      "bytes": 4885,
-      "sha256": "3fcdeadbd1a1fef6c6bad90a42e612f7749240795f5ef729b0090b6835b074e1"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package_current_state_v2/action_mapping.json",
-      "bytes": 2063,
-      "sha256": "61595d62e7ac0dfbdcf98187dbb2e33dae84bbd32c67fbad492216764ec260e0"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package_current_state_v2/adapter_config.json",
-      "bytes": 1097,
-      "sha256": "1d71678d836f09bfaff7f933eeafd807f1e6a81ede4e337fc4c7b32455be0218"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package_current_state_v2/adapter_model.safetensors",
-      "bytes": 25584224,
-      "sha256": "7db73c1cdcb9cb97a1213e813a4893d8b316099ea0969dd7b2812d11f2e7c295"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package_current_state_v2/evidence/gguf.json",
-      "bytes": 134229,
-      "sha256": "5a73bb5998d2002bc08fcbe728bff8585795500d219f47f29bc89021f246927c"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package_current_state_v2/evidence/qwen.json",
-      "bytes": 1249534,
-      "sha256": "8560fdf9e6df603247105ef997423a9f29bb6614f5b85877f40b7986e5f8165c"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package_current_state_v2/evidence/routing.json",
-      "bytes": 4309,
-      "sha256": "9584dfba1db015e31c6f162d6f7aa634f0a19b85977521ceab074cb36ad556a4"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/adapter_package_current_state_v2/scene_adapter_manifest.json",
-      "bytes": 5429,
-      "sha256": "734bd7761f81a894a38f17dba1ec241c94408ba257174b7bf6f751375abda264"
-    },
-    {
       "path": "scenes/freeway_traffic/assets/edge_llm/base_manifest.json",
       "bytes": 2726,
       "sha256": "2832e36a971974075c14694b1e2af506d0183e6a229eff2871b0283d24179af3"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/package_spec.json",
-      "bytes": 2658,
-      "sha256": "790919ac2456334cd48509b43ab8d4b7cb23e0df6231f922befa99c0709c53a2"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/edge_llm/package_spec_current_state_v2.json",
-      "bytes": 2848,
-      "sha256": "39ff5856b0a72161827098eb75cce2adad28ab8a134364fe2a597ceb60b8bff0"
     },
     {
       "path": "scenes/freeway_traffic/assets/models/cloud_coordinator_current_state_future_v1.joblib",
@@ -727,11 +722,6 @@
       "path": "scenes/freeway_traffic/assets/models/current_state_perception_v1.json",
       "bytes": 1292,
       "sha256": "8d06ac53712d653dcc6ec74bfee0fe182759c4bb340730111e4518a45e7ebcd2"
-    },
-    {
-      "path": "scenes/freeway_traffic/assets/models/edge_defer_gate.npz",
-      "bytes": 676016,
-      "sha256": "f4191ab8212cf6c42b5a9c04adb07a12874b645e788c3371a81b3b3eef056a41"
     },
     {
       "path": "scenes/freeway_traffic/assets/models/edge_qwen_gain_router_current_state_v1.json",
@@ -785,8 +775,8 @@
     },
     {
       "path": "scenes/freeway_traffic/benchmark_weak_network_retention.py",
-      "bytes": 60978,
-      "sha256": "00f830b59ada630115434756b31cc1d2e1f25c2b1d6bcff2170e58610e67b080"
+      "bytes": 61671,
+      "sha256": "1f3617dd2cb74dad3896cbacd71b604e1e1d6d75c85c26ffe28d680b3ca8d94f"
     },
     {
       "path": "scenes/freeway_traffic/configurations/PEMS08_astgcn.conf",
@@ -825,8 +815,8 @@
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/cloud_service.json",
-      "bytes": 600,
-      "sha256": "a19afdff696abd9c2104b4431e87fa1f384d6d28b89e94ddb6909486462a4284"
+      "bytes": 1170,
+      "sha256": "490238755934cc8567f2bc0d86e708342a5087d0dec274cfab688954b23751fc"
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/cloud_service_qwen9b.json",
@@ -835,13 +825,13 @@
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/edge_llm_runtime.json",
-      "bytes": 432,
-      "sha256": "61485870609872fe4ba60c5bc2d232cac1794cf40f9d32228bbb0230c33eb98e"
+      "bytes": 435,
+      "sha256": "a643d129da08429a5cc95c66a8201a2c0ae8371fe7435a4ea071d61ff26663c3"
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/edge_service.json",
-      "bytes": 1762,
-      "sha256": "dd30037199dec480d3a4e2408e3cd19a81e3ccb161308ed314537d480c71d8d5"
+      "bytes": 2014,
+      "sha256": "5816a76125a73fe79b619016c853c431743f813521640a0e76296a5d931c37aa"
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/edge_service_qwen9b.json",
@@ -860,8 +850,13 @@
     },
     {
       "path": "scenes/freeway_traffic/deployment/full/scene_plugins_edge.json",
-      "bytes": 1642,
-      "sha256": "04e7fc1af835ce39c52a103c8f7c1c64d1007d62a0c2ee98146f4fd9ee59c67e"
+      "bytes": 1555,
+      "sha256": "dd0b967e100c6f2427b505e31a91af4885143ce5f067853b0aa88c5ef08f5e1f"
+    },
+    {
+      "path": "scenes/freeway_traffic/deployment/full/scene_plugins_edge_primary_qwen.json",
+      "bytes": 1553,
+      "sha256": "1a93871a2ab5abd04fa575bdbb88fa66c8e21e6e3f359ea4ce2c90cb8d75e076"
     },
     {
       "path": "scenes/freeway_traffic/deployment/scene_plugins.json",
@@ -890,13 +885,13 @@
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_full/edge_llm.py",
-      "bytes": 28081,
-      "sha256": "31c6fa035772f93dece031e09c483a21dde4b494a046bb6c9991d974d95a20b2"
+      "bytes": 27791,
+      "sha256": "242fcc4df7d2f8ee02c9ba5c1ce3af125c09452125fcb728faa3f5656c987d4e"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_full/plugin_impl.py",
-      "bytes": 92298,
-      "sha256": "ca4104c4ada683232f2ed7c764f5e0d6b4a98966f3f94b97bd13761609345466"
+      "bytes": 130887,
+      "sha256": "d757ed9ba433a8f5faf7785e5eb4a8ea4b1adf540c6233dd1156201278fd431e"
     },
     {
       "path": "scenes/freeway_traffic/freeway_traffic_scene/__init__.py",
@@ -925,8 +920,8 @@
     },
     {
       "path": "scenes/freeway_traffic/install_full_assets.py",
-      "bytes": 5317,
-      "sha256": "ecc9810f62b002972ea47ee1b92ca8d477ee72315f1147ff5f3e80933677ed19"
+      "bytes": 5493,
+      "sha256": "0fb5c948f49dfd63858476c094238062aed707d811868543966dd30e6c99271c"
     },
     {
       "path": "scenes/freeway_traffic/lib/__init__.py",
@@ -960,13 +955,13 @@
     },
     {
       "path": "scenes/freeway_traffic/model_assets.example.json",
-      "bytes": 1092,
-      "sha256": "d98e6da6ef416f86087e3935608fc79e4e5010a0347e9887c167e3af2aa3b462"
+      "bytes": 1105,
+      "sha256": "ec5914d90ef0dd9d815f0c1ea9e4caf5fd078cf8364d113077772e2b0a7a2df2"
     },
     {
       "path": "scenes/freeway_traffic/prepare_metis_partition_data.py",
-      "bytes": 6086,
-      "sha256": "b55c205f8d1149a909e976ad0a80e8c5b725b9c916069a43e176fea29f2d66e9"
+      "bytes": 12372,
+      "sha256": "283e8a43ab30dd7886df6394e388c1b116aca399ab75595f41c939c155863e0a"
     },
     {
       "path": "scenes/freeway_traffic/pyproject.toml",
@@ -985,8 +980,8 @@
     },
     {
       "path": "scenes/freeway_traffic/run_partitioned_current_state_edges.py",
-      "bytes": 38312,
-      "sha256": "569cfccc52f59d33179287ed0d662741ac263ae8799a92be3dcfcf8928b315c2"
+      "bytes": 41378,
+      "sha256": "906e83e19bda923bf829d341228809795068abd595bbf99efee9d90525072ca1"
     },
     {
       "path": "scenes/freeway_traffic/samples/edge_a_event.json",
@@ -1000,8 +995,8 @@
     },
     {
       "path": "scenes/freeway_traffic/schemas/scenes/traffic_edge_event_v1.schema.json",
-      "bytes": 5784,
-      "sha256": "f0e5935811c3e46c0176eaf85a7993d5d84790d57199ce310fb45e219a717256"
+      "bytes": 7008,
+      "sha256": "6bfb5c0f4b7cbf9b29838a71aee2580296a8b9486c0f47583c77781bb9d9f3eb"
     },
     {
       "path": "scenes/freeway_traffic/send_real_partitions.py",
@@ -1009,24 +1004,24 @@
       "sha256": "31bf9880840a619df23c94cc51704670d1afe8d6abcac0746b4c64cdb0c76588"
     },
     {
-      "path": "scenes/freeway_traffic/tests/test_aggregate_four_route_e2e_evidence.py",
-      "bytes": 19789,
-      "sha256": "c280d97c38c9dd79ad6f9cec3a1067d8d65fb38d687eec6b169e3c03b8412758"
+      "path": "scenes/freeway_traffic/tests/test_boundary_road_set_coordination.py",
+      "bytes": 26522,
+      "sha256": "569d5c412bea29e4b2dc362ce22fa5e46c02bd12a52e74cbd46610c2c8045a0a"
+    },
+    {
+      "path": "scenes/freeway_traffic/tests/test_canonical_overlap_sidecars.py",
+      "bytes": 10311,
+      "sha256": "fae750c07dfa4e3840baa56292c49c0e820e116b4ac0973a47ffbba154e1d14c"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_current_state_perception.py",
-      "bytes": 15842,
-      "sha256": "699514bd5dbd5e737d90d0f24bf47cbae36ae2f45387a9c0e418f21ec5290b0b"
-    },
-    {
-      "path": "scenes/freeway_traffic/tests/test_current_state_qwen_contract.py",
-      "bytes": 28301,
-      "sha256": "e263bcba0aaedfbf763b681df810abd5826bf0a529636e39804fc5c68db083dc"
+      "bytes": 16221,
+      "sha256": "ae8953df30122bfa3e25fb805f8fc2bc3ea9e3ba21888afc764139ee810ffa9d"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_deploy_node.py",
-      "bytes": 19357,
-      "sha256": "2a46fe08755b83658ae6da243850b4cfac7a5d4a5f8484db92c891387ae46698"
+      "bytes": 19372,
+      "sha256": "047d0dbc67a579921fd07abc29c89d91359d4f514067cba3ae0ca7054507f30f"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_e2e_route_metrics.py",
@@ -1049,19 +1044,24 @@
       "sha256": "8502c691b83fede128768cb784e872b638a008a40d8728c00852ef833cf560a2"
     },
     {
-      "path": "scenes/freeway_traffic/tests/test_measure_current_edge_llm_targets.py",
-      "bytes": 11807,
-      "sha256": "0c216e25bb16ac0cd0eda14afe358a68c4b0f8e19bbc09cf18ddaaf93c78f7ed"
+      "path": "scenes/freeway_traffic/tests/test_overlap_road_set_contract.py",
+      "bytes": 13899,
+      "sha256": "2deb970cd8f7c053f32fadf50501094067e7ef5bb9815d89ddc22c7ee51249d7"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_partitioned_edge_services.py",
-      "bytes": 6206,
-      "sha256": "7edd2704824d0e8ed613caa8031b45c3b3da8e2cbfb5e8853a3ab78da927ed84"
+      "bytes": 8040,
+      "sha256": "d39aff2f83162ff63813790294fb58b097364f1003b1cadd0ee2ff4dec2c289d"
+    },
+    {
+      "path": "scenes/freeway_traffic/tests/test_summary_first_evidence.py",
+      "bytes": 19573,
+      "sha256": "dd0e109a15bc12b747cfaabe499a4e4627e515f2ec4ca49400f08d1f50756e85"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_traffic_semantics_and_edge_llm.py",
-      "bytes": 32004,
-      "sha256": "9843e3ca50a92f9267d477eb0b4073dc64ffc0a15a50f7ea1bcb97f9901cabcf"
+      "bytes": 33355,
+      "sha256": "998ecdf58c867675f96ae6e53b7c195417a3317dfdba7401895a8f3292202c25"
     },
     {
       "path": "scenes/freeway_traffic/tests/test_weak_network_retention.py",
@@ -1084,59 +1084,9 @@
       "sha256": "232e2bc11e4e36a092770c8299d4b0a557c82ed691ad5d6f0ec387d297ccc663"
     },
     {
-      "path": "scenes/freeway_traffic/traffic_system/benchmark_collaboration_framework.py",
-      "bytes": 16674,
-      "sha256": "a387a1dabb28879b16ad6b68be676a31111b1044b8131aa6fa24348c16a32a77"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/benchmark_continuous_edge_cloud.py",
-      "bytes": 34373,
-      "sha256": "5cedcc642b151ddca8d4593bbe4c0572de276729fbd6f7836dc1a7bfb1f40a5d"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/benchmark_coordinate_http.py",
-      "bytes": 3657,
-      "sha256": "20c3c07330f558948322a60d036791617d1da89079410cb0a03bcc35e58e2232"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/benchmark_llama_cpp_action_streaming.py",
-      "bytes": 16423,
-      "sha256": "4f795667f7db4657ad6bfbb23774d349f967eee75ed424c7985109216d42afaf"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/benchmark_measured_architectures.py",
-      "bytes": 24530,
-      "sha256": "805b114fb45e058e719bb70d11b4a264b0e822d2725b1ea9530134e41b67cdd6"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/benchmark_multi_edge_cloud_load.py",
-      "bytes": 8945,
-      "sha256": "84504b91ad06582618bc8af5d23f364d3eb190588de5e21c9a9d5398c34e1a79"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/benchmark_ollama_streaming.py",
-      "bytes": 9260,
-      "sha256": "dc6a8f1f226f7caa6a8bdb7df4bb2ab9599f92e31f04c3d52866d678e81d6c3f"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/benchmark_tree_feature_codec.py",
-      "bytes": 10485,
-      "sha256": "dbadae7701584b4a998459b0e19b767cbf1fc976b891a73b917d25031cfe46ea"
-    },
-    {
       "path": "scenes/freeway_traffic/traffic_system/benchmark_utils.py",
       "bytes": 9082,
       "sha256": "1b90a022447d0420623bbf7357992a6e075c1d19494f4f56a57c53c8b439330a"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/build_correction_distillation_dataset.py",
-      "bytes": 5905,
-      "sha256": "f4d4ff414db18388bc938a5454765a3d8b0f3996acd04aeee0b5654fd0c6b97b"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/build_current_state_qwen_dataset.py",
-      "bytes": 18810,
-      "sha256": "7b8cf1c5aa342f0c32979929c1c4f396117f356da7c111592b8a2114c7fcd224"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/build_framework_truth_cases.py",
@@ -1154,29 +1104,14 @@
       "sha256": "b43c4d04126ab871f1c276b205c4d4b09e7f22b29deb1ba6d594593fa5f40211"
     },
     {
-      "path": "scenes/freeway_traffic/traffic_system/build_mixed_capability_distillation_dataset.py",
-      "bytes": 8590,
-      "sha256": "40ad63e4172d9ef1739bb1e2917e94aa934f28380e5fb3762ee1518587c17d3c"
-    },
-    {
       "path": "scenes/freeway_traffic/traffic_system/build_paper_risk_labels.py",
       "bytes": 30633,
       "sha256": "24093cb66b7f4e096944c2f4eaa7f2965493c71793ff29cc6abf62686ecae79d"
     },
     {
-      "path": "scenes/freeway_traffic/traffic_system/build_preference_distillation_dataset.py",
-      "bytes": 8555,
-      "sha256": "99080ec13ab639e639bae5b71dbbbd762739423dbd08a3cc7173bcc79cbb770f"
-    },
-    {
       "path": "scenes/freeway_traffic/traffic_system/build_region_topology.py",
       "bytes": 5389,
       "sha256": "c7936903a3515d5a608257a4a48e8c54d9e49781e94b74b429c8ca0e3ac23151"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/build_traffic_requirement_report.py",
-      "bytes": 32530,
-      "sha256": "9f9d87b5b2123e4da303f8f50bae4804dbf4bd58d5d484045726f0aa395a81fd"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/build_ultracompact_llm_dataset.py",
@@ -1224,24 +1159,19 @@
       "sha256": "0725ef8d07f496dd61c7dc43563e5c553a18b833b0c493778ec01855f9920a1e"
     },
     {
+      "path": "scenes/freeway_traffic/traffic_system/coordination_policy.py",
+      "bytes": 28509,
+      "sha256": "0e107cd7dff3c4bf80e2804a258d7cd98623a9962857486dd82f55e8de232a28"
+    },
+    {
       "path": "scenes/freeway_traffic/traffic_system/current_state_perception_runtime.py",
-      "bytes": 23504,
-      "sha256": "31a85b74d07f54a0131d1cda8151923b18417980e3d8d79694a4591033196f1e"
+      "bytes": 43774,
+      "sha256": "e489859b8e2c9464ebdb0883e589fb39fff4237c8c222513ff164bac60b46cac"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/decision_utils.py",
       "bytes": 35326,
       "sha256": "4865bd2e7bcfcddbb3e7961090c2431bf9b109107e5cb4bbda9cb21299813d5b"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/defer_gate.py",
-      "bytes": 9979,
-      "sha256": "1b703fe900a09a7adf6d1c6681dee895a22b48e3aaed5e1e0aa81f1fbd103c4d"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/edge_orchestrator.py",
-      "bytes": 13457,
-      "sha256": "3f4b85973afb95102097e1536aa25b30b416705130fe6fc736f1f8b8de4c9cb5"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/edge_qwen_action_infer.py",
@@ -1254,74 +1184,9 @@
       "sha256": "8e0e05532a21c4721d39c0639fe7144aae628cdc7c676cf2c7ae31a173b309ab"
     },
     {
-      "path": "scenes/freeway_traffic/traffic_system/eval_conflicts.py",
-      "bytes": 15646,
-      "sha256": "a38e29d23741573685f4b558bc9a50616ef3beea309dc511eb34454089d61e26"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/eval_edge_qwen_collaboration.py",
-      "bytes": 6845,
-      "sha256": "f9e4008ee96e90919171980a0a3a35cec0ced68938f67121ebb921f9636e6e10"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/eval_general_capability_retention.py",
-      "bytes": 35051,
-      "sha256": "7edc9528578987427f44bd0b425d98939fac406cbf69fe1aa23ad49e94742f0b"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/eval_llm_sft_student.py",
-      "bytes": 21145,
-      "sha256": "607822d8a19418978cef96c0f0178652ed722c67f0fd4ba9b1c29dc185e5b9bf"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/eval_policy_sync.py",
-      "bytes": 3913,
-      "sha256": "b2e9dc559d3e81dffb07cafc5e610f8b96f571c81f8b3d615c749e71bbacfab0"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/eval_scheduler.py",
-      "bytes": 9261,
-      "sha256": "01002951448c6888139e34b60be9ddc5341cd9f599772f7e715a97873b4bb2c6"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/evaluate_conformal_scheduler.py",
-      "bytes": 21236,
-      "sha256": "548135faf244f739d3be7cd454fcb91783f7ab27fcb915c0157159dd39cf232b"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/evaluate_current_qwen_routing.py",
-      "bytes": 13236,
-      "sha256": "cd86aae387ca4543b5c885559d68a97ee8cccf3a601d8b75efc1971d8ec8e7f2"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/evaluate_edge_cloud_retention.py",
-      "bytes": 20394,
-      "sha256": "2e796908ee1f3bea8337c2ae453f383907f8ba6e12816132a4552948ce12105d"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/evaluate_edge_qwen_role_ablation.py",
-      "bytes": 28451,
-      "sha256": "2c23a656adcb4e67bfcde6487d33ee6db622d382c259e50aad753c6188a75ed8"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/evaluate_future_truth_policy.py",
-      "bytes": 27245,
-      "sha256": "e867ef5e74294965388cbc94a91ff719a7762ef7bac95b29ebfc75ac0235d95e"
-    },
-    {
       "path": "scenes/freeway_traffic/traffic_system/evaluate_llama_cpp_action_tokens.py",
       "bytes": 8189,
       "sha256": "cfe55b3e2594ba704832cb50a903afdab34974eccbf88112f4c7a1f72f402dae"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/evaluate_risk_channel_ablation.py",
-      "bytes": 12440,
-      "sha256": "c2005fb836f7b518af645bec4e82808e5d4e04229662bc76b0e9f060fb655ad9"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/evaluate_routing_ablation.py",
-      "bytes": 25300,
-      "sha256": "ec78a7f33453fa8c8a2c015a7b07f2ddd6bc5fe866e4f1979b6631ba99d075dc"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/generate_joint_edge_events.py",
@@ -1349,21 +1214,6 @@
       "sha256": "352ed27c38fb877f2eba264ccbbe099b3bd4b34dd44ecb8e0eb39fc4a6cb8539"
     },
     {
-      "path": "scenes/freeway_traffic/traffic_system/measure_current_edge_llm_memory.py",
-      "bytes": 12252,
-      "sha256": "80d7d4394c82692555d045a1087804a10cdd710702faf338c22376a49858fa15"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/measure_current_edge_llm_targets.py",
-      "bytes": 24128,
-      "sha256": "dcf037419a4e4ff87b451cb88823fa70f3f9eac9fd2a84de3d06415fa4df141e"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/merge_llm_lora.py",
-      "bytes": 3146,
-      "sha256": "ab96fbc0cb665f87f8471063feea53244a873db78d6701a536fe4e532ba4cc6d"
-    },
-    {
       "path": "scenes/freeway_traffic/traffic_system/model_modality.py",
       "bytes": 2487,
       "sha256": "0b66e82887fd2c35b86d2afcb99e742671a226ce8f27421c8f10291b5d51b2fa"
@@ -1374,9 +1224,19 @@
       "sha256": "49de2209a80ef2ee612d96776a8e33995a9cf7cfc22b5e9e2dc32962989024c2"
     },
     {
+      "path": "scenes/freeway_traffic/traffic_system/overlap_observations.py",
+      "bytes": 20745,
+      "sha256": "83755d8e994687da72fccb275ffec396bcb80e1ec5b420c0cf1fdd066fbdb8fd"
+    },
+    {
       "path": "scenes/freeway_traffic/traffic_system/policy_store.py",
-      "bytes": 12810,
-      "sha256": "49f39955756ea2d626b6a39d14754bcfbf2ad9e99a2a889bc6970eebdeea6baf"
+      "bytes": 12464,
+      "sha256": "1d1e4dc66fa9d33680e9d0f609411e751b272101e53ed01e2126557aacb2cd47"
+    },
+    {
+      "path": "scenes/freeway_traffic/traffic_system/qwen35_no_think_chat_template.jinja",
+      "bytes": 231,
+      "sha256": "dcf47916f88975993954275bce9d3e4786e9b27a904eebd292d43b1a4921c407"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/qwen_action_load_generator.py",
@@ -1394,6 +1254,11 @@
       "sha256": "3a8388eeea642effe51cbd5f80880eaae468884ef1f883e4313c821fd3ce71e7"
     },
     {
+      "path": "scenes/freeway_traffic/traffic_system/road_sets.py",
+      "bytes": 26928,
+      "sha256": "4e6ed26305219f1e10c2e0812e2f7e086434e9c74b17d549af9fe7b0c3854fcf"
+    },
+    {
       "path": "scenes/freeway_traffic/traffic_system/safety_filter.py",
       "bytes": 15834,
       "sha256": "15976c74434e727c6b90f577d838252cecc55c8bfed9d9b7763af7000043c0f5"
@@ -1404,34 +1269,9 @@
       "sha256": "0f1f87e79dd19d17a664b3992d53f7d75ab0c7774417c05bde0591bc822c7d20"
     },
     {
-      "path": "scenes/freeway_traffic/traffic_system/scheduler.py",
-      "bytes": 8063,
-      "sha256": "cbb1b60a788658b8197a198b7a73fb353cea4592c31c03b72470449e19f48f11"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/summarize_adaptive_network_benchmark.py",
-      "bytes": 12211,
-      "sha256": "741cae9b3ae54f260105fdc2a5e5f7de61d81f5d05cfa4181141d2a220d9e911"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/summarize_architecture_baselines.py",
-      "bytes": 4182,
-      "sha256": "681b17a878990887c5fe80cc77da1f8d3775136aad1af63fdec6e888fadc3112"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/summarize_llm_distillation_stages.py",
-      "bytes": 3650,
-      "sha256": "83f563b1e03faf6b5595f6b6398db95d09796753f75b52fbcbd16384b0063ba3"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/summarize_selective_defer_benchmark.py",
-      "bytes": 10553,
-      "sha256": "aa5d37836a0db2e79147b83dc7a8e2d70adde379820253a2188ebee4c226e9f2"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/summarize_unified_traffic_bf16_regression.py",
-      "bytes": 36243,
-      "sha256": "75ee4929fe75f2f1c2facfb8541f6e91518db66da71651920196cdcd5ecaa569"
+      "path": "scenes/freeway_traffic/traffic_system/summary_first_evidence.py",
+      "bytes": 33832,
+      "sha256": "68abfee8a154423ae0f913433231eb903e2e0f43adb9df57f5b89b2c74f33979"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/sync_edge_policy.py",
@@ -1454,44 +1294,19 @@
       "sha256": "04285fc5905b55fd7f78b7973c90496850b2677ba6ae9e39b86b41a4846951a9"
     },
     {
-      "path": "scenes/freeway_traffic/traffic_system/train_current_state_cloud_coordinator.py",
-      "bytes": 14317,
-      "sha256": "bd292e72ec94fda939745080b3b549005e55c88c2aa30efb4b4a039b22cb8c0b"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/train_current_state_student.py",
-      "bytes": 17786,
-      "sha256": "0dbdcc6f46fbb0b451fa8b25a652c57d5d832f851caab43c13861fcd1ccc7992"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/train_defer_gate.py",
-      "bytes": 14142,
-      "sha256": "b9b54328f8912b707b818eb5da7451ae9973147cb197e6ac762efe7d362ef075"
-    },
-    {
       "path": "scenes/freeway_traffic/traffic_system/train_edge_student.py",
       "bytes": 17432,
       "sha256": "46c1af12d8a8d4077d041698062ba0f08e7a8d8a5aca12ebdefed2e964e84e2e"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/train_future_calibrated_cloud_coordinator.py",
-      "bytes": 26652,
-      "sha256": "4336a2953c425f681e772973400de35b861a053a45c3e28d37e09a8c8604787b"
+      "bytes": 20049,
+      "sha256": "6f213826644a6ede65ce42dfcaabb9fb23413b9d3163e71d6ea8dcfbe0803812"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/train_joint_risk_astgcn.py",
       "bytes": 19779,
       "sha256": "7ff119bb621ad0b61b608be9fd3b35a0976ed67d6052bc9430f6ce461d2c5349"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/train_llm_dpo_lora.py",
-      "bytes": 11646,
-      "sha256": "4640159cb034cca6fd462deda228679837347359f4fc7d09aa4c3474be4499a0"
-    },
-    {
-      "path": "scenes/freeway_traffic/traffic_system/train_llm_sft_lora.py",
-      "bytes": 15545,
-      "sha256": "e2a37b548207c86ccd55199420d13710c236c53e10abb232b3c5ffa8739c4361"
     },
     {
       "path": "scenes/freeway_traffic/traffic_system/tree_feature_codec.py",
@@ -1514,9 +1329,64 @@
       "sha256": "ec45bcdd6c9ad2976271c5c416420c284dfd478266faad545b969d6ad16b52fe"
     },
     {
+      "path": "scenes/freeway_traffic/video_demo/README.md",
+      "bytes": 9787,
+      "sha256": "86a69726a9b662792968ea4f7ac54392e507322c27f467eb02011cadeab4ef96"
+    },
+    {
+      "path": "scenes/freeway_traffic/video_demo/app.py",
+      "bytes": 38468,
+      "sha256": "1df752ab5cc7f0d59bae7627a8ac85623ef11f067e0675a958ad526a41452692"
+    },
+    {
+      "path": "scenes/freeway_traffic/video_demo/assets/industrial/capsule_infrared.bmp",
+      "bytes": 1228854,
+      "sha256": "b39429b052341f95661ae66262f4979b070ee6cb90f180cc58cc0c22b4a0a09b"
+    },
+    {
+      "path": "scenes/freeway_traffic/video_demo/assets/industrial/capsule_rgb.bmp",
+      "bytes": 3686454,
+      "sha256": "2cb5dbebefa8b366e0ef46654279b1f15a298b4b553cbbcb6c494bdcd9b7ec2d"
+    },
+    {
+      "path": "scenes/freeway_traffic/video_demo/deployment.py",
+      "bytes": 68314,
+      "sha256": "34c5d1e709042d469795c38581c21bff4369cec73df4717c4aba92afaf521e26"
+    },
+    {
+      "path": "scenes/freeway_traffic/video_demo/deployment_profiles.example.json",
+      "bytes": 2922,
+      "sha256": "007c38745f756d5744d9d3c215ea39ac837cc93d34a007a2f73a7dec903cf541"
+    },
+    {
+      "path": "scenes/freeway_traffic/video_demo/index.html",
+      "bytes": 144761,
+      "sha256": "00c8587c8c8bde06afbb9e2a7bbb62a4487560e02a43f2ab2a2209e6c6288dea"
+    },
+    {
+      "path": "scenes/freeway_traffic/video_demo/test_deployment.py",
+      "bytes": 35281,
+      "sha256": "e5829079861b0813cdafb83a94d8eb988c07b059a4a5de08108c319772984ec6"
+    },
+    {
+      "path": "scenes/freeway_traffic/video_demo/traffic_final_mainline.SHA256SUMS",
+      "bytes": 247,
+      "sha256": "bf0f569884d4975e71b87f1e569f7c2accaf1d74b0e4b0ab98990ad2804f1110"
+    },
+    {
+      "path": "scenes/freeway_traffic/video_demo/traffic_final_mainline.json",
+      "bytes": 8569,
+      "sha256": "42a7370228d1e2efc76ff7907a4b35e0c0beb2ab84b20989b6c8cea6dfe519f1"
+    },
+    {
       "path": "scenes/industrial_anomaly/assets/models/industrial_cloud_extratrees_capsule_v1.joblib",
       "bytes": 108466,
       "sha256": "f733bb4e983ab9e1be3e29bcfad8abca755563e6795a7ee4e75bda9718959ab4"
+    },
+    {
+      "path": "scenes/industrial_anomaly/audit_industrial_qwen_runtime_paths.py",
+      "bytes": 23394,
+      "sha256": "ad6965bf8e4d3d3ace737540f0a30ff69654fb442140bcfb5d48d7d86a955e34"
     },
     {
       "path": "scenes/industrial_anomaly/benchmark_industrial_action_runtime.py",
@@ -1549,16 +1419,6 @@
       "sha256": "b81275db96cd181b3a7341aadbb1a9efc45ee2d12e38bc6a3dc1ab044e554827"
     },
     {
-      "path": "scenes/industrial_anomaly/benchmark_multi_adapter_isolation.py",
-      "bytes": 7244,
-      "sha256": "9a0d42d0c506e86c0bc631c09c24a41bb98adb1d48963c39167ceb7f33928581"
-    },
-    {
-      "path": "scenes/industrial_anomaly/benchmark_multi_adapter_stability.py",
-      "bytes": 25597,
-      "sha256": "7a5ca2831994b96a475d2abb591772a6780bec0646676cd0f2d6145f4429ca74"
-    },
-    {
       "path": "scenes/industrial_anomaly/build_industrial_margin_distillation_dataset.py",
       "bytes": 9799,
       "sha256": "ccc03fdce7572cd96ae1a89a815ab88b0828e5e0bbd76d5baf618243af0d5a3b"
@@ -1572,36 +1432,6 @@
       "path": "scenes/industrial_anomaly/demo_dual_scene.py",
       "bytes": 6214,
       "sha256": "219f9832aaff61c33bf6b7e4fab1fb0ef78097687db595e9b1ee8fcf0d9fbc7e"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/benchmark_cloud_service.json",
-      "bytes": 698,
-      "sha256": "bfa2ac52d995bbefb3a0e0983a09df083ebdb5179ce736eea28757ad11705f53"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/benchmark_edge_llm_runtime.json",
-      "bytes": 458,
-      "sha256": "12cba3c00a8d02dc06b9527efd011d3c0ff9ffd25d6f0acb24ba72b58124bc78"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/benchmark_edge_service.json",
-      "bytes": 1897,
-      "sha256": "a92c23102aff317e3572231b7cf3eca6bc6fca2d7e553e5acdf693c70b99e5fd"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/benchmark_scene_plugins_cloud.json",
-      "bytes": 386,
-      "sha256": "a3cf6b7e69c9a3595ed3e25371650237bf7faa5226d0197e3b61daad2becfd7e"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/benchmark_scene_plugins_edge.json",
-      "bytes": 536,
-      "sha256": "3a33e52f6be9b66a147dbe3af6d595265a14805d11b8b16904e3d5f41710954e"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/benchmark_traffic_llm_runtime.json",
-      "bytes": 454,
-      "sha256": "1540a7d64adac7fae59e63fa8167e19d89bf060367a5156396e6eed9027576e1"
     },
     {
       "path": "scenes/industrial_anomaly/deployment/cloud_service_traffic_industrial.json",
@@ -1619,69 +1449,24 @@
       "sha256": "e56e16b3894da1f6691f4f63f1aefa031049d9537b90dc4cc42c6e1d9a40e10d"
     },
     {
+      "path": "scenes/industrial_anomaly/deployment/controlled_threshold_demo_v1/optimized_candidate_thresholds.json",
+      "bytes": 2730,
+      "sha256": "0fc3c721a29c97b9f2172a3a82a605455c43390db954e9dd70b83207901177bc"
+    },
+    {
+      "path": "scenes/industrial_anomaly/deployment/controlled_threshold_demo_v1/registry.json",
+      "bytes": 709,
+      "sha256": "f444a6320ec5c3c647fc862470dc9da114fbbd9aa91248f170601b6490336554"
+    },
+    {
       "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial.json",
       "bytes": 465,
       "sha256": "7726ba48581efe3f05a17d7b81a747daedc6dab5edc9ae02e41140efc9ac0305"
     },
     {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_nano222.json",
-      "bytes": 515,
-      "sha256": "1c22f46f5634717b4f5a3bb4935625d03397ea60da5fc78a70bbf54127251b5a"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_q4km_f16_nano222.json",
-      "bytes": 517,
-      "sha256": "24f93294919047008ee5def5e9ccd558d1613daa1946badca12bd6320e34bbd3"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_q4km_nano222.json",
-      "bytes": 517,
-      "sha256": "d3fa2726b9192f0eea3cb826a76d3a8055a5f945c44d43617f8960418ab1b12d"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_q5km_nano222.json",
-      "bytes": 517,
-      "sha256": "1540f61f852452d5f326126ff7ecaa745987fe17345d11ac3c7d2108b56ab947"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_industrial_q6_nano222.json",
-      "bytes": 515,
-      "sha256": "d260ece1ef5e36dd73f47eb2bbfa00ff34e39dc391843323070e779f531c9641"
-    },
-    {
       "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter.json",
       "bytes": 464,
       "sha256": "015ec4e5e07bae343a48a88086dbdeed4bc55a821a2cff78753b13b07b75f6cd"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_nano222.json",
-      "bytes": 514,
-      "sha256": "91d6dba3869eeb061caf8c95f86d7fa92a9f2c7da24598151d6dc3f368cd9b74"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_q4km_f16_nano222.json",
-      "bytes": 516,
-      "sha256": "139e9c51f3965d1593a0d66c9cc47e0902dc58ac9a75b5ddb672cffc1491ea30"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_q4km_nano222.json",
-      "bytes": 516,
-      "sha256": "7086ad3c73cf206e464179d9a156707297aab800746749cd6464802f4c13c5b0"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_q5km_nano222.json",
-      "bytes": 516,
-      "sha256": "52819c5b36e95eb8e9a085b0abf414acea18a4b05d77be9c5fa4b68042d0ad49"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_runtime_traffic_multi_adapter_q6_nano222.json",
-      "bytes": 514,
-      "sha256": "3e915eca53ce1812143911a29dca09cc0a016270aaa0cd6999a1999f3751a023"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_llm_startup_probes_nano222.json",
-      "bytes": 3184,
-      "sha256": "1f65883746e5ac5c459ebab787e6d8a50f086b4c00f717e17319e747de137113"
     },
     {
       "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial.json",
@@ -1692,266 +1477,6 @@
       "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_formal.json",
       "bytes": 1778,
       "sha256": "ac8f245a981ee3e2b3033a0c4516057a0c1fe6d073cd1e6a25aa351bdcb0bfac"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_nano222.json",
-      "bytes": 2037,
-      "sha256": "73064c133b1610a98e611c05d4581803863b68a84f8afe8ca4bd00d7042bd80c"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_q4km_f16_sidecar_nano222.json",
-      "bytes": 1921,
-      "sha256": "6fa3a52afc42141c80db7062069491dd274e74c0d286fe09f087a8edc66e1233"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_q4km_nano222.json",
-      "bytes": 2018,
-      "sha256": "84333c9011acc0608c7ae9e14e3e21aca3afea36c2d99f5fb6568841f0f0f2c9"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_q5km_nano222.json",
-      "bytes": 2042,
-      "sha256": "747ef94fc1653e318cb3d912b6c07ba6cd8e00361074be35585150e7539e6288"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/edge_service_traffic_industrial_q6_nano222.json",
-      "bytes": 2040,
-      "sha256": "34aae90b08a3dd59a7e6c7125ca522ab8e4985ba940ad4c7e649697b35c7966c"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_candidate/candidate_identity.json",
-      "bytes": 2110,
-      "sha256": "0e80ed0d5beeb33fe84b0e3df1fd5c38bd970f36153493909e6bc6388bd75237"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_candidate/edge_llm_runtime_industrial_template.json",
-      "bytes": 485,
-      "sha256": "6780f86ef1f7fb927fef812059ac9192f0d9b728ee387ccca83787cbe32f9125"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_candidate/edge_llm_runtime_traffic_template.json",
-      "bytes": 484,
-      "sha256": "212c975f7efbbdf786563b54941bcbcc3d883bc11c056b948ee216ea07f8981a"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_candidate/edge_service.json",
-      "bytes": 1967,
-      "sha256": "884e79d9f0d9a44a89ec272f91e93d87c5d9fd977a078830008a5762d5ea764c"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_candidate/runtime_output_industrial.json",
-      "bytes": 355,
-      "sha256": "d3eaff5aaa358a391ca74c43c48eba6e95ef4c9ab4285e11a3192caef4b7950a"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_candidate/runtime_output_traffic.json",
-      "bytes": 346,
-      "sha256": "8ea7648f70b26c33ab00de592775b1dc15ff638fdc16e6e6cf5c3ead583193fa"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_candidate/scene_plugins_edge.json",
-      "bytes": 2267,
-      "sha256": "f5c62366a6e1a521e1532cf6cbf401f4c7243125731b38565bde08558a795564"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_candidate/startup_probes.json",
-      "bytes": 965,
-      "sha256": "1986a6f0df8c890acb5168de9307df77147f88697fd90ab69365c65164b0f23f"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/SHA256SUMS.txt",
-      "bytes": 754,
-      "sha256": "619622c4cbf467a1af58df772542355eda23fcaea43b761aba673a4426a49e0c"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/candidate_identity.json",
-      "bytes": 2046,
-      "sha256": "2bc232e14c72a4fc034c19fa1c86267d25e7f905769e5e7d82ec47b5104f0e55"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/edge_llm_runtime_industrial_template.json",
-      "bytes": 502,
-      "sha256": "f4ec37e898989782a862ce86632a56d3e45a2ea8eae5f098b55fcd658a042174"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/edge_llm_runtime_traffic_template.json",
-      "bytes": 501,
-      "sha256": "09c6ddbd92158ca2acbaafdc986a3d41b0257d4989f6a75677706da4e9b023f1"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/edge_service.json",
-      "bytes": 1994,
-      "sha256": "c4a5ba7565cb367e7b9e265719e65ef60152aba2d4a97502a71dfc460ad81143"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/runtime_output_industrial.json",
-      "bytes": 435,
-      "sha256": "adb9b13b6be1f5e83262e795f3786e79fb8b7ff4f77d077cd8835f49efdba68d"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/runtime_output_traffic.json",
-      "bytes": 423,
-      "sha256": "0a4b7ea7095a5da523cf4c47d65e756c6a8142084f42637af19ca4756b32b434"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/scene_plugins_edge.json",
-      "bytes": 2290,
-      "sha256": "51fdee727161ed17912b022ee4605e284c54d54af055db838a16a9dd89464134"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate/startup_probes.json",
-      "bytes": 789,
-      "sha256": "5731b80f9db8fd01ef2fb118f809e210987bc6536a7605119c88041cd4041816"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/SHA256SUMS.txt",
-      "bytes": 845,
-      "sha256": "b8994708207135278f32f4478101bc1d04a9ced164464f5a0be82d948242f95e"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/candidate_identity.json",
-      "bytes": 2046,
-      "sha256": "cddb84c3db109f3984005168bf04393866273cc5c7d45a58e708d76518414586"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/edge_llm_runtime_industrial_template.json",
-      "bytes": 502,
-      "sha256": "f4ec37e898989782a862ce86632a56d3e45a2ea8eae5f098b55fcd658a042174"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/edge_llm_runtime_traffic_template.json",
-      "bytes": 501,
-      "sha256": "09c6ddbd92158ca2acbaafdc986a3d41b0257d4989f6a75677706da4e9b023f1"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/edge_service.json",
-      "bytes": 2018,
-      "sha256": "633ef8d655b0bb89a46d331fe244af60f2dfdeb666d030aeff2c9abab779f9d8"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/runtime_output_industrial.json",
-      "bytes": 441,
-      "sha256": "a139f0e3ce992df5702860a88ba10642e3013fa7563c37a75c020c1a9723734c"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/runtime_output_traffic.json",
-      "bytes": 429,
-      "sha256": "d8d616bc10098f3e7f74a50077c68ce1adb8a3c7f7b3a3c04717ef16354aaa9d"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/scene_plugins_edge.json",
-      "bytes": 2305,
-      "sha256": "8a640662ae2cb42e562879da22a27a2443ad069fa4ad1b7012b045806b75b788"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/startup_probes.json",
-      "bytes": 789,
-      "sha256": "da6335e6f804440157a3585048583d097de0f720a13ad78745e6b3a50e87a55c"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v2/traffic_smoke_event.json",
-      "bytes": 1827,
-      "sha256": "8098387feb85eee91a52bae73a2645ea2400e67e6a1d4b5646ae53b6471f73f4"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/SHA256SUMS.txt",
-      "bytes": 845,
-      "sha256": "0ec697b5535e039554209c12eaec1b65731b82b7a64539e6e2ea1bde761a59f4"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/candidate_identity.json",
-      "bytes": 2747,
-      "sha256": "0633ed51b82ee25e07bbc62ba6c214407295cbad76cc7b4dfd0374f57f9ad278"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/edge_llm_runtime_industrial_template.json",
-      "bytes": 502,
-      "sha256": "cbe3d5e4e78798fcc980dbe0f6f06421cf91030dcb98072bceb2e71e975d6f22"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/edge_llm_runtime_traffic_template.json",
-      "bytes": 501,
-      "sha256": "09c6ddbd92158ca2acbaafdc986a3d41b0257d4989f6a75677706da4e9b023f1"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/edge_service.json",
-      "bytes": 2018,
-      "sha256": "be5b8dfc248e0a5e5158b4107627d3a7b377a69039fc9ac09afd72a5b1b6111a"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/runtime_output_industrial.json",
-      "bytes": 441,
-      "sha256": "e3b5df65aefe97971c4ff87ef17d71bb984132e75f2a63eaf59b84e5b3293e70"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/runtime_output_traffic.json",
-      "bytes": 429,
-      "sha256": "ca29ef28a9462cfcca1fd7a0b57cac6cc77d6e270b2b401ef2439ccc7a876f58"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/scene_plugins_edge.json",
-      "bytes": 2363,
-      "sha256": "1d770bf1e97b49996214a744fd4ece2fb9bfcd8b58be004f4c538089df22c64e"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/startup_probes.json",
-      "bytes": 789,
-      "sha256": "da6335e6f804440157a3585048583d097de0f720a13ad78745e6b3a50e87a55c"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_candidate_v3/traffic_smoke_event.json",
-      "bytes": 1827,
-      "sha256": "8098387feb85eee91a52bae73a2645ea2400e67e6a1d4b5646ae53b6471f73f4"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/SHA256SUMS.txt",
-      "bytes": 859,
-      "sha256": "c58d15f45c04ed961aed02e0a57e6708eebd65b47f49b71a7be5053d0c29455f"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/cloud-edge-edge-18101-joint-static-q5-v1.service",
-      "bytes": 2460,
-      "sha256": "f68c0addbd1978d95aaf1be3d118bf277e0d63df158cc07a011e8d45fe493a28"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/edge_llm_runtime_industrial_template.json",
-      "bytes": 501,
-      "sha256": "a76a9312830aa88581f0a4d6978cf2f57ef5346cc410b929edf96ee13c5cef2f"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/edge_llm_runtime_traffic_template.json",
-      "bytes": 501,
-      "sha256": "a76a9312830aa88581f0a4d6978cf2f57ef5346cc410b929edf96ee13c5cef2f"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/edge_service.json",
-      "bytes": 1992,
-      "sha256": "91e6c35954f2bb993d1dc66b8db56398a2cd47ae7ae3645cee08f021800eaf41"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/restore_q6.sh",
-      "bytes": 203,
-      "sha256": "b4ed7e00df7cf365f964941dbc48eb7a77faf91b1e35dcb98ca12dc79cc73097"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/runtime_output_industrial.json",
-      "bytes": 435,
-      "sha256": "6660f55d2ee6ab375c1eabcabcc441ee9da376e06d4973680cda148938aeca23"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/runtime_output_traffic.json",
-      "bytes": 423,
-      "sha256": "d7fed338f6600fa09d82e3ada8cacc9e6800441f63912e739d003d449565e10b"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/scene_plugins_edge.json",
-      "bytes": 2347,
-      "sha256": "5f1fbbebec368c743c4a044e9956472919cb550e9a001d975deacceb61269b80"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/joint_static_formal_v1/startup_probes.json",
-      "bytes": 789,
-      "sha256": "da6335e6f804440157a3585048583d097de0f720a13ad78745e6b3a50e87a55c"
     },
     {
       "path": "scenes/industrial_anomaly/deployment/joint_static_raw16_formal_v2/SHA256SUMS.txt",
@@ -1990,8 +1515,8 @@
     },
     {
       "path": "scenes/industrial_anomaly/deployment/joint_static_raw16_formal_v2/scene_plugins_edge.json",
-      "bytes": 2375,
-      "sha256": "7f7e00154a11a3d7d6deca28fbd23955caa8aefc5e3e8cfd9f4f5d25439f9c51"
+      "bytes": 2288,
+      "sha256": "33e79f0622b8b70e4f4d4492f1b9debc71ee3a69cc22eb91db0abd8d67557601"
     },
     {
       "path": "scenes/industrial_anomaly/deployment/joint_static_raw16_formal_v2/startup_probes.json",
@@ -2010,53 +1535,13 @@
     },
     {
       "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial.json",
-      "bytes": 2120,
-      "sha256": "d898ce2ccbd596aed2d3b386d0b931a45ee3618b1c25a149f23743d263c7a5cd"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_nano222.json",
-      "bytes": 2136,
-      "sha256": "ca319d004371b80b8b8ead3345ddf50ba40e39f745f99ffc64b91fa9579f41a6"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_q4km_f16_sidecar_nano222.json",
-      "bytes": 2154,
-      "sha256": "d62ee7baddb8f49199160b93cf5901e92d519e31fd8d5208db7bd95f9a94e490"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_q4km_nano222.json",
-      "bytes": 2146,
-      "sha256": "584b8b3340781bf8112f488f43887b61624f51515df672bb9489974786f0f362"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_q5km_nano222.json",
-      "bytes": 2146,
-      "sha256": "b55e4762960f3f6f59e6019eb9153b1000759922e04a7c2f4383c67fdeba5110"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/scene_plugins_edge_traffic_industrial_q6_nano222.json",
-      "bytes": 2142,
-      "sha256": "a19d22ca7353b737f65828fdad22188a5f6aea9dcc915308897015e961e4fbe0"
+      "bytes": 2033,
+      "sha256": "68b88132833609e90b8002f2f1ccece5cbfde1fa47405e7a0b7c329ff069e90c"
     },
     {
       "path": "scenes/industrial_anomaly/deployment/scene_plugins_industrial.json",
       "bytes": 386,
       "sha256": "a3cf6b7e69c9a3595ed3e25371650237bf7faa5226d0197e3b61daad2becfd7e"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/scene_plugins_sidecar_traffic_industrial.json",
-      "bytes": 603,
-      "sha256": "2198b7db011a193f61687ab51df9da17c7e67a387e2b90add9fd9e689038702b"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/sidecar_cloud_service_traffic_industrial.json",
-      "bytes": 665,
-      "sha256": "3c59f07eb0c2644e9c8764f8f519659bd474cbd406f60abaa3bdee2f13b99471"
-    },
-    {
-      "path": "scenes/industrial_anomaly/deployment/sidecar_edge_service_traffic_industrial.json",
-      "bytes": 1845,
-      "sha256": "5d89a4db5e4414ab861957af3427e1a21a42e736d01c9f7b1c1c0760236e43ee"
     },
     {
       "path": "scenes/industrial_anomaly/evidence/current_release_full_matrix_summary.json",
@@ -2115,8 +1600,8 @@
     },
     {
       "path": "scenes/industrial_anomaly/industrial_anomaly/plugin.py",
-      "bytes": 45215,
-      "sha256": "642ed7339c0bc8bfb228b6027c41637f723a95a6ba43c038fc74c511ba014a77"
+      "bytes": 45549,
+      "sha256": "5cbb1e9ec0da7e882bf8321355089a4ea3c5359aa94558a118d1da3d5a739763"
     },
     {
       "path": "scenes/industrial_anomaly/industrial_anomaly/review_bands.json",
@@ -2124,34 +1609,224 @@
       "sha256": "ff95475e9294440e6f871a40682e827582114d7589553cb6385794598624d7b7"
     },
     {
+      "path": "scenes/industrial_anomaly/measure_industrial_paired_transport.py",
+      "bytes": 14296,
+      "sha256": "7b2f14bd8c16fcc38c96bc503d244270c79e62522d8c57bffa1c99d60bae5b01"
+    },
+    {
       "path": "scenes/industrial_anomaly/perception/__init__.py",
       "bytes": 60,
       "sha256": "2ee77547a46193123f1b8249fe5b84ea40d103eb3945fcf18b83423a7201950b"
     },
     {
-      "path": "scenes/industrial_anomaly/perception/assets/capsule_infrared.bank.json",
-      "bytes": 8099,
-      "sha256": "6a4155550701b145fb918acbbe1e13919521198773807e21e5f370bbb3fc0bd7"
+      "path": "scenes/industrial_anomaly/perception/assets/banks/banks_manifest.json",
+      "bytes": 7519,
+      "sha256": "e947a971d43697e103554ef73bc3a8e538d7a2c17e505155a30e5d2435112217"
     },
     {
-      "path": "scenes/industrial_anomaly/perception/assets/capsule_infrared.pcbank",
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/button_cell.bank.json",
+      "bytes": 10740,
+      "sha256": "7dbbe42d1edd651e572cffe4963d8c0628245de46c8f48e1afb2d05de5ff042f"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/button_cell.pcbank",
+      "bytes": 552988,
+      "sha256": "a5cf85fee028e94b5ea328f8b4aaff886bd273d5ed0ad63d0f8aa7138cb837d8"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/capsule.bank.json",
+      "bytes": 8155,
+      "sha256": "28244c31f57b221d170930c282e250428becdf74d09c80849229c932ea42fd74"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/capsule.pcbank",
       "bytes": 393244,
       "sha256": "dc494dc2ea03765e77a7197543fb0758d6c973a2694157ed8b03f904ebe74a77"
     },
     {
-      "path": "scenes/industrial_anomaly/perception/assets/capsule_rgb.bank.json",
-      "bytes": 7770,
-      "sha256": "d34238946364a5c913c94f29cf1481889ac4eab6c3a7c6f7162d4ea5ad54d85c"
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/cotton.bank.json",
+      "bytes": 9539,
+      "sha256": "9ab87760e613c5169e0130c18df3a7563e3c9f07ae750c5790caa2f904d7388f"
     },
     {
-      "path": "scenes/industrial_anomaly/perception/assets/capsule_rgb.pcbank",
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/cotton.pcbank",
+      "bytes": 479260,
+      "sha256": "d3f72fbca919f1a60070ec37dbb02c152a463d1918158a40666e5bac0fd66179"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/cube.bank.json",
+      "bytes": 12713,
+      "sha256": "08b44d08935f2848b2d81fd91178ee0de6c70c44a9af407ca1abde78606fe87b"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/cube.pcbank",
+      "bytes": 675868,
+      "sha256": "12f92df3456d60a2c4656ae8bd6cceadfdfe48e7a9eb3ecc0c6b1802de007116"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/piggy.bank.json",
+      "bytes": 12717,
+      "sha256": "614d3a471c768a42ea319a351f9602a15b21ab5dda1726c9b42dbf7963a71811"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/piggy.pcbank",
+      "bytes": 675868,
+      "sha256": "e7c606faefe918acfba010d0844ccf5750ad58a1cedcb8d717f2e659c406c23d"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/plastic_cylinder.bank.json",
+      "bytes": 10755,
+      "sha256": "c4c2310b313473fdebb5a525819279830876b9332f74ebbcf895e3acaf868568"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/plastic_cylinder.pcbank",
+      "bytes": 552988,
+      "sha256": "bd3e3b03206086ca8a6fc3adccd67ab5cbf011c8975fe298bb8b71eebeac6f67"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/screw.bank.json",
+      "bytes": 10718,
+      "sha256": "c1bad11c9636dd7bc32f94cd5958bf50504b783e4c8a20cc24cd8637fb0259c6"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/screw.pcbank",
+      "bytes": 552988,
+      "sha256": "35dd0091b347b1787ce48ef3c62f27ac4a5b6084ed043fab008e0fdbaec9611d"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/solar_panel.bank.json",
+      "bytes": 10740,
+      "sha256": "5da478f5a62ea49460e868222a958daf0345d85d863da13630f7b929b5e107c5"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/solar_panel.pcbank",
+      "bytes": 552988,
+      "sha256": "199262a3225a29b3b0fcaebae64d14b35de49af48fed037bd902d5bc5fa743e5"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/toothbrush.bank.json",
+      "bytes": 12731,
+      "sha256": "1b572755d526ef8b21a72fa7e1579cae858ed4c6673a7315c5d6a048bfbfc0ea"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/toothbrush.pcbank",
+      "bytes": 675868,
+      "sha256": "1975a5cdfa73a3ea303255b7bea1da03ca8aefa677408bbce0379d63b5b9392e"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/zipper.bank.json",
+      "bytes": 10332,
+      "sha256": "8f0e5b3bd53cb1b0511b591e4b925ba693e7ef196b0517c504762a8db1a49737"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/infrared/zipper.pcbank",
+      "bytes": 528412,
+      "sha256": "9b29e0df560dacc7d9210bc62a8864c35c1620ece8e280cc0ce1917bb2d93ae3"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/button_cell.bank.json",
+      "bytes": 10278,
+      "sha256": "9a77aeff9dc444c26ec1d83f25f3e99faa9606e725c3e41c4bb1ba3620455127"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/button_cell.pcbank",
+      "bytes": 1382428,
+      "sha256": "c84204e19f05380b1a2bc478e83cfa87980ab7178f2eed1bf352315b3136e09e"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/capsule.bank.json",
+      "bytes": 7819,
+      "sha256": "cce91f52310fa4881adf5d75198d29b5738e93f811b542af5b3de139676af60f"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/capsule.pcbank",
       "bytes": 983068,
       "sha256": "6301280ac20f68f3f34f1340a6cbef09419559765ba8dc335bb72413763eb66a"
     },
     {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/cotton.bank.json",
+      "bytes": 9137,
+      "sha256": "ef1cc921bab46992131bfbc64dfc105444245487dcae11e1998c8c121dd693b9"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/cotton.pcbank",
+      "bytes": 1198108,
+      "sha256": "00804fd86582e8635d5728d68906752ca9b0f3726d360bd099ca3682ec40f2a7"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/cube.bank.json",
+      "bytes": 12148,
+      "sha256": "c6a87c91b2c098a44ed01e259c16574a4dd446327fd48621da9d4be6258a730b"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/cube.pcbank",
+      "bytes": 1689628,
+      "sha256": "735f7a5fa9474dfe92a1ed28bc9b8848ddd3960a3ab227e3ef6a58d05c664b35"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/piggy.bank.json",
+      "bytes": 12153,
+      "sha256": "a29c9c31e9de6140c2c44d0bce599389c60985c26fcb924a65262faed58fa549"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/piggy.pcbank",
+      "bytes": 1689628,
+      "sha256": "a7c3e5d47a404a952f0e1ebb0efc451b07d3b31f4e17bb05c69e7d4199bcdc0a"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/plastic_cylinder.bank.json",
+      "bytes": 10296,
+      "sha256": "30fecf9bac9f4454a961c651f6d5de81fbc9f9d53b9c343aba43d24d5e9e7f99"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/plastic_cylinder.pcbank",
+      "bytes": 1382428,
+      "sha256": "1e0b3c6d03696cd60a7293e1f49d0df9e06828a49323f6d77543a3ae7b294547"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/screw.bank.json",
+      "bytes": 10259,
+      "sha256": "f6ade690bb6d799ad91dfd3cc65209ecf40df646f4bbd967739ab34a31ef7037"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/screw.pcbank",
+      "bytes": 1382428,
+      "sha256": "89fc8f7e947701d194681a9f19280243c4a49a77949ad617bf9ae66e16ee6c08"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/solar_panel.bank.json",
+      "bytes": 10280,
+      "sha256": "6e4c3b74cdb24543665294a7b92a8f712c9d79655040cbbbadcb29f2ca7bc91b"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/solar_panel.pcbank",
+      "bytes": 1382428,
+      "sha256": "3a8218694e7a7f98f18d41056d0ee1a4835e812e8599bfe7e70cdefb19017089"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/toothbrush.bank.json",
+      "bytes": 12171,
+      "sha256": "03f69da0e4158b1c5d7d602b7b64e6fcc906a5bb63c5ae19bbc5e3e54232e7c7"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/toothbrush.pcbank",
+      "bytes": 1689628,
+      "sha256": "f277d3f0121f66f1f3ec7592e6313286eab15c03151ebd68bcc931216d4ddca5"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/zipper.bank.json",
+      "bytes": 9890,
+      "sha256": "e5b6933d6d36ae74fd8a4ebc0f6c4105c0c03f49de7e3d0988a8518fc66eb2d6"
+    },
+    {
+      "path": "scenes/industrial_anomaly/perception/assets/banks/rgb/zipper.pcbank",
+      "bytes": 1320988,
+      "sha256": "10299d8a79745617fd28416524e7221ffb951545aeb74d44716d53803ddb1799"
+    },
+    {
       "path": "scenes/industrial_anomaly/perception/assets/model_manifest.json",
-      "bytes": 2045,
-      "sha256": "cb0d78cba60f3587cdb86f314a6cadcb2a6a592010123ca911513e168e899c22"
+      "bytes": 1650,
+      "sha256": "4515ef21768e4092103d6e3dc285a531d727dae93c3781574870be76577fc372"
     },
     {
       "path": "scenes/industrial_anomaly/perception/assets/vit_small_patch8_160.onnx",
@@ -2184,6 +1859,11 @@
       "sha256": "3c369920cc78a155fcb57b4df4b97785ba543d4a908678c3ee652f2367eef117"
     },
     {
+      "path": "scenes/industrial_anomaly/run_controlled_threshold_optimization_demo.py",
+      "bytes": 38672,
+      "sha256": "02b713409852c25ad93e2be20c59c21593450eacc09c1029352515b9d7907f73"
+    },
+    {
       "path": "scenes/industrial_anomaly/samples/infrared_event.json",
       "bytes": 876,
       "sha256": "54f46bbab69f30263f187188e09a8baacb49023ebdbfa0f2975224a999f60698"
@@ -2199,254 +1879,19 @@
       "sha256": "7d85f12b02890d733d92c83f310b261ceac027b6746639c542469029e473e50c"
     },
     {
-      "path": "scenes/industrial_anomaly/summarize_industrial_selective_benchmark.py",
-      "bytes": 4223,
-      "sha256": "2de80746161cd39786fbc157072635433ac3156363f8cdf9fdc4c058da336300"
-    },
-    {
       "path": "scenes/industrial_anomaly/train_industrial_cloud_coordinator.py",
       "bytes": 9692,
       "sha256": "ba0df4db43c1b1b846c9d64c65b2bec694b72cbd2fb41aacc01401cbbccc4779"
     },
     {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/CMakeLists.txt",
-      "bytes": 1586,
-      "sha256": "311cbd383815ac3d8fda4c4525052f621214e134964efd21a80d26ca6388340c"
+      "path": "scenes/industrial_anomaly/verify_controlled_threshold_optimization_demo.py",
+      "bytes": 9476,
+      "sha256": "dbd2835e0bbe77daf806131c4bbec7de3407f858ef41ba78ee873c6af11e6fca"
     },
     {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/config.yaml",
-      "bytes": 33,
-      "sha256": "1ec066332e80198c3f59f90c742ee28343d88486aac0d99098d5ee1e52c6dd08"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/acceptance.sh",
-      "bytes": 4003,
-      "sha256": "b272665908f22d600c04bcd87a3640c7c5ab123be23662210959b066e9a6a84f"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/build_engine.sh",
-      "bytes": 544,
-      "sha256": "1463710b1edc59a92f0e4fe79785253a19adacf071e9b529c6e3e58eb98d5ab2"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/build_runtime.sh",
-      "bytes": 468,
-      "sha256": "c52f9984576f8d0dfd4bb44c0aa0134391b98977edc1691b46f6e113c83fef65"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/check_environment.sh",
-      "bytes": 1700,
-      "sha256": "fbe76f4192bdf617b952fe55256027ddfae330b69f45c10af61c47d3555fa4cb"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/evaluate_metrics.sh",
-      "bytes": 813,
-      "sha256": "6eda101db7293a259cf49581de4664b25ec112075907beeba0c494b8ca0ddd8f"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/package_offline.sh",
-      "bytes": 1168,
-      "sha256": "a9b953219ac47ba9f14a569972604f0c450238247cb26ed2f4e010db00b53d5f"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/prepare_assets.sh",
-      "bytes": 1237,
-      "sha256": "e935fa0d8855974ddd53b7df10b6115f0564d63a0783c055f477c1b464a8140a"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/prepare_dataset.sh",
-      "bytes": 771,
-      "sha256": "4f8a6324da26ab37e104a2e4afa2dac6535107b02090f69abd855f83ea6d6734"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/run_predict.sh",
-      "bytes": 1266,
-      "sha256": "7903b5f3a945f1f85f0c7114e08a3b83a13d8f8eb77045d76e0916b0979df8d8"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/scripts/run_predict_preprocessed.sh",
-      "bytes": 1615,
-      "sha256": "4006141d8026fac7e305494c5a41267a511b1f963e5b357aca4a54d15e33e28d"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/src/main.cpp",
-      "bytes": 30746,
-      "sha256": "ec5eff6ddd64fcf35ee2b653fffdf7e8fdbb33e3a82b4250baa49bacf494352f"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/src/main.cpp.bak",
-      "bytes": 26487,
-      "sha256": "05541d356743b2cfd2ec15cdabf669ab3cda8db38fdf892a4afad32c4614ec0b"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/src/patchcore_cuda.cu",
-      "bytes": 8186,
-      "sha256": "0eff5eb68c82a26428d6d1ae2aeda53ba085b427c14acf19e36c5ab6e9cd8276"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/src/patchcore_cuda.h",
-      "bytes": 1179,
-      "sha256": "d24b5f0e4f47d315b88dfcdcd1f2318fa60e28aad6e24542e5b29c431cdc3e72"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/compare_feature_parity.py",
-      "bytes": 5024,
-      "sha256": "7fa842c802277846a6117aa99ed065ab81726b0db40d9a2993586a20e8e0173e"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/compress_pcbank.py",
-      "bytes": 2113,
-      "sha256": "6b67b9a455ee5f8eac369468e6a1b0d1a25359168c464675ceeb0309b0aea951"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/convert_memory_bank.py",
-      "bytes": 1516,
-      "sha256": "760015ab0d7716917e0515cea805d04707a1ecbfaad9ac1782821dd789457151"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/export_onnx.py",
-      "bytes": 1433,
-      "sha256": "b47057c6e8d462d7a5382302e80c17d17d00ff0ebd88177126188586dcd51006"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/measure_rss.py",
-      "bytes": 2215,
-      "sha256": "68c9de9577b686680887fcd1319a8a007b25f43e177f2815f4c255f4d4b5e05a"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/prepare_inputs.py",
-      "bytes": 2034,
-      "sha256": "9b6d8b880d8c261f8dab2364898d84db9140022a0d5ad243ff72900c43905061"
-    },
-    {
-      "path": "scenes/jetson_infra_trt_runtime_cublas/tools/verify_metrics.py",
-      "bytes": 6719,
-      "sha256": "6e05e908b359676a6a269768e0a55be1af5ceecbe2034c1b8462ae2512560af0"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/CMakeLists.txt",
-      "bytes": 1574,
-      "sha256": "c02bc964d0061f429de479499d47a9cff8089e2ee33998fe9c56fdb2b048d9ba"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/config.yaml",
-      "bytes": 33,
-      "sha256": "1ec066332e80198c3f59f90c742ee28343d88486aac0d99098d5ee1e52c6dd08"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/acceptance.sh",
-      "bytes": 3632,
-      "sha256": "48d619b07431a80142de541df4b6657a8481059e28595ed02fe3b4b339427ba8"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/build_engine.sh",
-      "bytes": 489,
-      "sha256": "fd1f6f3a312f1a69402bcef59ece4044b86022dace06faad82f10726c47ca649"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/build_runtime.sh",
-      "bytes": 466,
-      "sha256": "67d2d308f21fbbd52f4355e532cc175accbb98eb8ecd8199cf073b6b099b4ddf"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/check_environment.sh",
-      "bytes": 1700,
-      "sha256": "fbe76f4192bdf617b952fe55256027ddfae330b69f45c10af61c47d3555fa4cb"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/evaluate_metrics.sh",
-      "bytes": 773,
-      "sha256": "56f5857619884cbbe605a7b56b225e0cddb990529136eae811053342e6609659"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/package_offline.sh",
-      "bytes": 1179,
-      "sha256": "3c579b15d680dee29ecfbd4a4bba5c1778f4bdb3c040928ae73a9a76aa1a6d3d"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/prepare_assets.sh",
-      "bytes": 1107,
-      "sha256": "37d9e99b57fe8433e0d850e1a5fbc7e6c5aa7c91db34204bc35f78ce849d0567"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/prepare_dataset.sh",
-      "bytes": 806,
-      "sha256": "858031416242ccc6e29b56e243d3ce81142357a26dcc914fa3ab0a856019bba6"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/run_predict.sh",
-      "bytes": 1069,
-      "sha256": "d364c338196a2c181ff8fe2e747a9d349b9446336607a7978d2f5e6d43a28d2d"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/scripts/run_predict_preprocessed.sh",
-      "bytes": 1415,
-      "sha256": "95858a8195646925baafed93b060fbd4ffebc897ed078b65a818ad6c1df51ef7"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/src/main.cpp",
-      "bytes": 30350,
-      "sha256": "f5924a7d712914b9e1e9c459cc05cefedf69e5ea11888191bb2acaa1cc8ae202"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/src/main.cpp.bak",
-      "bytes": 26462,
-      "sha256": "ddc8692d4db0385c33ef5e80383e8e0916255b65a4fca5bd9e637ede5cf91226"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/src/patchcore_cuda.cu",
-      "bytes": 8186,
-      "sha256": "0eff5eb68c82a26428d6d1ae2aeda53ba085b427c14acf19e36c5ab6e9cd8276"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/src/patchcore_cuda.h",
-      "bytes": 1179,
-      "sha256": "d24b5f0e4f47d315b88dfcdcd1f2318fa60e28aad6e24542e5b29c431cdc3e72"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/compare_feature_parity.py",
-      "bytes": 5024,
-      "sha256": "7fa842c802277846a6117aa99ed065ab81726b0db40d9a2993586a20e8e0173e"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/compress_pcbank.py",
-      "bytes": 2113,
-      "sha256": "6b67b9a455ee5f8eac369468e6a1b0d1a25359168c464675ceeb0309b0aea951"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/convert_memory_bank.py",
-      "bytes": 1516,
-      "sha256": "760015ab0d7716917e0515cea805d04707a1ecbfaad9ac1782821dd789457151"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/export_onnx.py",
-      "bytes": 1451,
-      "sha256": "e02b98a78a90c5be61c71a9e9fed93a27ad3b8975fda4f625b4d20c0222d7f9a"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/measure_rss.py",
-      "bytes": 2215,
-      "sha256": "68c9de9577b686680887fcd1319a8a007b25f43e177f2815f4c255f4d4b5e05a"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/prepare_inputs.py",
-      "bytes": 2034,
-      "sha256": "95f071b5096a03598207889ca44d08780ec4a7b18dfd881d86586e662a07b925"
-    },
-    {
-      "path": "scenes/jetson_rgb_trt_runtime_cublas/tools/verify_metrics.py",
-      "bytes": 6601,
-      "sha256": "287ceedb24ba95dcd2c9c87f6902ca8b6baf186473f063f113b9958bf6c9d3d5"
-    },
-    {
-      "path": "schemas/competition_targets_manifest.example.json",
-      "bytes": 6719,
-      "sha256": "7167b1d0a309f7d97363e636fefab54f38e2126a61d5f09cd5dedc92cacad8dd"
-    },
-    {
-      "path": "schemas/competition_targets_manifest.schema.json",
-      "bytes": 4675,
-      "sha256": "8ccdc2b3db3310f2535588663b49d2a3807c491167281ed75b3b936e80e0026c"
+      "path": "scenes/industrial_anomaly/verify_industrial_qwen_runtime_paths.py",
+      "bytes": 6806,
+      "sha256": "5ebcadef5730700b8fe07fb3ae6821359232507bbe4e9511696fde5170262271"
     },
     {
       "path": "schemas/decision_envelope.schema.json",
@@ -2465,8 +1910,8 @@
     },
     {
       "path": "schemas/edge_llm_base_manifest.schema.json",
-      "bytes": 4603,
-      "sha256": "5b0f4e6e848802505bf45b826f95d06d47c623e159a75b4555a15faed53d8909"
+      "bytes": 7124,
+      "sha256": "d02122b996f01f67bad09996b43e594ff43a025514ab802b34881d062f975d93"
     },
     {
       "path": "schemas/edge_llm_package_spec.schema.json",
@@ -2480,8 +1925,8 @@
     },
     {
       "path": "schemas/edge_llm_release_store.schema.json",
-      "bytes": 1773,
-      "sha256": "d088db932cf1ba35f6c22044d2405f1837479ef7cc48900de68deed71a20ba1b"
+      "bytes": 2525,
+      "sha256": "022a8d40d6f91c0e15a4ecb0528b3087e6e2003aa1bfb426faed2f147d940b49"
     },
     {
       "path": "schemas/edge_llm_runtime.schema.json",
@@ -2515,8 +1960,8 @@
     },
     {
       "path": "schemas/framework_service_config.schema.json",
-      "bytes": 5990,
-      "sha256": "7bc725b4625a6c3f7316bc5ab9b2b2c41121995600c652ccac07df2100c498ef"
+      "bytes": 6468,
+      "sha256": "bf27a3c50fba8d62878553fd3daa1b993587f48327a3688991b675d1f84c2bf9"
     },
     {
       "path": "schemas/scene_event_envelope.schema.json",
@@ -2565,18 +2010,13 @@
     },
     {
       "path": "scripts/build_manifest.py",
-      "bytes": 2051,
-      "sha256": "85c7d7fc5f054c4846885317e3ecae0247c1488dbde58954318ec53033ce65de"
-    },
-    {
-      "path": "scripts/evaluate_competition_targets.py",
-      "bytes": 125898,
-      "sha256": "7400c0e19b394d879d76d1e30ba47693108f09721c4131d02836f38203f7f89d"
+      "bytes": 1953,
+      "sha256": "ffbf0100ae83d1ddff85ba1b69679c5387c1bc21fed82fdf310ee9c9ceaf41a7"
     },
     {
       "path": "scripts/install_traffic_systemd.sh",
-      "bytes": 2063,
-      "sha256": "704b8a94e8e3e8bde363a747554f33da8128ffdc9563d078ffc548b30e075934"
+      "bytes": 2062,
+      "sha256": "288bdca6d82f26c5900a68cb0e6e46aee2eba8763cb3209bd2015b1eec62550f"
     },
     {
       "path": "scripts/measure_distributed_model_update_loop.py",
@@ -2590,8 +2030,8 @@
     },
     {
       "path": "tests/test_action_token_constraints.py",
-      "bytes": 6967,
-      "sha256": "aa6b143906a29590bc2bb80c3492599ecbea554b16ee9007568385f986e42557"
+      "bytes": 6997,
+      "sha256": "a3ef62035dd9c7e224ce7c012a9c221901eda731a46ce6fb5dfab4cd84d35fa5"
     },
     {
       "path": "tests/test_aggregation_finality.py",
@@ -2600,8 +2040,8 @@
     },
     {
       "path": "tests/test_async_summary_delivery.py",
-      "bytes": 104525,
-      "sha256": "13a0a2d88c1bf5a044caf62b5f63bcd99f18cc6d0434c8fc2244a8d47ff02c1f"
+      "bytes": 105908,
+      "sha256": "246e0b7fc65253be25211157090a51bb069eb136b43d230f19ebfccbb4498c67"
     },
     {
       "path": "tests/test_build_ceval_kd_source.py",
@@ -2619,14 +2059,9 @@
       "sha256": "e3e7a6ce511cfd37e563132dfd9ec4f20248771e1de23fb77b7e68e9b0b63c51"
     },
     {
-      "path": "tests/test_competition_target_evaluator.py",
-      "bytes": 69156,
-      "sha256": "8e735b506808924ff932c2e642fa903e109750fbf82b7b91d6cbc747368ee133"
-    },
-    {
-      "path": "tests/test_current_edge_llm_targets.py",
-      "bytes": 1745,
-      "sha256": "61a9d344eac2d79c3479426c200a021a804f8bcacefba7935b93d9e3423e74e8"
+      "path": "tests/test_cloud_llm_async_audit_service.py",
+      "bytes": 6512,
+      "sha256": "9006eb915b3db6f8b4f9f1b854cf28806c1c8a61447c375b5a25181feb7955af"
     },
     {
       "path": "tests/test_distributed_update_evidence.py",
@@ -2641,7 +2076,7 @@
     {
       "path": "tests/test_edge_llm_dual_promotion_gate.py",
       "bytes": 24809,
-      "sha256": "dd7109a7cb30aa08eadb75a879c0327602a392c8ac68481455f67331a5b08414"
+      "sha256": "bd140b9cf5f11dcd208593e3efd94106317a0be82821446e9a7534d9522db52f"
     },
     {
       "path": "tests/test_edge_llm_factory_cli.py",
@@ -2650,8 +2085,8 @@
     },
     {
       "path": "tests/test_edge_llm_release_lifecycle.py",
-      "bytes": 38490,
-      "sha256": "5a74a8de485cbe00095922741e3c51d8205aed1bdcd2f3ffca6e54763f10bb32"
+      "bytes": 47423,
+      "sha256": "11dcc081587857ce6dd5076e2a2765bd7b961f0152cd20e06cc7fe5826d8cc46"
     },
     {
       "path": "tests/test_edge_llm_startup_gate.py",
@@ -2674,49 +2109,19 @@
       "sha256": "4e011c80e83a2bc20c70cfd79cab601c9e39fb5f1f99258f8e2e469fb08df8ca"
     },
     {
-      "path": "tests/test_general_capability_retention_math_scoring.py",
-      "bytes": 1626,
-      "sha256": "6fd68b502477acbb555b864f85fb12e5142b059279de734af0480751de35940a"
-    },
-    {
       "path": "tests/test_general_kd_data.py",
       "bytes": 1426,
       "sha256": "fa9c6888ea519cd8e99e122e2b2f134d1b52c90f41744ac27d622a926362c8a9"
     },
     {
       "path": "tests/test_industrial_anomaly_scene.py",
-      "bytes": 33477,
-      "sha256": "378ff76bb3e43adcdc751e311231d64fb93cb9300f183dcbf981c752db2692da"
-    },
-    {
-      "path": "tests/test_industrial_benchmark.py",
-      "bytes": 11845,
-      "sha256": "78e8913a5ae27db67972f9cce03b445dd547a319395bd8e7fd6835f740c4c168"
-    },
-    {
-      "path": "tests/test_industrial_joint_static_candidate.py",
-      "bytes": 5373,
-      "sha256": "e8b6f4bec8d975b7be8a78470c4c31d9f74fb0cef722d51d46beb034628c7af1"
-    },
-    {
-      "path": "tests/test_industrial_joint_static_formal.py",
-      "bytes": 3367,
-      "sha256": "acdbc2805850b69151862c5b4227801df15301cbcc3ede4b684981820bb881de"
-    },
-    {
-      "path": "tests/test_industrial_perception.py",
-      "bytes": 6667,
-      "sha256": "87314b73795459ef07c6cc351ccc68f05815a522826727558f9d8c3106592629"
+      "bytes": 33815,
+      "sha256": "8c825e44ecb3431834bc5ed673c5884cc091ba87a8ae44074af3df0d82097caf"
     },
     {
       "path": "tests/test_industrial_rule_distillation.py",
       "bytes": 3507,
       "sha256": "f6b0358bc9ca13e5f717b0d6a4896927bfc24b94cec0ed007e4a58a5ab3423cb"
-    },
-    {
-      "path": "tests/test_joint_scene_adapter.py",
-      "bytes": 25752,
-      "sha256": "be37ff372e7b0cef2e644eda75237adb0c1b130e1b4fe36147334a5aaef927b5"
     },
     {
       "path": "tests/test_model_update_evidence_runner.py",
@@ -2729,39 +2134,9 @@
       "sha256": "66c44e01912973cf602258692d176998d3e611256a85b91c19075897291a1557"
     },
     {
-      "path": "tests/test_multi_adapter_stability_benchmark.py",
-      "bytes": 7453,
-      "sha256": "05bbe6b40d7593f9d362165e552bf44886a00caea9cf6d9e5486506155e86f93"
-    },
-    {
-      "path": "tests/test_pems08_e2e_benchmark.py",
-      "bytes": 24821,
-      "sha256": "9689127ee670c63be53ac842b02347797d220556fb2558f3b17e4c8164cae17e"
-    },
-    {
       "path": "tests/test_protocol_compatibility.py",
       "bytes": 14606,
       "sha256": "b85af74f2bd22b07a107ac22b7ea71d2c191b9871c4dc5151e86ed90851613ea"
-    },
-    {
-      "path": "tests/test_q5_joint_release_packager.py",
-      "bytes": 16756,
-      "sha256": "ee2fe5b6027bd26d61133360bdbca108d0292818036afa619ec100451d201483"
-    },
-    {
-      "path": "tests/test_q5_static_joint_release_packager.py",
-      "bytes": 9709,
-      "sha256": "8f220dcfb5d29723a906f97da60723c96edab36f9be36fb4c626b02801fc1390"
-    },
-    {
-      "path": "tests/test_q6_multiscene_release_packager.py",
-      "bytes": 14181,
-      "sha256": "5b15d253a9619a271cbc9dd12b7c914c26579da5c2dbbe1a70c2e1f21da4b582"
-    },
-    {
-      "path": "tests/test_record_u2_bf16_execution_receipt.py",
-      "bytes": 40662,
-      "sha256": "ba12c25e9fa238215ee39d2de37665e6f8f13eec197f8d3dbee9f79f3bcda957"
     },
     {
       "path": "tests/test_record_u2_candidate_artifact.py",
@@ -2775,8 +2150,8 @@
     },
     {
       "path": "tests/test_review_tracking_metrics.py",
-      "bytes": 18632,
-      "sha256": "df4078f964ddc57f78faa72075f62927edcd18176aa210cfab62422f29180abc"
+      "bytes": 18401,
+      "sha256": "6aa7d8b506e8e5b8d4d58642172ebaa16928ee7f2fcccd4a75f635321f67be00"
     },
     {
       "path": "tests/test_scheduler_risk_routing.py",
@@ -2784,19 +2159,24 @@
       "sha256": "f53f029fb6bc0cde2655e891ae3881b1b482c02ec179ae4132c4d10b7b0002d6"
     },
     {
-      "path": "tests/test_summarize_ceval_specialty_eval.py",
-      "bytes": 33330,
-      "sha256": "e859982acce2e45657a558ebc242843d82ebe5ca65c441fc724d6a4ccd5396ba"
+      "path": "tests/test_selective_evidence_pull.py",
+      "bytes": 26239,
+      "sha256": "12a4300c4b59eaeacaefdab75b9421c5d2eda184a219a364c3d5d5af0780360a"
+    },
+    {
+      "path": "tests/test_selective_evidence_pull_fail_closed_matrix.py",
+      "bytes": 13261,
+      "sha256": "20a8e6d66f1065e03a15c337f191a69fe97555f6663ee841f5e273099b5ec8c1"
+    },
+    {
+      "path": "tests/test_simplified_routing_pipeline.py",
+      "bytes": 6264,
+      "sha256": "08381e0c7ac179f4ce3251f531bd43637e7e3654723d654f5677f85e6bc264e9"
     },
     {
       "path": "tests/test_task_lora_routing.py",
       "bytes": 7290,
       "sha256": "4635754adc9f4660bae308613ea958aa0a1fc8aa09ac6c2af31d4b36912a1691"
-    },
-    {
-      "path": "tests/test_traffic_bf16_external_path_contract.py",
-      "bytes": 8421,
-      "sha256": "0e35e9bb72b1f7e2e9b0f095bf5b591128e779c07cf81d6b24fc06d18e3c5124"
     },
     {
       "path": "tests/test_train_general_kd_resume_adapter.py",
@@ -2829,11 +2209,6 @@
       "sha256": "37c7ea92f4d258bdca01d4d245f2f7015937889e09a60aa44fd91528a5a6c9cd"
     },
     {
-      "path": "tests/test_unified_traffic_bf16_regression_gate.py",
-      "bytes": 17955,
-      "sha256": "a7e03de4b5704f9a8f329019d65b0e72ffc01fe458a4654756dd3659c019f6b9"
-    },
-    {
       "path": "tests/test_unified_traffic_general.py",
       "bytes": 19688,
       "sha256": "828ac2acb9d8ef08bf71ee056c457dd653bd0f5e9798a4e430ec95c9f09530fe"
@@ -2855,10 +2230,6 @@
     }
   ],
   "excluded_assets": [
-    "PEMS08 prepared inference array (downloaded by traffic asset installer)",
-    "traffic Edge-Qwen GGUF (downloaded by traffic asset installer)",
-    "traffic benchmark results",
-    "Qwen 9B weights (installed from the official Ollama registry)",
-    "Qwen base weights (manifest only)"
+    "Large runtime models and final evidence are governed by the repository-local model catalogs and SHA256SUMS envelopes, not this source-file manifest"
   ]
 }

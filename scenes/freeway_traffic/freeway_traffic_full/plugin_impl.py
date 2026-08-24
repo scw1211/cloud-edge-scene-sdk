@@ -23,7 +23,20 @@ from cloud_edge_framework.contracts import (
 from cloud_edge_framework.event_envelope import SceneEventEnvelope
 from cloud_edge_framework.plugins.base import ScenePlugin
 from freeway_traffic_full.edge_llm import TrafficEdgeLLMController
+from traffic_system.coordination_policy import (
+    ACTION_TO_DECISION,
+    DECISION_TO_ACTION,
+    CoordinationPolicy,
+    verify_policy_package,
+)
 from traffic_system.global_objective import TrafficGlobalObjective
+from traffic_system.road_sets import (
+    build_overlap_partial_assessments,
+    build_road_set_catalog,
+    contexts_for_region,
+    fuse_road_set_contexts,
+    incident_road_sets,
+)
 from traffic_system.scene_event import TRAFFIC_DATA_SCHEMA_ID, TRAFFIC_EVENT_TYPE
 
 
@@ -152,7 +165,6 @@ def _model_uncertainty(
         "prediction_set": normalized_set,
         "prediction_set_size": len(normalized_set),
         "student_rule_disagreement": None,
-        "defer_recommended": False,
         "requires_review": bool(
             confidence < student_confidence_threshold or len(normalized_set) > 1
         ),
@@ -281,7 +293,6 @@ class TrafficPlugin(ScenePlugin):
         self,
         cloud_model_path: Optional[Path] = None,
         edge_student_path: Optional[Path] = None,
-        defer_gate_path: Optional[Path] = None,
         feature_codec_path: Optional[Path] = None,
         topology_path: Optional[Path] = None,
         edge_llm_release_registry_path: Optional[Path] = None,
@@ -303,6 +314,9 @@ class TrafficPlugin(ScenePlugin):
         global_objective_path: Optional[Path] = None,
         global_optimizer_mode: str = "disabled",
         edge_llm_prompt_prefix: Optional[str] = None,
+        coordination_policy_path: Optional[Path] = None,
+        coordination_policy_mode: str = "disabled",
+        road_set_rule_config_path: Optional[Path] = None,
     ) -> None:
         self.cloud_model_path = Path(cloud_model_path) if cloud_model_path is not None else None
         self.current_state_cloud_model_path = (
@@ -318,9 +332,6 @@ class TrafficPlugin(ScenePlugin):
             if current_state_edge_student_path is not None
             else None
         )
-        self.defer_gate_path = (
-            Path(defer_gate_path) if defer_gate_path is not None else None
-        )
         self.feature_codec_path = (
             Path(feature_codec_path) if feature_codec_path is not None else None
         )
@@ -330,6 +341,21 @@ class TrafficPlugin(ScenePlugin):
             else None
         )
         self.topology_path = Path(topology_path) if topology_path is not None else None
+        inferred_road_set_rule_path = (
+            self.topology_path.parent / "current_state_perception_v1.json"
+            if self.topology_path is not None
+            else None
+        )
+        self.road_set_rule_config_path = (
+            Path(road_set_rule_config_path)
+            if road_set_rule_config_path is not None
+            else inferred_road_set_rule_path
+            if inferred_road_set_rule_path is not None
+            and inferred_road_set_rule_path.is_file()
+            else None
+        )
+        self._road_set_model_artifact_sha256: Optional[str] = None
+        self._road_set_rule_config: Optional[Dict[str, Any]] = None
         self.cloud_llm_min_expected_gain = float(cloud_llm_min_expected_gain)
         if not -1.0 <= self.cloud_llm_min_expected_gain <= 1.0:
             raise ValueError("cloud_llm_min_expected_gain must be in [-1, 1]")
@@ -356,16 +382,37 @@ class TrafficPlugin(ScenePlugin):
                 "enabled traffic global optimizer requires global_objective_path"
             )
         self._global_objective: Optional[TrafficGlobalObjective] = None
+        self.coordination_policy_path = (
+            Path(coordination_policy_path)
+            if coordination_policy_path is not None
+            else None
+        )
+        self.coordination_policy_mode = str(
+            coordination_policy_mode
+        ).strip().lower()
+        if self.coordination_policy_mode not in {"disabled", "shadow", "active"}:
+            raise ValueError(
+                "coordination_policy_mode must be disabled, shadow, or active"
+            )
+        if (
+            self.coordination_policy_mode != "disabled"
+            and self.coordination_policy_path is None
+        ):
+            raise ValueError(
+                "enabled coordination policy requires coordination_policy_path"
+            )
+        self._coordination_policy: Optional[CoordinationPolicy] = None
+        self._coordination_policy_package: Optional[Dict[str, Any]] = None
         self._cloud_model: Optional[Dict[str, Any]] = None
         self._current_state_cloud_model: Optional[Dict[str, Any]] = None
         self._edge_student: Optional[Dict[str, Any]] = None
         self._current_state_edge_student: Optional[Dict[str, Any]] = None
-        self._defer_gate: Optional[Dict[str, Any]] = None
         self._feature_codec: Optional[Any] = None
         self._current_state_feature_codec: Optional[Any] = None
         self._cloud_model_sha256: Optional[str] = None
         self._current_state_cloud_model_sha256: Optional[str] = None
         self._topology: Optional[Dict[str, Any]] = None
+        self._road_set_catalog: Optional[Dict[str, Any]] = None
         self._payload_schema: Optional[Dict[str, Any]] = None
         self._edge_llm = TrafficEdgeLLMController(
             release_registry_path=edge_llm_release_registry_path,
@@ -401,6 +448,22 @@ class TrafficPlugin(ScenePlugin):
                 self.global_objective_path
             )
         return self._global_objective
+
+    def _load_coordination_policy(self) -> CoordinationPolicy:
+        if self.coordination_policy_path is None:
+            raise ValueError("traffic coordination policy path is not configured")
+        if self._coordination_policy is None:
+            package = verify_policy_package(self.coordination_policy_path)
+            if (
+                self.coordination_policy_mode == "active"
+                and not package["production_activation_allowed"]
+            ):
+                raise ValueError(
+                    "traffic coordination policy did not pass the production gate"
+                )
+            self._coordination_policy_package = package
+            self._coordination_policy = CoordinationPolicy(package["policy"])
+        return self._coordination_policy
 
     def _load_feature_codec(self) -> Any:
         if self.feature_codec_path is None:
@@ -509,15 +572,6 @@ class TrafficPlugin(ScenePlugin):
             raise ValueError("traffic edge student path is not configured")
         return self._load_edge_student(), self.edge_student_path, "forecast_joint_v1"
 
-    def _load_defer_gate(self) -> Dict[str, Any]:
-        if self.defer_gate_path is None:
-            raise ValueError("traffic defer gate path is not configured")
-        if self._defer_gate is None:
-            from traffic_system.defer_gate import load_defer_gate
-
-            self._defer_gate = load_defer_gate(self.defer_gate_path)
-        return self._defer_gate
-
     def _load_topology(self) -> Dict[str, Any]:
         if self.topology_path is None:
             raise ValueError("traffic topology path is not configured")
@@ -532,40 +586,93 @@ class TrafficPlugin(ScenePlugin):
             self._topology = topology
         return self._topology
 
+    def _load_road_set_catalog(self) -> Dict[str, Any]:
+        if self._road_set_catalog is None:
+            self._road_set_catalog = build_road_set_catalog(self._load_topology())
+        return self._road_set_catalog
+
+    def _approved_road_set_model_artifact_sha256(self) -> str:
+        if self.road_set_rule_config_path is None:
+            raise ValueError(
+                "canonical road-set observations require a configured rule artifact"
+            )
+        if self._road_set_model_artifact_sha256 is None:
+            if not self.road_set_rule_config_path.is_file():
+                raise ValueError("canonical road-set rule artifact is missing")
+            self._road_set_model_artifact_sha256 = _sha256_file(
+                self.road_set_rule_config_path
+            )
+        return self._road_set_model_artifact_sha256
+
+    def _load_road_set_rule_config(self) -> Dict[str, Any]:
+        self._approved_road_set_model_artifact_sha256()
+        if self._road_set_rule_config is None:
+            assert self.road_set_rule_config_path is not None
+            with self.road_set_rule_config_path.open(
+                "r", encoding="utf-8"
+            ) as file_obj:
+                value = json.load(file_obj)
+            if not isinstance(value, dict):
+                raise ValueError("canonical road-set rule artifact is invalid")
+            self._road_set_rule_config = value
+        return dict(self._road_set_rule_config)
+
     def _attach_boundary_resources(self, action: Action, region_id: str) -> Action:
+        """Bind only explicitly road-set-scoped actions.
+
+        Region-level reroute/regional actions are never copied onto every
+        incident road set.  Shared actions are produced separately from the
+        canonical overlap observation and carry an explicit ``road_set_ids``
+        declaration.
+        """
         if self.topology_path is None:
             return action
-        topology = self._load_topology()
-        target_nodes = set()
-        for target_id in action.target_ids:
-            if not target_id.startswith("traffic_node:"):
-                continue
-            try:
-                target_nodes.add(int(target_id.split(":", 1)[1]))
-            except ValueError:
-                continue
-        boundary_resources = []
-        for pair in topology.get("region_pairs", []):
-            if not isinstance(pair, dict):
-                continue
-            left_region = str(pair.get("left_region", ""))
-            right_region = str(pair.get("right_region", ""))
-            if region_id == left_region:
-                own_boundary = set(pair.get("left_boundary_nodes", []))
-            elif region_id == right_region:
-                own_boundary = set(pair.get("right_boundary_nodes", []))
-            else:
-                continue
-            affects_corridor = action.action_type in {"reroute", "regional_coordination"}
-            if affects_corridor or target_nodes & own_boundary:
-                boundary_resources.append(
-                    "traffic_boundary:{}|{}".format(left_region, right_region)
+        parameters = dict(action.parameters)
+        raw_declared = parameters.get("road_set_ids", [])
+        declared = (
+            [str(value) for value in raw_declared]
+            if isinstance(raw_declared, list)
+            else []
+        )
+        incident = {
+            value["road_set_id"]: value
+            for value in incident_road_sets(
+                self._load_road_set_catalog(), region_id
+            )
+        }
+        invalid = sorted(set(declared) - set(incident))
+        if invalid:
+            raise ValueError(
+                "traffic action declares non-incident road sets: {}".format(
+                    ", ".join(invalid)
                 )
-        if not boundary_resources:
-            return action
+            )
+        road_set_ids = list(dict.fromkeys(value for value in declared if value))
+        road_set_resources = [
+            incident[road_set_id]["resource_id"] for road_set_id in road_set_ids
+        ]
+        target_ids = list(action.target_ids)
+        resource_ids = list(action.resource_ids)
+        target_ids.extend(road_set_resources)
+        resource_ids.extend(road_set_resources)
+        if road_set_ids:
+            parameters["road_set_ids"] = road_set_ids
+            if action.action_type in {
+                "variable_speed_limit",
+                "ramp_metering",
+                "regional_coordination",
+                "reroute",
+            }:
+                # The road set is jointly owned by two edge partitions.  A
+                # control that changes its shared execution state must never be
+                # authorized from one owner's partial view when supplemental
+                # evidence is missing, expired, or rejected.
+                parameters["requires_cloud_confirmation"] = True
         return replace(
             action,
-            resource_ids=list(dict.fromkeys(action.resource_ids + boundary_resources)),
+            target_ids=list(dict.fromkeys(target_ids)),
+            resource_ids=list(dict.fromkeys(resource_ids)),
+            parameters=parameters,
         )
 
     def normalize(self, envelope: SceneEventEnvelope) -> SemanticEvent:
@@ -634,7 +741,89 @@ class TrafficPlugin(ScenePlugin):
             for action in reference.get("actions", [])
         ]
         node_ids = payload.get("managed_node_ids", [])
-        shared_resources = ["traffic_node:{}".format(node) for node in node_ids]
+        raw_overlap_observations = payload.get(
+            "road_set_overlap_observations", []
+        )
+        if not isinstance(raw_overlap_observations, list):
+            raise ValueError(
+                "traffic road_set_overlap_observations must be a list"
+            )
+        overlap_observations = [
+            dict(value)
+            for value in raw_overlap_observations
+            if isinstance(value, dict)
+        ]
+        if overlap_observations:
+            expected_dataset = str(payload.get("dataset", ""))
+            expected_split = str(payload.get("sample_split", ""))
+            expected_sample_id = int(payload.get("sample_id", -1))
+            for observation in overlap_observations:
+                if (
+                    str(observation.get("dataset", "")) != expected_dataset
+                    or str(observation.get("split", "")) != expected_split
+                    or int(observation.get("sample_id", -2))
+                    != expected_sample_id
+                    or str(observation.get("window_id", ""))
+                    != "{}:{}:{}".format(
+                        expected_dataset,
+                        expected_split,
+                        expected_sample_id,
+                    )
+                ):
+                    raise ValueError(
+                        "canonical road-set observation is bound to another event window"
+                    )
+        road_set_assessments: List[Dict[str, Any]] = []
+        road_set_contexts: List[Dict[str, Any]] = []
+        road_set_scope_resources: List[str] = []
+        road_set_correlation_keys: List[str] = []
+        if self.topology_path is not None:
+            road_set_catalog = self._load_road_set_catalog()
+            incident = incident_road_sets(road_set_catalog, region_id)
+            road_set_scope_resources = [
+                road_set["resource_id"] for road_set in incident
+            ]
+            road_set_correlation_keys = [
+                "traffic_road_set:{}".format(road_set["road_set_id"])
+                for road_set in incident
+            ]
+            if overlap_observations:
+                road_set_assessments = build_overlap_partial_assessments(
+                    road_set_catalog,
+                    region_id,
+                    aggregation_member,
+                    overlap_observations,
+                    self._approved_road_set_model_artifact_sha256(),
+                    self._load_road_set_rule_config(),
+                    "edge_normalize_raw",
+                )
+            road_set_contexts = fuse_road_set_contexts(
+                [
+                    {
+                        "aggregation_member": aggregation_member,
+                        "road_set_assessments": road_set_assessments,
+                    }
+                ]
+            )
+            # Do not upload a second copy of every partial assessment.  Local
+            # contexts carry only routing/audit state; the cloud reconstructs
+            # the two-sided context from ``road_set_assessments``.
+            road_set_contexts = [
+                {
+                    key: value
+                    for key, value in context.items()
+                    if key != "partial_assessments"
+                }
+                for context in road_set_contexts
+            ]
+            payload["road_set_assessments"] = road_set_assessments
+            payload["road_set_contexts"] = road_set_contexts
+        shared_resources = list(
+            dict.fromkeys(
+                ["traffic_node:{}".format(node) for node in node_ids]
+                + road_set_scope_resources
+            )
+        )
         evidence_summary = {
             "risk_level": risk_level,
             "risk_score": risk_score,
@@ -675,6 +864,48 @@ class TrafficPlugin(ScenePlugin):
                     encoding="json",
                     inline={"top_k_risk_nodes": top_nodes},
                     size_bytes=len(str(top_nodes).encode("utf-8")),
+                    content_type="application/json",
+                )
+            )
+        if overlap_observations:
+            overlap_feature_payload = {
+                "schema_version": 2,
+                "kind": "canonical_road_set_overlap_feature_bundle",
+                "observations": [
+                    {
+                        key: value
+                        for key, value in observation.items()
+                        if key != "raw_fragment_base64"
+                    }
+                    for observation in overlap_observations
+                ],
+            }
+            evidence.append(
+                Evidence(
+                    evidence_id="{}_road_set_overlap_features".format(
+                        event_id
+                    ),
+                    level="feature",
+                    modality="traffic_road_set_overlap_features",
+                    encoding="json",
+                    inline=overlap_feature_payload,
+                    size_bytes=_json_size(overlap_feature_payload),
+                    content_type="application/json",
+                )
+            )
+            overlap_raw_payload = {
+                "schema_version": 2,
+                "kind": "canonical_road_set_overlap_raw_bundle",
+                "observations": overlap_observations,
+            }
+            evidence.append(
+                Evidence(
+                    evidence_id="{}_road_set_overlap_raw".format(event_id),
+                    level="raw",
+                    modality="traffic_road_set_overlap_raw",
+                    encoding="json",
+                    inline=overlap_raw_payload,
+                    size_bytes=_json_size(overlap_raw_payload),
                     content_type="application/json",
                 )
             )
@@ -747,7 +978,8 @@ class TrafficPlugin(ScenePlugin):
                 correlation_keys=[
                     "traffic_region:{}".format(region_id),
                     "traffic_network:{}".format(payload.get("dataset", "PEMS08")),
-                ],
+                ]
+                + road_set_correlation_keys,
                 window_start_ms=occurred_at_ms,
                 window_end_ms=occurred_at_ms + horizon_ms,
             ),
@@ -803,6 +1035,9 @@ class TrafficPlugin(ScenePlugin):
                 "escalation_expected_gain": expected_gain,
                 "cloud_llm_review_policy": cloud_llm_review_policy,
                 "evidence_completeness": evidence_completeness,
+                "road_set_contexts": road_set_contexts,
+                "road_set_conflict_suspected": False,
+                "required_members": [],
                 "legacy_risk_semantics": "max(regional_state,max_node_state)",
                 "transport_include_scene_payload": False,
                 "cloud_review_requested": cloud_review_requested,
@@ -885,12 +1120,13 @@ class TrafficPlugin(ScenePlugin):
                             break
                 compact_capabilities[name] = selected
         compact_payload = {
-            "scene": payload.get("scene", "freeway_traffic_management"),
-            "task": payload.get("task", event.task),
-            "event_id": event.event_id,
+            # scene/task/event_id already live in the common SemanticEvent
+            # envelope.  Repeating them here made four compact traffic uploads
+            # larger than the source float32 window they were meant to replace.
             "edge_id": event.edge_id,
             "region_id": event.scope.region_id,
             "sample_id": payload.get("sample_id"),
+            "sample_split": payload.get("sample_split"),
             "partition_id": payload.get("partition_id"),
             "num_partitions": payload.get("num_partitions"),
             "upload_required": bool(payload.get("upload_required", False)),
@@ -905,14 +1141,46 @@ class TrafficPlugin(ScenePlugin):
             "region_summary": payload.get("region_summary", {}),
             "top_k_risk_nodes": top_nodes,
             "control_capabilities": compact_capabilities,
+            "road_set_assessments": payload.get("road_set_assessments", []),
+            "road_set_contexts": payload.get("road_set_contexts", []),
         }
         if isinstance(payload.get("current_control_state"), dict):
             compact_payload["current_control_state"] = dict(
                 payload["current_control_state"]
             )
-        if isinstance(payload.get("neighbor_context"), list):
+        if isinstance(payload.get("neighbor_context"), (dict, list)):
             compact_payload["neighbor_context"] = payload["neighbor_context"]
-        metadata = dict(event.metadata)
+        # Only cloud-consumed/audited metadata belongs on the data plane.  The
+        # original edge event keeps the full diagnostic record locally, while
+        # source identity is attached again by EdgeRuntime after this hook.
+        cloud_metadata_keys = (
+            "trace_id",
+            "traffic_semantics_version",
+            "regional_state",
+            "operational_safety_risk",
+            "model_uncertainty",
+            "escalation_expected_gain",
+            "cloud_llm_review_policy",
+            "cloud_review_requested",
+            "cloud_review_reason",
+            "monitoring_force_cloud_review",
+            "monitoring_reasons",
+            "edge_runtime_network_available",
+            "edge_runtime_network_status",
+            "edge_runtime_network_class",
+            "edge_runtime_network_rtt_ms",
+            "edge_runtime_network_loss_rate",
+            "aggregation",
+            "road_set_contexts",
+            "road_set_conflict_suspected",
+            "required_members",
+            "required_evidence_level",
+        )
+        metadata = {
+            key: event.metadata[key]
+            for key in cloud_metadata_keys
+            if key in event.metadata
+        }
         metadata.update(
             {
                 "transport_include_scene_payload": True,
@@ -938,6 +1206,22 @@ class TrafficPlugin(ScenePlugin):
             return list(events)
         topology = self._load_topology()
         region_neighbors = topology["region_neighbors"]
+        fused_road_set_contexts = fuse_road_set_contexts(
+            [
+                {
+                    "region_id": event.scope.region_id,
+                    "aggregation_member": event.metadata.get(
+                        "aggregation", {}
+                    ).get("member", event.edge_id)
+                    if isinstance(event.metadata.get("aggregation"), dict)
+                    else event.edge_id,
+                    "road_set_assessments": self._effective_road_set_assessments(
+                        event
+                    ),
+                }
+                for event in events
+            ]
+        )
         fused_events: List[SemanticEvent] = []
         for event in events:
             allowed_regions = set(region_neighbors.get(event.scope.region_id, []))
@@ -988,15 +1272,243 @@ class TrafficPlugin(ScenePlugin):
                         "neighbors": neighbors,
                     }
                 ]
+            event_road_set_contexts = contexts_for_region(
+                fused_road_set_contexts, event.scope.region_id
+            )
+            payload["road_set_contexts"] = event_road_set_contexts
+            conflict_contexts = [
+                context
+                for context in event_road_set_contexts
+                if bool(context.get("road_set_conflict_suspected", False))
+            ]
+            required_members = sorted(
+                {
+                    str(member)
+                    for context in conflict_contexts
+                    for member in context.get("required_members", [])
+                }
+            )
             metadata = dict(event.metadata)
             metadata.update(
                 {
                     "topology_fusion": topology.get("method"),
                     "fused_neighbor_count": len(neighbors),
+                    "road_set_contexts": event_road_set_contexts,
+                    "road_set_conflict_suspected": bool(conflict_contexts),
+                    "required_members": required_members,
+                    "road_set_conflicts": [
+                        {
+                            "road_set_id": context.get("road_set_id"),
+                            "kind": context.get("conflict_kind"),
+                            "reason": context.get("conflict_reason"),
+                            "required_members": context.get(
+                                "required_members", []
+                            ),
+                            "required_evidence_level": context.get(
+                                "required_evidence_level"
+                            ),
+                        }
+                        for context in conflict_contexts
+                    ],
                 }
             )
+            if conflict_contexts:
+                metadata["required_evidence_level"] = "raw"
+            else:
+                metadata.pop("required_evidence_level", None)
             fused_events.append(replace(event, scene_payload=payload, metadata=metadata))
         return fused_events
+
+    def _effective_road_set_assessments(
+        self, event: SemanticEvent
+    ) -> List[Dict[str, Any]]:
+        """Return the best authenticated road-set view available this pass.
+
+        A summary/feature first pass uses compact declaration references.
+        Feature evidence can verify the portable feature calculation but
+        cannot independently reconstruct the source-content digest.  Only a
+        raw callback rebuilds the complete observation and replaces stale or
+        tampered declarations before the cloud reruns the policy.
+        """
+
+        raw_default = event.scene_payload.get("road_set_assessments", [])
+        default = [
+            dict(value)
+            for value in raw_default
+            if isinstance(value, dict)
+        ] if isinstance(raw_default, list) else []
+        aggregation = event.metadata.get("aggregation", {})
+        member = (
+            str(aggregation.get("member", event.edge_id))
+            if isinstance(aggregation, dict)
+            else event.edge_id
+        )
+        catalog = self._load_road_set_catalog()
+        expected = {
+            item["road_set_id"]: item
+            for item in incident_road_sets(catalog, event.scope.region_id)
+        }
+        seen = set()
+        for assessment in default:
+            road_set_id = str(assessment.get("road_set_id", ""))
+            if road_set_id in seen or road_set_id not in expected:
+                raise ValueError(
+                    "traffic compact road-set assessment coverage is invalid"
+                )
+            seen.add(road_set_id)
+            expected_road_set = expected[road_set_id]
+            if (
+                assessment.get("assessment_source")
+                != "canonical_overlap_observation"
+                or str(assessment.get("member_region", ""))
+                != event.scope.region_id
+                or str(assessment.get("aggregation_member", "")) != member
+                or str(assessment.get("resource_id", ""))
+                != expected_road_set["resource_id"]
+                or sorted(assessment.get("required_regions", []))
+                != list(expected_road_set["required_regions"])
+            ):
+                raise ValueError(
+                    "traffic compact road-set assessment owner binding is invalid"
+                )
+        if seen != set(expected):
+            raise ValueError(
+                "traffic compact road-set assessment set is incomplete"
+            )
+
+        selected_level = str(
+            event.metadata.get("selected_evidence_level", "summary")
+        ).strip().lower()
+        pulled = event.metadata.get("selective_evidence_pull")
+        pulled_level = (
+            str(pulled.get("requested_level", "")).strip().lower()
+            if isinstance(pulled, dict)
+            else ""
+        )
+        raw_materialized = selected_level == "raw" or pulled_level == "raw"
+        if not raw_materialized:
+            feature_observations = []
+            original_by_id = {}
+            for assessment in default:
+                road_set_id = str(assessment["road_set_id"])
+                nested = assessment.get("canonical_feature_observation")
+                if not isinstance(nested, dict):
+                    raise ValueError(
+                        "traffic compact road-set feature declaration is missing"
+                    )
+                expected_sample_id = int(
+                    event.scene_payload.get("sample_id", -1)
+                )
+                expected_split = str(
+                    event.scene_payload.get("sample_split", "")
+                )
+                if (
+                    str(nested.get("dataset", "")) != "PEMS08"
+                    or str(nested.get("split", "")) != expected_split
+                    or int(nested.get("sample_id", -2))
+                    != expected_sample_id
+                    or str(nested.get("window_id", ""))
+                    != "PEMS08:{}:{}".format(
+                        expected_split, expected_sample_id
+                    )
+                ):
+                    raise ValueError(
+                        "traffic compact road-set observation window is invalid"
+                    )
+                feature_observations.append(dict(nested))
+                original_by_id[road_set_id] = assessment
+            rebuilt = build_overlap_partial_assessments(
+                catalog,
+                event.scope.region_id,
+                member,
+                feature_observations,
+                self._approved_road_set_model_artifact_sha256(),
+                self._load_road_set_rule_config(),
+                "cloud_compact_feature_recomputed",
+            )
+            declaration_fields = (
+                "observation_id",
+                "window_id",
+                "source_dataset_sha256",
+                "raw_fragment_sha256",
+                "source_content_sha256",
+                "feature_content_sha256",
+                "preprocess_version",
+                "model_id",
+                "model_version",
+                "model_artifact_sha256",
+                "policy_id",
+                "policy_version",
+                "policy_artifact_sha256",
+                "output",
+                "output_digest",
+                "action",
+                "action_digest",
+            )
+            for assessment in rebuilt:
+                original = original_by_id[assessment["road_set_id"]]
+                errors = [
+                    field
+                    for field in declaration_fields
+                    if original.get(field) != assessment.get(field)
+                ]
+                if errors:
+                    assessment["compact_self_validation_errors"] = errors
+            return rebuilt
+        bundles = [
+            item
+            for item in event.evidence
+            if item.level == "raw"
+            and item.modality == "traffic_road_set_overlap_raw"
+        ]
+        if not bundles:
+            return default
+        if len(bundles) != 1:
+            raise ValueError(
+                "traffic cloud fusion requires one canonical road-set overlap bundle"
+            )
+        inline = bundles[0].inline
+        if not isinstance(inline, dict):
+            raise ValueError("traffic road-set overlap bundle must be inline JSON")
+        if (
+            int(inline.get("schema_version", 0)) != 2
+            or inline.get("kind")
+            != "canonical_road_set_overlap_raw_bundle"
+        ):
+            raise ValueError("traffic road-set overlap bundle contract is invalid")
+        raw_observations = inline.get("observations", [])
+        if not isinstance(raw_observations, list):
+            raise ValueError("traffic road-set overlap observations must be a list")
+        expected_sample_id = int(event.scene_payload.get("sample_id", -1))
+        expected_split = str(event.scene_payload.get("sample_split", ""))
+        for observation in raw_observations:
+            if (
+                not isinstance(observation, dict)
+                or str(observation.get("dataset", "")) != "PEMS08"
+                or str(observation.get("split", "")) != expected_split
+                or int(observation.get("sample_id", -2))
+                != expected_sample_id
+                or str(observation.get("window_id", ""))
+                != "PEMS08:{}:{}".format(
+                    expected_split, expected_sample_id
+                )
+            ):
+                raise ValueError(
+                    "pulled road-set raw observation window is invalid"
+                )
+        return build_overlap_partial_assessments(
+            catalog,
+            event.scope.region_id,
+            member,
+            [
+                dict(value)
+                for value in raw_observations
+                if isinstance(value, dict)
+            ],
+            self._approved_road_set_model_artifact_sha256(),
+            self._load_road_set_rule_config(),
+            "cloud_pulled_raw",
+        )
 
     def _prepare_cloud_feature_input(
         self,
@@ -1263,6 +1775,17 @@ class TrafficPlugin(ScenePlugin):
         return rule_teacher_decision(payload, decision_source=source)
 
     def warmup(self) -> None:
+        if self.coordination_policy_mode != "disabled":
+            if (
+                self.coordination_policy_path is None
+                or not self.coordination_policy_path.is_dir()
+            ):
+                raise FileNotFoundError(
+                    "traffic coordination policy not found: {}".format(
+                        self.coordination_policy_path
+                    )
+                )
+            self._load_coordination_policy()
         if self.global_optimizer_mode != "disabled":
             if self.global_objective_path is None or not self.global_objective_path.is_file():
                 raise FileNotFoundError(
@@ -1295,21 +1818,6 @@ class TrafficPlugin(ScenePlugin):
                 raise ValueError(
                     "traffic current-state student and feature codec schemas differ"
                 )
-        if self.defer_gate_path is not None:
-            if not self.defer_gate_path.is_file():
-                raise FileNotFoundError(
-                    "traffic defer gate not found: {}".format(self.defer_gate_path)
-                )
-            if (
-                self.edge_student_path is None
-                and self.current_state_edge_student_path is None
-            ):
-                raise ValueError("traffic defer gate requires an edge student")
-            gate = self._load_defer_gate()
-            if list(gate.get("base_feature_names", [])) != list(
-                self._load_edge_student().get("feature_names", [])
-            ):
-                raise ValueError("traffic defer gate and edge student schemas differ")
         self._edge_llm.warmup()
         cloud_contracts = []
         if self.cloud_model_path is not None:
@@ -1386,8 +1894,6 @@ class TrafficPlugin(ScenePlugin):
             is not None,
             "current_state_edge_student_loaded": self._current_state_edge_student
             is not None,
-            "defer_gate_configured": self.defer_gate_path is not None,
-            "defer_gate_loaded": self._defer_gate is not None,
             "feature_codec_configured": self.feature_codec_path is not None,
             "feature_codec_loaded": self._feature_codec is not None,
             "feature_codec": self._feature_codec.describe()
@@ -1424,6 +1930,20 @@ class TrafficPlugin(ScenePlugin):
                 if self._global_objective is not None
                 else None
             ),
+            "coordination_policy_mode": self.coordination_policy_mode,
+            "coordination_policy_configured": self.coordination_policy_path
+            is not None,
+            "coordination_policy_loaded": self._coordination_policy is not None,
+            "coordination_policy_version": self._coordination_policy.version
+            if self._coordination_policy is not None
+            else None,
+            "coordination_policy_production_activation_allowed": (
+                self._coordination_policy_package[
+                    "production_activation_allowed"
+                ]
+                if self._coordination_policy_package is not None
+                else None
+            ),
             "edge_llm": self._edge_llm.health(),
         }
 
@@ -1442,82 +1962,28 @@ class TrafficPlugin(ScenePlugin):
             self.global_optimizer_mode,
         )
 
-    def _apply_defer_gate(
+    def _attach_local_uncertainty(
         self,
         event: SemanticEvent,
         student_decision: Any,
     ) -> Any:
-        from traffic_system.decision_utils import (
-            DECISION_CLASSES,
-            extract_feature_vector,
-            rule_teacher_decision,
-        )
+        """Record deterministic Student/rule signals without selecting a route."""
+        from traffic_system.decision_utils import rule_teacher_decision
+
         rule = rule_teacher_decision(
             event.scene_payload,
             decision_source="traffic_local_safety_policy",
         )
         student_name = str(student_decision.decision)
         rule_name = str(rule["decision"])
-        if student_name not in DECISION_CLASSES or rule_name not in DECISION_CLASSES:
-            raise ValueError("traffic defer gate received an unknown decision class")
         student_confidence = float(student_decision.confidence)
         student_available = bool(
             self.edge_student_path is not None
             or self.current_state_edge_student_path is not None
         )
-        choice = "edge_student"
-        gate_confidence: Optional[float] = None
-        selected = student_decision
         uses_current_state_contract = self._uses_current_state_contract(
             event.scene_payload
         )
-        use_legacy_defer_gate = bool(
-            self.defer_gate_path is not None and not uses_current_state_contract
-        )
-        if use_legacy_defer_gate:
-            from traffic_system.defer_gate import (
-                GATE_CLASSES,
-                build_gate_features,
-                predict_defer_gate,
-            )
-
-            gate = self._load_defer_gate()
-            base_vector, feature_names = extract_feature_vector(event.scene_payload)
-            if list(feature_names) != list(gate["base_feature_names"]):
-                raise ValueError("traffic defer gate base feature schema mismatch")
-            gate_features = build_gate_features(
-                np.asarray([base_vector], dtype=np.float64),
-                np.asarray([DECISION_CLASSES.index(rule_name)], dtype=np.int64),
-                np.asarray([DECISION_CLASSES.index(student_name)], dtype=np.int64),
-                np.asarray([student_confidence], dtype=np.float64),
-            )
-            choices, confidences = predict_defer_gate(gate_features, gate)
-            choice = GATE_CLASSES[int(choices[0])]
-            gate_confidence = float(confidences[0])
-            if choice in {"local_rule", "defer_cloud"}:
-                actions = [
-                    self._attach_boundary_resources(
-                        _traffic_action(action, event.scope.region_id),
-                        event.scope.region_id,
-                    )
-                    for action in rule.get("actions", [])
-                ]
-                selected = build_decision(
-                    event=event,
-                    decision=rule_name,
-                    actions=actions,
-                    confidence=_safe_float(
-                        rule.get("confidence"), event.prediction.confidence
-                    ),
-                    reason=str(rule.get("reason", "traffic local safety policy")),
-                    source=str(
-                        rule.get(
-                            "decision_source", "traffic_local_safety_policy"
-                        )
-                    ),
-                    policy_version=self.policy_version,
-                )
-
         disagreement = student_available and student_name != rule_name
         uncertainty = event.metadata.get("model_uncertainty", {})
         uncertainty = dict(uncertainty) if isinstance(uncertainty, dict) else {}
@@ -1533,7 +1999,6 @@ class TrafficPlugin(ScenePlugin):
             student_available
             and student_confidence < self._edge_llm.student_confidence_threshold
         )
-        defer_recommended = choice == "defer_cloud"
         uncertainty_update = {
             "score": round(
                 max(
@@ -1553,21 +2018,17 @@ class TrafficPlugin(ScenePlugin):
             "prediction_set": prediction_set,
             "prediction_set_size": len(prediction_set),
             "student_rule_disagreement": disagreement,
-            "defer_recommended": defer_recommended,
             "requires_review": bool(
                 low_student_confidence
                 or len(prediction_set) > 1
                 or disagreement
-                or defer_recommended
             ),
-            "source": "student_rule_defer_signals",
+            "source": "student_rule_signals",
         }
         if uses_current_state_contract:
             synchronous_reasons = []
             if len(prediction_set) > 1:
                 synchronous_reasons.append("prediction_set_ambiguous")
-            if defer_recommended:
-                synchronous_reasons.append("defer_recommended")
             if (
                 student_available
                 and disagreement
@@ -1590,23 +2051,9 @@ class TrafficPlugin(ScenePlugin):
                 }
             )
         uncertainty.update(uncertainty_update)
-        metadata = dict(selected.metadata)
+        metadata = dict(student_decision.metadata)
         metadata.update(
             {
-                "traffic_selective_defer_enabled": use_legacy_defer_gate,
-                "traffic_defer_gate_skipped_for_current_state": bool(
-                    self.defer_gate_path is not None and not use_legacy_defer_gate
-                ),
-                "traffic_defer_gate_choice": choice,
-                "traffic_defer_gate_confidence": round(gate_confidence, 6)
-                if gate_confidence is not None
-                else None,
-                "traffic_defer_recommended": defer_recommended,
-                "traffic_routing_risk_level": str(
-                    event.metadata.get(
-                        "regional_risk_level", event.prediction.label
-                    )
-                ),
                 "traffic_student_candidate_decision": student_name,
                 "traffic_student_candidate_confidence": round(
                     student_confidence, 6
@@ -1623,7 +2070,7 @@ class TrafficPlugin(ScenePlugin):
                 else {},
             }
         )
-        return replace(selected, metadata=metadata)
+        return replace(student_decision, metadata=metadata)
 
     def _resolve_current_state_synchronous_uncertainty(
         self,
@@ -1666,32 +2113,12 @@ class TrafficPlugin(ScenePlugin):
         metadata["model_uncertainty"] = uncertainty
         return replace(decision, metadata=metadata)
 
-    def routing_advice(
-        self,
-        event: SemanticEvent,
-        local_decision: Any,
-    ) -> Dict[str, Any]:
-        del event
-        metadata = local_decision.metadata
-        if not bool(metadata.get("traffic_selective_defer_enabled", False)):
-            return {}
-        return {
-            "selective_defer": True,
-            "defer_recommended": bool(
-                metadata.get("traffic_defer_recommended", False)
-            ),
-            "routing_risk_level": str(
-                metadata.get("traffic_routing_risk_level", "low")
-            ),
-            "source": "traffic_defer_gate",
-        }
-
     def cloud_submission_metadata(
         self,
         event: SemanticEvent,
         local_decision: Any,
     ) -> Dict[str, Any]:
-        """Carry Student/defer uncertainty into cloud routing and review policy."""
+        """Carry Student/rule uncertainty into cloud review policy."""
         event_uncertainty = event.metadata.get("model_uncertainty", {})
         event_uncertainty = (
             dict(event_uncertainty) if isinstance(event_uncertainty, dict) else {}
@@ -1958,14 +2385,11 @@ class TrafficPlugin(ScenePlugin):
                 metadata.update(framework_metadata)
                 decision = replace(decision, metadata=metadata)
             if not cloud:
-                decision = self._apply_defer_gate(event, decision)
-                defer_metadata = {
+                decision = self._attach_local_uncertainty(event, decision)
+                local_signal_metadata = {
                     key: value
                     for key, value in decision.metadata.items()
-                    if key.startswith("traffic_defer_")
-                    or key.startswith("traffic_selective_")
-                    or key.startswith("traffic_routing_")
-                    or key in {
+                    if key in {
                         "traffic_student_candidate_decision",
                         "traffic_student_candidate_confidence",
                         "traffic_rule_candidate_decision",
@@ -1975,24 +2399,15 @@ class TrafficPlugin(ScenePlugin):
                     }
                 }
                 decision = self._edge_llm.decide(event, decision, self.policy_version)
-                if defer_metadata:
+                if local_signal_metadata:
                     decision = replace(
                         decision,
-                        metadata={**decision.metadata, **defer_metadata},
+                        metadata={**decision.metadata, **local_signal_metadata},
                     )
                 decision = self._resolve_current_state_synchronous_uncertainty(
                     event,
                     decision,
                 )
-                if bool(
-                    decision.metadata.get("traffic_selective_defer_enabled", False)
-                ):
-                    metadata = dict(decision.metadata)
-                    if metadata.get("edge_decision_path") == "student":
-                        metadata["edge_decision_path"] = "defer_gate_{}".format(
-                            metadata.get("traffic_defer_gate_choice", "unknown")
-                        )
-                    decision = replace(decision, metadata=metadata)
                 decision = self._ensure_operational_safety(event, decision)
             return decision
         source = "traffic_cloud_candidates" if cloud else "traffic_edge_candidates"
@@ -2011,15 +2426,391 @@ class TrafficPlugin(ScenePlugin):
             cloud,
         )
 
+    def _apply_coordination_policy(
+        self,
+        event: SemanticEvent,
+        local_decision: DecisionEnvelope,
+    ) -> DecisionEnvelope:
+        """Apply the separately versioned coordination layer after local Q8.
+
+        The default is disabled and therefore byte-for-byte preserves the old
+        decision object.  Shadow mode records a suggestion only.  Active mode
+        is fail-closed at package load time unless the frozen production gate
+        explicitly permits activation.
+        """
+
+        if self.coordination_policy_mode == "disabled":
+            return local_decision
+        metadata = dict(local_decision.metadata)
+        raw_context = event.scene_payload.get("neighbor_context")
+        local_action = DECISION_TO_ACTION.get(local_decision.decision)
+        if not isinstance(raw_context, dict) or local_action is None:
+            metadata["coordination_policy"] = {
+                "mode": self.coordination_policy_mode,
+                "applied": False,
+                "reason_code": (
+                    "NEIGHBOR_CONTEXT_UNAVAILABLE"
+                    if not isinstance(raw_context, dict)
+                    else "LOCAL_ACTION_OUTSIDE_A_TO_F"
+                ),
+                "q8_model_input_changed": False,
+            }
+            return replace(local_decision, metadata=metadata)
+
+        policy = self._load_coordination_policy()
+        declared_policy_version = str(
+            event.scene_payload.get("coordination_policy_version", "")
+        ).strip()
+        if declared_policy_version != policy.version:
+            metadata["coordination_policy"] = {
+                "mode": self.coordination_policy_mode,
+                "applied": False,
+                "reason_code": "COORDINATION_POLICY_VERSION_MISMATCH",
+                "declared_policy_version": declared_policy_version or None,
+                "loaded_policy_version": policy.version,
+                "q8_model_input_changed": False,
+            }
+            return replace(local_decision, metadata=metadata)
+        recommendation = policy.recommend(local_action, raw_context)
+        coordination_metadata = {
+            **recommendation.to_dict(),
+            "mode": self.coordination_policy_mode,
+            "applied": False,
+            "q8_model_input_changed": False,
+            "q8_model_parameter_changed": False,
+            "collaboration_scheduler_changed": False,
+        }
+        metadata["coordination_policy"] = coordination_metadata
+        if (
+            self.coordination_policy_mode != "active"
+            or not recommendation.changed
+        ):
+            return replace(local_decision, metadata=metadata)
+
+        from traffic_system.decision_utils import build_decision_from_student_class
+
+        selected_decision = ACTION_TO_DECISION[recommendation.selected_action]
+        legacy = build_decision_from_student_class(
+            event.scene_payload,
+            selected_decision,
+            local_decision.confidence,
+            decision_source="edge_neighbor_coordination_policy",
+        )
+        actions = [
+            self._attach_boundary_resources(
+                _traffic_action(action, event.scope.region_id),
+                event.scope.region_id,
+            )
+            for action in legacy.get("actions", [])
+        ]
+        adjusted = build_decision(
+            event=event,
+            decision=selected_decision,
+            actions=actions,
+            confidence=local_decision.confidence,
+            reason=(
+                "verified neighbor-aware policy {} changed {} to {} ({})"
+            ).format(
+                policy.version,
+                recommendation.local_action,
+                recommendation.selected_action,
+                recommendation.reason_code,
+            ),
+            source="edge_neighbor_coordination_policy",
+            policy_version=local_decision.policy_version,
+            route=local_decision.route,
+            status=local_decision.status,
+        )
+        coordination_metadata["applied"] = True
+        adjusted = replace(
+            adjusted,
+            metadata={**metadata, "coordination_policy": coordination_metadata},
+        )
+        # Existing scene safety semantics remain the final action invariant.
+        return self._ensure_operational_safety(event, adjusted)
+
+    @staticmethod
+    def _action_road_set_ids(action: Action) -> List[str]:
+        road_set_ids = []
+        raw_parameter_ids = action.parameters.get("road_set_ids", [])
+        if isinstance(raw_parameter_ids, list):
+            road_set_ids.extend(str(value) for value in raw_parameter_ids)
+        for resource_id in action.resource_ids:
+            if resource_id.startswith("traffic_road_set:"):
+                road_set_ids.append(resource_id.split(":", 1)[1])
+        return list(dict.fromkeys(value for value in road_set_ids if value))
+
+    @staticmethod
+    def _canonical_road_set_action(
+        road_set_id: str, partial: Mapping[str, Any]
+    ) -> Optional[Action]:
+        raw_action = partial.get("action", {})
+        if not isinstance(raw_action, Mapping):
+            raise ValueError("canonical road-set action must be an object")
+        action_type = str(raw_action.get("action_type", "")).strip()
+        if action_type in {"", "no_action"}:
+            return None
+        raw_parameters = raw_action.get("parameters", {})
+        if not isinstance(raw_parameters, Mapping):
+            raise ValueError("canonical road-set action parameters must be an object")
+        resource_id = "traffic_road_set:{}".format(road_set_id)
+        parameters = dict(raw_parameters)
+        parameters.update(
+            {
+                "canonical_road_set_action": True,
+                "road_set_ids": [road_set_id],
+                "observation_id": partial.get("observation_id"),
+                "window_id": partial.get("window_id"),
+                "source_dataset_sha256": partial.get(
+                    "source_dataset_sha256"
+                ),
+                "raw_fragment_sha256": partial.get(
+                    "raw_fragment_sha256"
+                ),
+                "source_content_sha256": partial.get(
+                    "source_content_sha256"
+                ),
+                "feature_content_sha256": partial.get(
+                    "feature_content_sha256"
+                ),
+                "preprocess_version": partial.get("preprocess_version"),
+                "model_id": partial.get("model_id"),
+                "model_version": partial.get("model_version"),
+                "model_artifact_sha256": partial.get(
+                    "model_artifact_sha256"
+                ),
+                "policy_id": partial.get("policy_id"),
+                "policy_version": partial.get("policy_version"),
+                "policy_artifact_sha256": partial.get(
+                    "policy_artifact_sha256"
+                ),
+                "output_digest": partial.get("output_digest"),
+                "action_digest": partial.get("action_digest"),
+            }
+        )
+        if action_type in {
+            "variable_speed_limit",
+            "ramp_metering",
+            "regional_coordination",
+            "reroute",
+        }:
+            parameters["requires_cloud_confirmation"] = True
+        priority_by_type = {
+            "traffic_advisory": 40,
+            "variable_speed_limit": 70,
+            "ramp_metering": 70,
+            "regional_coordination": 80,
+            "reroute": 80,
+        }
+        return Action(
+            action_type=action_type,
+            target_ids=[resource_id],
+            resource_ids=[resource_id],
+            parameters=parameters,
+            reason=(
+                "deterministic policy over the canonical shared overlap "
+                "observation"
+            ),
+            priority=priority_by_type.get(action_type, 50),
+        )
+
+    def _attach_road_set_decisions(
+        self,
+        event: SemanticEvent,
+        decision: DecisionEnvelope,
+    ) -> DecisionEnvelope:
+        """Expose one auditable member decision per shared road-set object."""
+        raw_contexts = event.scene_payload.get(
+            "road_set_contexts", event.metadata.get("road_set_contexts", [])
+        )
+        if not isinstance(raw_contexts, list) or not raw_contexts:
+            return decision
+        aggregation = event.metadata.get("aggregation", {})
+        aggregation_member = (
+            str(aggregation.get("member", event.edge_id))
+            if isinstance(aggregation, dict)
+            else event.edge_id
+        )
+        own_assessments = {
+            str(value.get("road_set_id", "")): value
+            for value in self._effective_road_set_assessments(event)
+            if isinstance(value, dict)
+            and str(value.get("member_region", "")) == event.scope.region_id
+        }
+        actions = list(decision.actions)
+        existing_canonical_ids = {
+            road_set_id
+            for action in actions
+            if bool(action.parameters.get("canonical_road_set_action", False))
+            for road_set_id in self._action_road_set_ids(action)
+        }
+        for road_set_id, partial in sorted(own_assessments.items()):
+            if not road_set_id or road_set_id in existing_canonical_ids:
+                continue
+            canonical_action = self._canonical_road_set_action(
+                road_set_id, partial
+            )
+            if canonical_action is not None:
+                actions.append(canonical_action)
+                existing_canonical_ids.add(road_set_id)
+        decision = replace(decision, actions=actions)
+        road_set_decisions = []
+        for context in raw_contexts:
+            if not isinstance(context, dict):
+                continue
+            road_set_id = str(context.get("road_set_id", ""))
+            if not road_set_id:
+                continue
+            own_partial = own_assessments.get(road_set_id) or next(
+                (
+                    partial
+                    for partial in context.get("partial_assessments", [])
+                    if isinstance(partial, dict)
+                    and str(partial.get("member_region", ""))
+                    == event.scope.region_id
+                ),
+                {},
+            )
+            action_indices = [
+                index
+                for index, action in enumerate(decision.actions)
+                if road_set_id in self._action_road_set_ids(action)
+            ]
+            action_types = [
+                decision.actions[index].action_type for index in action_indices
+            ]
+            if action_indices:
+                selected_action = max(
+                    (decision.actions[index] for index in action_indices),
+                    key=lambda action: action.priority,
+                )
+                road_set_decision = (
+                    "congestion_warning"
+                    if selected_action.action_type == "traffic_advisory"
+                    else selected_action.action_type
+                )
+            elif str(
+                own_partial.get("action", {}).get("action_type", "")
+                if isinstance(own_partial.get("action"), dict)
+                else ""
+            ) == "no_action":
+                road_set_decision = "no_action"
+            elif decision.decision in {"no_action", "monitor", "abstain"}:
+                road_set_decision = decision.decision
+            else:
+                # A model may select an interior-node control that does not
+                # touch this boundary road set.  Record that fact instead of
+                # falsely copying the region decision onto every road set.
+                road_set_decision = "no_road_set_action"
+            road_set_decisions.append(
+                {
+                    "schema_version": 2,
+                    "road_set_id": road_set_id,
+                    "resource_id": "traffic_road_set:{}".format(road_set_id),
+                    "member_region": event.scope.region_id,
+                    "aggregation_member": own_partial.get(
+                        "aggregation_member",
+                        aggregation_member,
+                    ),
+                    "required_regions": list(
+                        context.get("required_regions", [])
+                    ),
+                    "required_members": list(
+                        context.get("required_members", [])
+                    ),
+                    "required_evidence_level": context.get(
+                        "required_evidence_level"
+                    ),
+                    "decision": road_set_decision,
+                    "action_indices": action_indices,
+                    "action_types": action_types,
+                    "confidence": round(
+                        _safe_float(
+                            own_partial.get("confidence"),
+                            decision.confidence,
+                        ),
+                        6,
+                    ),
+                    "observation_id": own_partial.get("observation_id"),
+                    "window_id": own_partial.get("window_id"),
+                    "source_content_sha256": own_partial.get(
+                        "source_content_sha256"
+                    ),
+                    "preprocess_version": own_partial.get(
+                        "preprocess_version"
+                    ),
+                    "model_version": own_partial.get("model_version"),
+                    "model_artifact_sha256": own_partial.get(
+                        "model_artifact_sha256"
+                    ),
+                    "policy_version": own_partial.get("policy_version"),
+                    "policy_artifact_sha256": own_partial.get(
+                        "policy_artifact_sha256"
+                    ),
+                    "output_digest": own_partial.get("output_digest"),
+                    "action_digest": own_partial.get("action_digest"),
+                    "raw_fragment_digest_recomputed": bool(
+                        own_partial.get(
+                            "raw_fragment_digest_recomputed", False
+                        )
+                    ),
+                    "deterministic_policy_recomputed": bool(
+                        own_partial.get(
+                            "deterministic_policy_recomputed", False
+                        )
+                    ),
+                    "recomputation_source": own_partial.get(
+                        "recomputation_source"
+                    ),
+                    "compact_self_validation_errors": list(
+                        own_partial.get(
+                            "compact_self_validation_errors", []
+                        )
+                    ),
+                    "road_set_conflict_suspected": bool(
+                        context.get("road_set_conflict_suspected", False)
+                    ),
+                    "conflict_kind": str(context.get("conflict_kind", "")),
+                    "conflict_reason": str(
+                        context.get("conflict_reason", "")
+                    ),
+                }
+            )
+        if not road_set_decisions:
+            return decision
+        metadata = dict(decision.metadata)
+        metadata.update(
+            {
+                "decision_granularity": "road_set",
+                "deployment_partition_region": event.scope.region_id,
+                "road_set_decisions": road_set_decisions,
+                "road_set_decision_count": len(road_set_decisions),
+                "global_action_collapsed": False,
+                "road_set_conflict_suspected": any(
+                    item["road_set_conflict_suspected"]
+                    for item in road_set_decisions
+                ),
+            }
+        )
+        return replace(decision, metadata=metadata)
+
     def edge_decide(self, event: SemanticEvent) -> Any:
-        return self._decision(event, cloud=False)
+        return self._attach_road_set_decisions(
+            event,
+            self._apply_coordination_policy(
+                event,
+                self._decision(event, cloud=False),
+            ),
+        )
 
     def cloud_decide(self, event: SemanticEvent) -> Any:
         if (
             self.cloud_model_path is None
             and self.current_state_cloud_model_path is None
         ):
-            return self._decision(event, cloud=True)
+            return self._attach_road_set_decisions(
+                event, self._decision(event, cloud=True)
+            )
         return list(self.cloud_decide_batch([event]))[0]
 
     def cloud_decide_batch(
@@ -2033,7 +2824,12 @@ class TrafficPlugin(ScenePlugin):
             self.cloud_model_path is None
             and self.current_state_cloud_model_path is None
         ):
-            return [self._decision(event, cloud=True) for event in normalized]
+            return [
+                self._attach_road_set_decisions(
+                    event, self._decision(event, cloud=True)
+                )
+                for event in normalized
+            ]
 
         decisions: List[Optional[Any]] = [None] * len(normalized)
         model_indices = [
@@ -2074,9 +2870,126 @@ class TrafficPlugin(ScenePlugin):
                     {},
                     cloud=True,
                 )
-        return [decision for decision in decisions if decision is not None]
+        return [
+            self._attach_road_set_decisions(event, decision)
+            for event, decision in zip(normalized, decisions)
+            if decision is not None
+        ]
 
     def action_conflict(self, left: Action, right: Action) -> Tuple[bool, str]:
+        shared_road_sets = sorted(
+            resource
+            for resource in set(left.resource_ids) & set(right.resource_ids)
+            if resource.startswith("traffic_road_set:")
+        )
+        if shared_road_sets:
+            left_canonical = bool(
+                left.parameters.get("canonical_road_set_action", False)
+            )
+            right_canonical = bool(
+                right.parameters.get("canonical_road_set_action", False)
+            )
+            if not (left_canonical and right_canonical):
+                return True, "overlap_action_digest_mismatch"
+            comparisons = (
+                (
+                    (
+                        "window_id",
+                        "source_dataset_sha256",
+                        "raw_fragment_sha256",
+                        "source_content_sha256",
+                    ),
+                    "overlap_content_digest_mismatch",
+                ),
+                (
+                    ("feature_content_sha256",),
+                    "overlap_feature_digest_mismatch",
+                ),
+                (
+                    ("preprocess_version",),
+                    "overlap_preprocess_version_mismatch",
+                ),
+                (
+                    (
+                        "model_id",
+                        "model_version",
+                        "model_artifact_sha256",
+                    ),
+                    "overlap_model_version_mismatch",
+                ),
+                (
+                    (
+                        "policy_id",
+                        "policy_version",
+                        "policy_artifact_sha256",
+                    ),
+                    "overlap_policy_version_mismatch",
+                ),
+                (("output_digest",), "overlap_output_digest_mismatch"),
+                (("action_digest",), "overlap_action_digest_mismatch"),
+            )
+            for fields, kind in comparisons:
+                if any(
+                    left.parameters.get(field)
+                    != right.parameters.get(field)
+                    for field in fields
+                ):
+                    return True, kind
+            if left.action_type != right.action_type:
+                return True, "overlap_action_digest_mismatch"
+            left_policy_parameters = {
+                key: value
+                for key, value in left.parameters.items()
+                if key
+                not in {
+                    "canonical_road_set_action",
+                    "road_set_ids",
+                    "observation_id",
+                    "window_id",
+                    "source_dataset_sha256",
+                    "raw_fragment_sha256",
+                    "source_content_sha256",
+                    "feature_content_sha256",
+                    "preprocess_version",
+                    "model_id",
+                    "model_version",
+                    "model_artifact_sha256",
+                    "policy_id",
+                    "policy_version",
+                    "policy_artifact_sha256",
+                    "output_digest",
+                    "action_digest",
+                    "requires_cloud_confirmation",
+                }
+            }
+            right_policy_parameters = {
+                key: value
+                for key, value in right.parameters.items()
+                if key
+                not in {
+                    "canonical_road_set_action",
+                    "road_set_ids",
+                    "observation_id",
+                    "window_id",
+                    "source_dataset_sha256",
+                    "raw_fragment_sha256",
+                    "source_content_sha256",
+                    "feature_content_sha256",
+                    "preprocess_version",
+                    "model_id",
+                    "model_version",
+                    "model_artifact_sha256",
+                    "policy_id",
+                    "policy_version",
+                    "policy_artifact_sha256",
+                    "output_digest",
+                    "action_digest",
+                    "requires_cloud_confirmation",
+                }
+            }
+            if left_policy_parameters != right_policy_parameters:
+                return True, "overlap_action_digest_mismatch"
+            return False, ""
         if left.action_type != right.action_type:
             return False, ""
         if left.action_type == "variable_speed_limit":
@@ -2105,6 +3018,20 @@ class TrafficPlugin(ScenePlugin):
         left_event: SemanticEvent,
         right_event: SemanticEvent,
     ) -> Tuple[Action, Action, str]:
+        if any(
+            resource.startswith("traffic_road_set:")
+            for resource in set(left.resource_ids) & set(right.resource_ids)
+        ):
+            # Never average, cap, or otherwise manufacture a shared-boundary
+            # control from mismatched canonical inputs/versions.  A successful
+            # exact-owner evidence pull reruns the deterministic policy; a
+            # failed pull leaves this conflict residual so authorization stays
+            # deferred.
+            return (
+                left,
+                right,
+                "canonical road-set evidence reconciliation is required",
+            )
         if left.action_type == "variable_speed_limit":
             value = round(
                 (_safe_float(left.parameters.get("target_speed_mph")) + _safe_float(right.parameters.get("target_speed_mph")))

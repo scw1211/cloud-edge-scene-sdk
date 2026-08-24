@@ -1,0 +1,102 @@
+{
+  "schema_version": "guided-deployment-profiles/v2",
+  "profiles": [
+    {
+      "id": "traffic-lab",
+      "label": "交通实验室节点池",
+      "enabled": true,
+      "allow_deploy": false,
+      "nodes": [
+        {
+          "id": "cloud-a",
+          "role": "cloud",
+          "label": "云端 A",
+          "service_url": "http://192.0.2.10:18100",
+          "ssh": {
+            "host": "192.0.2.10",
+            "user": "deployer",
+            "ssh_port": 22,
+            "identity_file": "/etc/cloud-edge/keys/id_ed25519"
+          },
+          "sdk_root": "/opt/cloud-edge-scene-sdk"
+        },
+        {
+          "id": "cloud-b",
+          "role": "cloud",
+          "label": "云端 B",
+          "service_url": "http://192.0.2.11:18100",
+          "ssh": {
+            "host": "192.0.2.11",
+            "user": "deployer",
+            "ssh_port": 22,
+            "identity_file": "/etc/cloud-edge/keys/id_ed25519"
+          },
+          "sdk_root": "/opt/cloud-edge-scene-sdk"
+        },
+        {
+          "id": "edge-1",
+          "role": "edge",
+          "label": "边缘 1",
+          "service_url": "http://192.0.2.21:18101",
+          "ssh": {
+            "host": "192.0.2.21",
+            "user": "deployer",
+            "ssh_port": 22,
+            "identity_file": "/etc/cloud-edge/keys/id_ed25519"
+          },
+          "sdk_root": "/opt/cloud-edge-scene-sdk",
+          "llama_binary": "/opt/cloud-edge-scene-sdk/runtime/bin/llama-server"
+        },
+        {
+          "id": "edge-2",
+          "role": "edge",
+          "label": "边缘 2",
+          "service_url": "http://192.0.2.22:18101",
+          "ssh": {
+            "host": "192.0.2.22",
+            "user": "deployer",
+            "ssh_port": 22,
+            "identity_file": "/etc/cloud-edge/keys/id_ed25519"
+          },
+          "sdk_root": "/opt/cloud-edge-scene-sdk",
+          "llama_binary": "/opt/cloud-edge-scene-sdk/runtime/bin/llama-server"
+        },
+        {
+          "id": "edge-3",
+          "role": "edge",
+          "label": "边缘 3",
+          "service_url": "http://192.0.2.23:18101",
+          "ssh": {
+            "host": "192.0.2.23",
+            "user": "deployer",
+            "ssh_port": 22,
+            "identity_file": "/etc/cloud-edge/keys/id_ed25519"
+          },
+          "sdk_root": "/opt/cloud-edge-scene-sdk",
+          "llama_binary": "/opt/cloud-edge-scene-sdk/runtime/bin/llama-server"
+        }
+      ],
+      "default_topology": {
+        "primary_cloud_id": "cloud-a",
+        "cloud_node_ids": [
+          "cloud-a",
+          "cloud-b"
+        ],
+        "edge_bindings": [
+          {
+            "edge_id": "edge-1",
+            "cloud_id": "cloud-a"
+          },
+          {
+            "edge_id": "edge-2",
+            "cloud_id": "cloud-a"
+          },
+          {
+            "edge_id": "edge-3",
+            "cloud_id": "cloud-b"
+          }
+        ]
+      }
+    }
+  ]
+}

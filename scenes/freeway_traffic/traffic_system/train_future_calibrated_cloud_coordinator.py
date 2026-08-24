@@ -14,7 +14,6 @@ from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.metrics import accuracy_score, f1_score
 
 from traffic_system.decision_utils import DECISION_CLASSES, extract_feature_vector, rule_teacher_decision, save_json
-from traffic_system.edge_student import load_student_model, predict_student
 from traffic_system.evaluate_future_truth_policy import (
     classification_report,
     load_evaluation_arrays,
@@ -31,7 +30,6 @@ from traffic_system.infer_joint_risk_astgcn import (
     torch_load_trusted,
 )
 from traffic_system.risk_labels import RISK_CLASSES, denormalize
-from traffic_system.scheduler import AdaptiveScheduler, NetworkSnapshot
 from traffic_system.train_joint_risk_astgcn import clip_physical_state, select_device
 
 
@@ -40,7 +38,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", default="configurations/PEMS08_astgcn.conf")
     parser.add_argument("--data_npz", default="../data/PEMS08/PEMS08_r1_d0_w0_astcgn_multitask.npz")
     parser.add_argument("--risk_labels", default="datasets/risk_labels_pems08_metis4.npz")
-    parser.add_argument("--student_model", default="models/edge_student_freeway_joint_metis4.json")
     parser.add_argument(
         "--checkpoint",
         default="experiments/PEMS08/joint_risk_astgcn_metis4_flowprio2_frozen/best.pt",
@@ -59,8 +56,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_depths", default="12,16,none")
     parser.add_argument("--min_samples_leaf", default="1,2")
     parser.add_argument("--max_features", default="sqrt")
-    parser.add_argument("--scheduler_thresholds", default="0.45,0.50,0.55,0.60,0.65,0.70,0.75")
-    parser.add_argument("--scheduler_accuracy_tolerance", type=float, default=0.01)
     parser.add_argument("--bootstrap_samples", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
@@ -95,13 +90,6 @@ def parse_positive_ints(value: str, name: str) -> List[int]:
     if not values or min(values) <= 0:
         raise ValueError("{} must contain positive integers".format(name))
     return values
-
-
-def parse_thresholds(value: str) -> List[float]:
-    thresholds = [float(item.strip()) for item in value.split(",") if item.strip()]
-    if not thresholds or any(threshold <= 0.0 or threshold >= 1.0 for threshold in thresholds):
-        raise ValueError("scheduler_thresholds must be in (0, 1)")
-    return sorted(set(thresholds))
 
 
 def parse_max_features(value: str) -> List[Any]:
@@ -154,7 +142,6 @@ def extract_split(
     data_path: Path,
     labels_path: Path,
     model: torch.nn.Module,
-    student_model: Dict[str, Any],
     partitions: Sequence[Sequence[int]],
     capabilities: Sequence[Dict[str, Any]],
     device: torch.device,
@@ -169,9 +156,6 @@ def extract_split(
     rule_predictions: List[int] = []
     sample_ids: List[int] = []
     event_ids: List[str] = []
-    student_predictions: List[int] = []
-    student_confidences: List[float] = []
-    scheduler_events: List[Dict[str, Any]] = []
     feature_names: List[str] = []
     for batch_start in range(0, arrays["split_x"].shape[0], batch_size):
         batch_end = min(batch_start + batch_size, arrays["split_x"].shape[0])
@@ -251,34 +235,11 @@ def extract_split(
                 feature_names = list(names)
                 target_name = str(rule_teacher_decision(truth_event)["decision"])
                 rule_name = str(rule_teacher_decision(predicted_event)["decision"])
-                student_name, student_confidence, _ = predict_student(predicted_event, student_model)
                 features.append(vector)
                 targets.append(DECISION_CLASSES.index(target_name))
                 rule_predictions.append(DECISION_CLASSES.index(rule_name))
                 sample_ids.append(sample_id)
                 event_ids.append(str(predicted_event["event_id"]))
-                student_predictions.append(DECISION_CLASSES.index(student_name))
-                student_confidences.append(float(student_confidence))
-                summary = predicted_event["region_summary"]
-                scheduler_events.append(
-                    {
-                        "upload_required": bool(predicted_event["upload_required"]),
-                        "region_summary": {
-                            "region_risk_level": summary["region_risk_level"],
-                            "max_node_risk_level": summary["max_node_risk_level"],
-                            "region_risk_confidence": summary["region_risk_confidence"],
-                            **(
-                                {
-                                    "region_risk_calibration": summary[
-                                        "region_risk_calibration"
-                                    ]
-                                }
-                                if "region_risk_calibration" in summary
-                                else {}
-                            ),
-                        },
-                    }
-                )
         print("{} [{}/{}]".format(split, batch_end, arrays["split_x"].shape[0]), flush=True)
     return {
         "x": np.asarray(features, dtype=np.float64),
@@ -286,9 +247,6 @@ def extract_split(
         "rule": np.asarray(rule_predictions, dtype=np.int64),
         "sample_ids": np.asarray(sample_ids, dtype=np.int64),
         "event_ids": event_ids,
-        "student": np.asarray(student_predictions, dtype=np.int64),
-        "student_confidence": np.asarray(student_confidences, dtype=np.float64),
-        "scheduler_events": scheduler_events,
         "feature_names": feature_names,
     }
 
@@ -328,84 +286,6 @@ def make_model(
     )
 
 
-def select_scheduler_tradeoff(
-    candidates: Sequence[Dict[str, Any]],
-    accuracy_tolerance: float,
-) -> Dict[str, Any]:
-    if not candidates or accuracy_tolerance < 0.0:
-        raise ValueError("Scheduler candidates are empty or tolerance is negative")
-    best_accuracy = max(float(candidate["accuracy"]) for candidate in candidates)
-    eligible = [
-        candidate
-        for candidate in candidates
-        if float(candidate["accuracy"]) >= best_accuracy - accuracy_tolerance
-    ]
-    selected = min(
-        eligible,
-        key=lambda item: (
-            float(item["cloud_request_rate"]),
-            -float(item["accuracy"]),
-            -float(item["macro_f1"]),
-        ),
-    )
-    return {
-        **selected,
-        "best_candidate_accuracy": round(best_accuracy, 6),
-        "accuracy_tolerance": accuracy_tolerance,
-    }
-
-
-def calibrate_scheduler(
-    validation: Dict[str, Any],
-    tune_indices: np.ndarray,
-    cloud_model: ExtraTreesClassifier,
-    thresholds: Sequence[float],
-    accuracy_tolerance: float,
-) -> Dict[str, Any]:
-    cloud_predictions = cloud_model.predict(validation["x"][tune_indices])
-    network = NetworkSnapshot(available=True, rtt_ms=15.0, jitter_ms=3.0, loss_rate=0.0, cloud_queue_ms=1.0)
-    candidates = []
-    for threshold in thresholds:
-        scheduler = AdaptiveScheduler(
-            confidence_threshold=threshold,
-            edge_compute_ms=74.0,
-            cloud_compute_ms=32.0,
-        )
-        final_predictions = []
-        route_counts: Dict[str, int] = {}
-        for local_index, row_index in enumerate(tune_indices.tolist()):
-            schedule = scheduler.schedule(
-                validation["scheduler_events"][row_index],
-                float(validation["student_confidence"][row_index]),
-                network,
-            )
-            route_counts[schedule.route] = route_counts.get(schedule.route, 0) + 1
-            if schedule.waits_for_cloud:
-                final_predictions.append(int(cloud_predictions[local_index]))
-            else:
-                final_predictions.append(int(validation["student"][row_index]))
-        predictions = np.asarray(final_predictions, dtype=np.int64)
-        targets = validation["y"][tune_indices]
-        cloud_requests = sum(
-            count for route, count in route_counts.items() if route in {"cloud_sync", "cloud_async"}
-        )
-        candidates.append(
-            {
-                "confidence_threshold": threshold,
-                "accuracy": round(float(accuracy_score(targets, predictions)), 6),
-                "macro_f1": round(float(f1_score(targets, predictions, average="macro")), 6),
-                "cloud_request_rate": round(cloud_requests / len(tune_indices), 6),
-                "route_counts": route_counts,
-            }
-        )
-    return {
-        "selection_rule": "lowest cloud request rate within configured accuracy tolerance of the best validation accuracy",
-        "network_profile": network.__dict__,
-        "candidates": candidates,
-        "selected": select_scheduler_tradeoff(candidates, accuracy_tolerance),
-    }
-
-
 def write_markdown(result: Dict[str, Any], path: Path) -> None:
     test = result["test"]
     rule = result["predicted_risk_rule_test"]
@@ -418,9 +298,6 @@ def write_markdown(result: Dict[str, Any], path: Path) -> None:
         ),
         "- 最终评测：完整 test 时段，一次性评估，不参与选参。",
         "- 模型定位：云端毫秒级专用协调器；Qwen 仍负责异步复杂复核。",
-        "- 调度阈值：仅在 val 隔离尾段选择，置信阈值为 `{}`。".format(
-            result["scheduler_calibration"]["selected"]["confidence_threshold"]
-        ),
         "",
         "| 模型 | Accuracy | Macro-F1 | Weighted-F1 | 95% CI |",
         "| --- | ---: | ---: | ---: | ---: |",
@@ -453,9 +330,6 @@ def main() -> None:
     max_depths = parse_depths(args.max_depths)
     min_leaves = parse_positive_ints(args.min_samples_leaf, "min_samples_leaf")
     max_features_values = parse_max_features(args.max_features)
-    scheduler_thresholds = parse_thresholds(args.scheduler_thresholds)
-    if args.scheduler_accuracy_tolerance < 0.0:
-        raise ValueError("scheduler_accuracy_tolerance must be non-negative")
     device = select_device(args.device)
     config = load_config(args.config)
     with Path(args.topology).open("r", encoding="utf-8") as file_obj:
@@ -477,14 +351,12 @@ def main() -> None:
         build_control_capabilities(partitions, adj_mx, partition_id)
         for partition_id in range(len(partitions))
     ]
-    student_model = load_student_model(Path(args.student_model))
     extraction_started = time.perf_counter()
     validation = extract_split(
         "val",
         Path(args.data_npz),
         Path(args.risk_labels),
         model,
-        student_model,
         partitions,
         capabilities,
         device,
@@ -497,7 +369,6 @@ def main() -> None:
         Path(args.data_npz),
         Path(args.risk_labels),
         model,
-        student_model,
         partitions,
         capabilities,
         device,
@@ -537,21 +408,6 @@ def main() -> None:
                 )
                 print("candidate", candidates[-1], flush=True)
     selected = max(candidates, key=lambda item: (item["macro_f1"], item["accuracy"]))
-    tuning_cloud_model = make_model(
-        args.candidate_trees,
-        selected["max_depth"],
-        int(selected["min_samples_leaf"]),
-        args.seed,
-        selected["max_features"],
-    )
-    tuning_cloud_model.fit(validation["x"][train_indices], validation["y"][train_indices])
-    scheduler_calibration = calibrate_scheduler(
-        validation,
-        tune_indices,
-        tuning_cloud_model,
-        scheduler_thresholds,
-        args.scheduler_accuracy_tolerance,
-    )
     final_model = make_model(
         args.final_trees,
         selected["max_depth"],
@@ -576,7 +432,6 @@ def main() -> None:
             "label_source": "future flow/occupancy/speed -> frozen FCM risk -> fixed safety policy",
             "context_fusion": "road-graph adjacent regions at the same timestamp",
             "selected_hyperparameters": selected,
-            "scheduler_confidence_threshold": scheduler_calibration["selected"]["confidence_threshold"],
         },
     }
     joblib.dump(payload, model_path, compress=3)
@@ -603,7 +458,6 @@ def main() -> None:
             "candidate_trees": args.candidate_trees,
             "final_trees": args.final_trees,
         },
-        "scheduler_calibration": scheduler_calibration,
         "validation_full_fit": evaluate(
             validation["y"], final_model.predict(validation["x"]), args.bootstrap_samples, args.seed
         ),

@@ -193,6 +193,20 @@ class _GroupedCloudReviewPlugin(_AggregationPlugin):
         )
 
 
+class _AsyncGroupedCloudReviewPlugin(_GroupedCloudReviewPlugin):
+    def cloud_decide(self, event: SemanticEvent):
+        baseline = super().cloud_decide(event)
+        policy = dict(baseline.metadata["cloud_llm_review_policy"])
+        policy["execution_mode"] = "async_advisory"
+        return replace(
+            baseline,
+            metadata={
+                **baseline.metadata,
+                "cloud_llm_review_policy": policy,
+            },
+        )
+
+
 class _CountingCloudReviewer:
     def __init__(self):
         self.calls = 0
@@ -1067,6 +1081,24 @@ class AsyncSummaryDeliveryTest(unittest.TestCase):
             self.assertTrue(
                 all("cloud_llm_review" in item.metadata for item in decisions)
             )
+        finally:
+            registry.close()
+
+    def test_async_cloud_llm_audit_never_blocks_business_decision(self) -> None:
+        plugin = _AsyncGroupedCloudReviewPlugin(False)
+        reviewer = _CountingCloudReviewer()
+        registry = SceneRegistry([plugin])
+        try:
+            event = plugin.normalize(SceneEventEnvelope.from_dict(_payload()))
+            decision = CloudRuntime(registry, reviewer=reviewer).decide(event)
+
+            self.assertEqual(decision.decision, "monitor")
+            self.assertEqual(decision.status, "final")
+            self.assertEqual(reviewer.calls, 0)
+            self.assertTrue(decision.metadata["cloud_llm_audit_requested"])
+            self.assertEqual(decision.metadata["cloud_llm_audit_status"], "queued")
+            self.assertFalse(decision.metadata["cloud_llm_business_result_blocked"])
+            self.assertNotIn("cloud_llm_review", decision.metadata)
         finally:
             registry.close()
 

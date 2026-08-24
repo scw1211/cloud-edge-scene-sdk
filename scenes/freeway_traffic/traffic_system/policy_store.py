@@ -204,8 +204,15 @@ def default_payload(project_root: Path) -> Dict[str, Any]:
     astgcn_config_path = project_root / "configurations/PEMS08_astgcn.conf"
     student_path = project_root / "models/edge_student_freeway_joint_metis4.json"
     risk_calibrator_path = project_root / "models/region_risk_conformal.json"
-    defer_gate_path = project_root / "models/edge_defer_gate.npz"
-    qwen_path = project_root / "models/gguf/qwen35_0_8b_freeway_action_token_v9_text_only_q6_k.gguf"
+    qwen_path = (
+        project_root
+        / ".."
+        / ".."
+        / "model_bundle"
+        / "final"
+        / "qwen3_5_0p8b_q4"
+        / "joint_static_raw16.Q4_K_M.gguf"
+    ).resolve()
     cloud_path = project_root / "models/cloud_coordinator_future_calibrated.joblib"
     runtime_config_path = project_root / "deployment/edge/edge_runtime_config.json"
     artifacts = []
@@ -214,7 +221,6 @@ def default_payload(project_root: Path) -> Dict[str, Any]:
         ("edge_perception_config", "edge", astgcn_config_path),
         ("realtime_student", "edge", student_path),
         ("region_risk_calibrator", "edge", risk_calibrator_path),
-        ("selective_defer_gate", "edge", defer_gate_path),
         ("cloud_coordinator", "cloud", cloud_path),
         ("edge_llm_student", "edge", qwen_path),
         ("edge_runtime_config", "edge", runtime_config_path),
@@ -224,7 +230,7 @@ def default_payload(project_root: Path) -> Dict[str, Any]:
                 {
                     "role": role,
                     "target": target,
-                    "path": str(path.relative_to(project_root)),
+                    "path": os.path.relpath(path, project_root),
                     "size_bytes": path.stat().st_size,
                     "sha256": artifact_sha256(path),
                 }
@@ -236,17 +242,10 @@ def default_payload(project_root: Path) -> Dict[str, Any]:
             "confidence_threshold": 0.70,
             "edge_compute_ms": 52.0,
             "cloud_compute_ms": 12.0,
-            "routing_revision": "conformal_selective_defer_v1",
-            "calibration_source": "temporally_isolated_validation_future_state_reference",
-            "risk_scope": "region_head_with_node_distribution_in_gate",
+            "routing_revision": "collaboration_scheduler_rules_v1",
+            "calibration_source": "frozen_framework_rule_configuration",
+            "risk_scope": "normalized_event_risk_and_operational_safety_signals",
             "severe_always_reviewed": True,
-        },
-        "selective_defer": {
-            "enabled": True,
-            "gate": "models/edge_defer_gate.npz",
-            "risk_calibrator": "models/region_risk_conformal.json",
-            "conformal_method": "marginal_aps",
-            "local_experts": ["fixed_safety_policy", "distilled_edge_student"],
         },
         "edge_llm": {
             "modality": "text_only",

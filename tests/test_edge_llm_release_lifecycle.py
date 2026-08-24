@@ -22,7 +22,10 @@ from edge_llm_factory.contracts import (  # noqa: E402
     write_json_object,
 )
 from edge_llm_factory.release_store import ReleaseStore  # noqa: E402
-from edge_llm_factory.release_runtime import _runtime_matches_release  # noqa: E402
+from edge_llm_factory.release_runtime import (  # noqa: E402
+    _runtime_matches_release,
+    load_active_edge_llm,
+)
 from edge_llm_factory.serve_release import ActiveReleaseLlamaServer  # noqa: E402
 from edge_llm_factory.providers import (  # noqa: E402
     validate_disabled_runtime_config,
@@ -991,6 +994,229 @@ class EdgeLLMReleaseLifecycleTests(unittest.TestCase):
         self.assertEqual(state["active_release_id"], "release-c")
         self.assertEqual(state["revision"], 3)
         self.assertEqual(len(state["history"]), 3)
+
+    def test_base_only_release_is_first_class_and_has_no_adapter_metadata(self) -> None:
+        base = self.release_a[0]
+        artifact = self.root / "official-base-q4_k_m.gguf"
+        artifact.write_bytes(b"official-base-q4-k-m")
+
+        promoted = self.store.promote_base_only(
+            "official-base", base, artifact
+        )
+        record = promoted["release"]
+        self.assertEqual(record["deployment_mode"], "base_only")
+        self.assertEqual(record["runtime_adapters"], [])
+        self.assertEqual(record["deployment_artifact"]["format"], "gguf")
+        self.assertNotIn("adapter", record)
+        self.assertNotIn("adapter_package", record)
+
+        status = self.store.status(verify_active=True)
+        self.assertEqual(status["active_integrity"]["status"], "verified")
+        self.assertEqual(
+            status["active_integrity"]["deployment_mode"], "base_only"
+        )
+        self.assertEqual(
+            self.store.promote_base_only("official-base", base, artifact)["status"],
+            "already_active",
+        )
+
+        artifact.write_bytes(b"tampered")
+        with self.assertRaisesRegex(ManifestError, "GGUF"):
+            self.store.status(verify_active=True)
+
+    def test_serve_release_starts_and_binds_base_only_static_runtime(self) -> None:
+        base = self.release_a[0]
+        artifact = self.root / "official-base-q4_k_m.gguf"
+        artifact.write_bytes(b"official-base-q4-k-m")
+        promoted = self.store.promote_base_only(
+            "official-base", base, artifact
+        )
+        record = promoted["release"]
+
+        template = self.root / "base-runtime-template.json"
+        write_json_object(
+            template,
+            {
+                "authentication": {"api_key_env": ""},
+                "endpoint": "http://127.0.0.1:18990",
+                "generation": {
+                    "keep_alive": "30m",
+                    "max_input_tokens": 16,
+                    "max_output_tokens": 1,
+                    "seed": 42,
+                    "temperature": 0.0,
+                    "thinking": False,
+                    "top_p": 1.0,
+                },
+                "model": "template.gguf",
+                "provider": "llama_cpp",
+                "schema_version": "edge-llm-runtime/v1",
+                "timeout_seconds": 0.5,
+            },
+        )
+        output = self.root / "generated" / "base-runtime.json"
+        descriptor = self.root / "base-runtime-output.json"
+        write_json_object(
+            descriptor,
+            {
+                "schema_version": "edge-llm-runtime-output/v1",
+                "name": "base",
+                "template": str(template),
+                "output": str(output),
+                "adapter_mode": "static",
+                "static_deployment_sha256": record["deployment_artifact"][
+                    "sha256"
+                ],
+                "on_missing_adapter": "base",
+            },
+        )
+        binary = self.root / "fake-base-llama-server"
+        binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        binary.chmod(0o700)
+        server = ActiveReleaseLlamaServer(
+            registry_path=self.registry,
+            runtime_config_path=None,
+            binary=binary,
+            host="127.0.0.1",
+            port=18990,
+            context_tokens=256,
+            threads=1,
+            parallel=1,
+            gpu_layers=99,
+            poll_seconds=0.01,
+            startup_timeout_seconds=0.1,
+            runtime_output_descriptor_paths=[descriptor],
+        )
+
+        adapters = server._runtime_adapters_for_record(record)
+        self.assertEqual(adapters, [])
+        command = server.command(artifact, adapters)
+        self.assertNotIn("--lora", command)
+        self.assertNotIn("--lora-scaled", command)
+        runtime_outputs = server._build_runtime_outputs(
+            "official-base", 1, record, artifact
+        )
+        self.assertEqual(runtime_outputs[0]["state"], "static_fusion")
+        binding = runtime_outputs[0]["release_binding"]
+        self.assertEqual(binding["binding_fingerprint"], record["binding_fingerprint"])
+        self.assertIsNone(binding["adapter_id"])
+        self.assertIsNone(binding["adapter_sha256"])
+
+        with patch(
+            "edge_llm_factory.serve_release.subprocess.Popen",
+            return_value=_FakeProcess(),
+        ), patch.object(server, "_wait_ready"), patch.object(
+            server,
+            "_verify_startup_gate",
+            return_value={"status": "passed"},
+        ), patch.object(
+            server,
+            "_publish_runtime_configuration",
+            return_value={"status": "published"},
+        ):
+            active = server.apply_current(force=True)
+        self.assertEqual(active["status"], "active")
+        self.assertEqual(active["runtime_adapters"], [])
+        with patch.object(server, "_is_process_healthy", return_value=True):
+            self.assertEqual(server.status()["status"], "ok")
+        server.stop_process()
+
+    def test_load_active_edge_llm_uses_base_only_scene_protocol(self) -> None:
+        artifact = self.root / "official-base-q4_k_m.gguf"
+        artifact.write_bytes(b"official-base-q4-k-m")
+        action_mapping = self.root / "base-only-action-mapping.json"
+        write_json_object(
+            action_mapping,
+            {
+                "schema_version": "edge-llm-action-map/v1",
+                "scene": "test_scene",
+                "protocol": "single_token_action/v1",
+                "entries": [
+                    {
+                        "slot": "A",
+                        "decision": "no_action",
+                        "candidate_action_type": None,
+                        "min_risk_level": "low",
+                        "max_risk_level": "severe",
+                        "requires_cloud": False,
+                        "safe_offline": True,
+                    }
+                ],
+                "fallback_slot": "A",
+            },
+        )
+        base = _base_manifest()
+        base["base_only_scene_protocols"] = {
+            "test_scene": {
+                "version": "official-base-v1",
+                "action_mapping": {
+                    "path": action_mapping.name,
+                    "sha256": sha256_file(action_mapping),
+                },
+                "input_contract": {
+                    "event_type": "test.event.v1",
+                    "data_schema": "https://example.test/test-event-v1.json",
+                    "context_encoder": "test-encoder@1",
+                    "llm_input_type": "compact_text_code",
+                    "max_input_tokens": 16,
+                    "direct_media_to_llm": False,
+                },
+                "deployment": {
+                    "runtime": "llama.cpp",
+                    "format": "gguf",
+                    "quantization": "Q4_K_M",
+                    "artifact_sha256": sha256_file(artifact),
+                    "artifact_bytes": artifact.stat().st_size,
+                    "max_input_tokens": 16,
+                    "max_output_tokens": 1,
+                    "thinking": False,
+                },
+            }
+        }
+        base_path = self.root / "base-only-manifest.json"
+        write_json_object(base_path, base)
+        promoted = self.store.promote_base_only(
+            "official-base", base_path, artifact
+        )
+        record = promoted["release"]
+        runtime_path = self.root / "base-only-runtime.json"
+        binding = ActiveReleaseLlamaServer._release_binding(
+            "official-base", 1, record, "test_scene", None
+        )
+        write_json_object(
+            runtime_path,
+            {
+                "authentication": {"api_key_env": ""},
+                "endpoint": "http://127.0.0.1:18990",
+                "generation": {
+                    "keep_alive": "30m",
+                    "max_input_tokens": 16,
+                    "max_output_tokens": 1,
+                    "seed": 42,
+                    "temperature": 0.0,
+                    "thinking": False,
+                    "top_p": 1.0,
+                },
+                "model": str(artifact.resolve()),
+                "provider": "llama_cpp",
+                "release_binding": binding,
+                "schema_version": "edge-llm-runtime/v1",
+                "timeout_seconds": 0.5,
+            },
+        )
+
+        active = load_active_edge_llm(
+            self.registry, runtime_path, expected_scene="test_scene"
+        )
+        description = active.model.describe()
+        self.assertEqual(description["deployment_mode"], "base_only")
+        self.assertIsNone(description["adapter_id"])
+        self.assertEqual(description["metrics"], {})
+        self.assertEqual(description["scene"], "test_scene")
+        self.assertEqual(
+            description["runtime"]["release_binding"]["binding_fingerprint"],
+            record["binding_fingerprint"],
+        )
 
 
 if __name__ == "__main__":

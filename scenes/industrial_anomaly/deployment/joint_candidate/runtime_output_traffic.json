@@ -1,9 +1,0 @@
-{
-  "schema_version": "edge-llm-runtime-output/v1",
-  "name": "traffic-joint-candidate",
-  "template": "edge_llm_runtime_traffic_template.json",
-  "output": "../../../../runtime/traffic_industrial_joint_q5km_f16_candidate/edge_llm_runtime_traffic.json",
-  "adapter_id": 0,
-  "adapter_mode": "process_default",
-  "on_missing_adapter": "disable"
-}

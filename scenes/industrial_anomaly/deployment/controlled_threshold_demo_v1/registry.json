@@ -1,0 +1,16 @@
+{
+  "active_demo_version": "industrial-controlled-threshold-demo-v1.0.0",
+  "production_active_version": null,
+  "production_registry_modified": false,
+  "registry_scope": "ISOLATED_DEVELOPMENT_DEMO_ONLY",
+  "rollback_target": "NO_ACTIVE_DEMO_VERSION",
+  "schema_version": "industrial-controlled-demo-registry/v1",
+  "versions": {
+    "industrial-controlled-threshold-demo-v1.0.0": {
+      "activation_scope": "offline_demo_registry_only",
+      "config_path": "scenes/industrial_anomaly/deployment/controlled_threshold_demo_v1/optimized_candidate_thresholds.json",
+      "config_sha256": "0fc3c721a29c97b9f2172a3a82a605455c43390db954e9dd70b83207901177bc",
+      "status": "DEVELOPMENT_DEMO_ONLY"
+    }
+  }
+}

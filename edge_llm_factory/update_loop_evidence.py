@@ -223,7 +223,6 @@ def _git_identity(repository_root: Path, expected_commit: str) -> Dict[str, Any]
         Path(__file__).resolve(),
         (root / "edge_llm_factory" / "serve_release.py").resolve(),
         (root / "edge_llm_factory" / "release_store.py").resolve(),
-        (root / "scripts" / "evaluate_competition_targets.py").resolve(),
     )
     source_sha256 = {}
     for path in source_files:

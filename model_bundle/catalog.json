@@ -1,8 +1,8 @@
 {
-  "schema_version": "cloud-edge-model-catalog/v1",
-  "bundle_version": "0.9.0",
-  "cloud_teacher": {
-    "role": "cloud_teacher",
+  "schema_version": "cloud-edge-model-catalog/v2",
+  "bundle_version": "1.0.0-final",
+  "cloud_production_runtime": {
+    "role": "cloud_complex_reasoning_low_frequency_review_async_audit",
     "runtime": "ollama",
     "model": "qwen3.5:9b",
     "upstream_model": "Qwen/Qwen3.5-9B",
@@ -13,28 +13,80 @@
     "model_blob_bytes": 6594462816,
     "parameters": 9700000000,
     "quantization": "Q4_K_M",
+    "business_semantics": "industrial final business result never waits for 9B; audit is non-blocking",
     "project_modifications": "none",
     "license": "Apache-2.0"
   },
-  "edge_general_student": {
-    "role": "edge_general_student",
-    "runtime": "ollama",
-    "model": "qwen35-text-general-kd-q4:latest",
-    "base_id": "qwen35-0.8b-text@2fc06364",
-    "asset_name": "qwen35_0_8b_text_general_kd_q4_k_m.gguf",
-    "asset_url": "https://github.com/scw1211/cloud-edge-scene-sdk/releases/download/models-v0.9.0/qwen35_0_8b_text_general_kd_q4_k_m.gguf",
-    "asset_sha256": "e9918db619700df60a010c132de82b8e0e1b7c7ba458b65e651ca8a59b74369d",
-    "asset_bytes": 529289600,
-    "ollama_manifest_sha256": "78067229c1fa35c164a72d15f2c27c8df48acbb50b888a3c9199bb611195edd2",
-    "parameters": 752393024,
+  "cloud_reference": {
+    "role": "cloud_reference_and_audit_model",
+    "runtime": "llama.cpp",
+    "model": "Qwen3.5-9B Q4_K_M",
+    "upstream_model": "Qwen/Qwen3.5-9B",
+    "upstream_revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+    "artifact_sha256": "dec52a44569a2a25341c4e4d3fee25846eed4f6f0b936278e3a3c900bb99d37c",
+    "artifact_bytes": 6594462816,
     "quantization": "Q4_K_M",
-    "training": "scene-independent behavior distillation from Qwen3.5 9B",
-    "evaluation": {
-      "sample_count": 80,
-      "macro_accuracy": 0.4222,
-      "relative_to_teacher": 0.6333,
-      "valid_output_rate": 1.0
+    "runtime_sha256": "dbfeea380cdc1de9bbfe32399befbcd8381a3c5ac83e573d79d0fa41bdc40037",
+    "note": "Shared 9B Q4 reference used by both edge-model pair evaluations; it is not one of the two edge models."
+  },
+  "edge_general_model": {
+    "role": "optional_edge_difficult_task_candidate_unscored",
+    "runtime": "llama.cpp",
+    "model": "Qwen3.5-0.8B general distilled static-merge Q4_K_M",
+    "source_repository": "Qwen/Qwen3.5-0.8B",
+    "source_revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "artifact_path": "model_bundle/final/qwen3_5_0p8b_general_distilled_q4/distilled-0.8B.Q4_K_M.gguf",
+    "artifact_sha256": "d4f248ee8e6403bb2c2ba25242a7832fe8fb593256eeb09d1b206b272d0f5eb4",
+    "artifact_bytes": 529289216,
+    "quantization": "Q4_K_M",
+    "runtime_lora_count": 0,
+    "formal_scoring_status": "NOT_PART_OF_FINAL_SCORED_MODEL_SET",
+    "release_qualified": false,
+    "historical_diagnostic": {
+      "ttft_gate": "FINAL_TTFT_FAIL",
+      "ttft_reduction_vs_9b_q4": 0.3241718452758402,
+      "capability_gate": "FINAL_GENERAL_EDGE_CAPABILITY_FAIL"
     },
+    "deployment_role": "low-frequency general requests; on-demand mutually exclusive load or separate edge node",
     "license": "Apache-2.0"
+  },
+  "edge_business_model": {
+    "role": "final_scored_edge_traffic_industrial_business_model",
+    "runtime": "llama.cpp",
+    "model": "Qwen3.5-0.8B joint traffic-industrial Q4_K_M",
+    "source_repository": "Qwen/Qwen3.5-0.8B",
+    "source_revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "artifact_path": "model_bundle/final/qwen3_5_0p8b_q4/joint_static_raw16.Q4_K_M.gguf",
+    "artifact_sha256": "828f839873c7505005101544d8febb7408bc0443c153c4ba97ec4b3603445526",
+    "artifact_bytes": 529289216,
+    "parameters": 752393024,
+    "num_hidden_layers": 24,
+    "quantization": "Q4_K_M",
+    "runtime_contract": {
+      "thinking": false,
+      "max_input_tokens": 16,
+      "max_output_tokens": 1,
+      "runtime_lora_count": 0
+    },
+    "ttft_gate": "FINAL_TTFT_PASS",
+    "ttft_reduction_vs_9b_q4": 0.8676741363772513,
+    "formal_capability_scope": "elementary millisecond-scale business tasks",
+    "formal_capability_gate": "FINAL_BASIC_CAPABILITY_PASS",
+    "semantic_retention_vs_9b_q4": {
+      "math": 0.9655172413793104,
+      "code": 1.0,
+      "natural_language_reasoning": 0.9
+    },
+    "deployment_role": "resident traffic and industrial structured business hot path",
+    "license": "Apache-2.0"
+  },
+  "edge_deployment_boundary": {
+    "edge_artifact_count": 2,
+    "weights_fused_into_single_gguf": false,
+    "current_release_store_active_model": "edge_business_model",
+    "current_release_store_active_model_count": 1,
+    "dual_role_router_formally_deployed": false,
+    "dual_model_concurrent_orin_residency_measured": false,
+    "approved_unvalidated_target": "828f business model resident; d4f remains an unqualified difficult-task candidate for on-demand mutually exclusive loading or another edge node"
   }
 }

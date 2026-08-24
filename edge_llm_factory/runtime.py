@@ -15,10 +15,13 @@ from edge_llm_factory.action_constraints import action_token_constraint_evidence
 from edge_llm_factory.contracts import (
     ManifestError,
     RISK_ORDER,
+    base_fingerprint,
     base_slots,
     read_json_object,
+    sha256_file,
     validate_action_mapping,
     validate_base_manifest,
+    validate_input_contract,
 )
 from edge_llm_factory.providers import (
     GenerationProvider,
@@ -276,6 +279,121 @@ class ValidatedEdgeLLM:
             "input_contract": dict(self.manifest.get("input_contract", {})),
             "deployment": dict(self.manifest.get("deployment", {})),
             "runtime": runtime,
+            "action_decoding_contract": {
+                "allowed_model_tokens": list(self.decoder.valid_tokens.values()),
+                "reserved_slots_excluded_from_sampling": dict(
+                    self.decoder.reserved_tokens
+                ),
+                "post_hoc_remapping": False,
+            },
+        }
+
+    def decide(
+        self,
+        prompt: str,
+        event: Mapping[str, Any],
+        network_available: bool,
+    ) -> Dict[str, Any]:
+        inference = self.client.predict(prompt, self.decoder.valid_tokens)
+        constraint = inference.get("decoding_constraint")
+        if isinstance(constraint, dict):
+            inference["decoding_constraint"] = {
+                **constraint,
+                "reserved_slots_excluded_from_sampling": dict(
+                    self.decoder.reserved_tokens
+                ),
+            }
+        decoded = self.decoder.decode(inference["slot"], event, network_available)
+        return {"inference": inference, "decision": decoded}
+
+
+class ValidatedBaseEdgeLLM:
+    """A base-only release with an explicit scene action contract.
+
+    The scene protocol lives in the validated base manifest, so an official
+    unmerged GGUF never needs a synthetic or unrelated adapter package merely
+    to carry action-mapping metadata.
+    """
+
+    def __init__(
+        self,
+        base_manifest_path: Path,
+        scene: str,
+        runtime_config_path: Path,
+    ) -> None:
+        self.base_manifest_path = Path(base_manifest_path).resolve()
+        self.base = validate_base_manifest(read_json_object(self.base_manifest_path))
+        protocols = self.base.get("base_only_scene_protocols")
+        if not isinstance(protocols, dict):
+            raise ManifestError("base-only 基座缺少 base_only_scene_protocols")
+        raw = protocols.get(scene)
+        if not isinstance(raw, dict):
+            raise ManifestError(
+                "base-only 基座缺少场景协议: {}".format(scene)
+            )
+        action_ref = raw.get("action_mapping")
+        if not isinstance(action_ref, dict):
+            raise ManifestError("base-only 场景协议缺少 action_mapping")
+        path_value = action_ref.get("path")
+        digest = action_ref.get("sha256")
+        if not isinstance(path_value, str) or not path_value.strip():
+            raise ManifestError("base-only action_mapping.path 无效")
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise ManifestError("base-only action_mapping.sha256 无效")
+        unresolved = Path(path_value).expanduser()
+        if not unresolved.is_absolute():
+            unresolved = self.base_manifest_path.parent / unresolved
+        try:
+            mode = unresolved.lstat().st_mode
+        except FileNotFoundError as exc:
+            raise ManifestError(
+                "base-only action mapping 不存在: {}".format(unresolved)
+            ) from exc
+        if unresolved.is_symlink() or not unresolved.is_file():
+            raise ManifestError("base-only action mapping 必须是非符号链接普通文件")
+        action_path = unresolved.resolve()
+        if sha256_file(action_path) != digest:
+            raise ManifestError("base-only action mapping SHA256 不一致")
+        mapping = validate_action_mapping(read_json_object(action_path), self.base)
+        if mapping.get("scene") != scene:
+            raise ManifestError("base-only action mapping 场景不一致")
+
+        input_contract = raw.get("input_contract")
+        deployment = raw.get("deployment")
+        if not isinstance(input_contract, dict):
+            raise ManifestError("base-only 场景协议缺少 input_contract")
+        if not isinstance(deployment, dict):
+            raise ManifestError("base-only 场景协议缺少 deployment")
+        self.input_contract = validate_input_contract(input_contract, self.base)
+        if deployment.get("runtime") not in {"llama.cpp", "llama_cpp"}:
+            raise ManifestError("base-only deployment.runtime 必须是 llama.cpp")
+        for field in ("max_input_tokens", "max_output_tokens", "thinking"):
+            if deployment.get(field) != self.base["decision_protocol"].get(field):
+                raise ManifestError(
+                    "base-only deployment.{} 与基座动作协议不一致".format(field)
+                )
+        self.deployment = dict(deployment)
+        self.scene = str(scene)
+        self.version = str(raw.get("version", "base-only"))
+        self.action_mapping = mapping
+        self.decoder = ActionDecoder(self.base, self.action_mapping)
+        self.client = ConfiguredActionClient.from_path(Path(runtime_config_path))
+
+    def describe(self) -> Dict[str, Any]:
+        return {
+            "adapter_id": None,
+            "scene": self.scene,
+            "version": self.version,
+            "deployment_mode": "base_only",
+            "base_fingerprint": base_fingerprint(self.base),
+            "metrics": {},
+            "input_contract": dict(self.input_contract),
+            "deployment": dict(self.deployment),
+            "runtime": self.client.describe(),
             "action_decoding_contract": {
                 "allowed_model_tokens": list(self.decoder.valid_tokens.values()),
                 "reserved_slots_excluded_from_sampling": dict(

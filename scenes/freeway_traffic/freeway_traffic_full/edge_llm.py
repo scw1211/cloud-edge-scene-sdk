@@ -281,9 +281,6 @@ class TrafficEdgeLLMController:
                 "traffic_student_rule_disagreement", False
             )
         disagreement = bool(raw_disagreement)
-        defer_recommended = bool(
-            student.metadata.get("traffic_defer_recommended", False)
-        )
 
         signals = []
         if student_available and student_confidence < self.student_confidence_threshold:
@@ -292,8 +289,6 @@ class TrafficEdgeLLMController:
             signals.append("prediction_set_ambiguous")
         if disagreement:
             signals.append("student_rule_disagreement")
-        if defer_recommended:
-            signals.append("defer_gate_recommends_escalation")
         return tuple(signals)
 
     def _prompt_routing_context(
@@ -624,8 +619,7 @@ class TrafficEdgeLLMController:
                     "edge_llm_release_id": self.active.release_id,
                     "edge_llm_runtime_error": self.last_error,
                     "edge_llm_requires_cloud": bool(
-                        student.metadata.get("traffic_defer_recommended", False)
-                        or self._structured_metadata(
+                        self._structured_metadata(
                             student.metadata.get(
                                 "model_uncertainty",
                                 event.metadata.get("model_uncertainty"),

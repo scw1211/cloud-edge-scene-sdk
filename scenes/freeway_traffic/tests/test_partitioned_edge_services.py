@@ -19,6 +19,7 @@ from run_partitioned_current_state_edges import (  # noqa: E402
     _four_edge_provisional_barrier_ms,
     _launch_isolated_edge_services,
     _stop_edge_services,
+    _validate_cloud_evidence_pull_allowlist,
 )
 
 
@@ -47,6 +48,45 @@ class _FakeProcess:
 
 
 class PartitionedEdgeServiceTests(unittest.TestCase):
+    def test_cloud_callback_allowlist_is_exact_and_fails_before_launch(self):
+        endpoints = [
+            "http://127.0.0.1:{}".format(19101 + index)
+            for index in range(4)
+        ]
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(
+            {
+                "selective_evidence_pull": {
+                    "enabled": True,
+                    "allowed_edge_base_urls": endpoints,
+                }
+            }
+        ).encode("utf-8")
+        with mock.patch(
+            "run_partitioned_current_state_edges.urlopen",
+            return_value=response,
+        ):
+            _validate_cloud_evidence_pull_allowlist(
+                "http://127.0.0.1:18100", endpoints
+            )
+
+        missing_response = mock.MagicMock()
+        missing_response.__enter__.return_value.read.return_value = json.dumps(
+            {
+                "selective_evidence_pull": {
+                    "enabled": True,
+                    "allowed_edge_base_urls": endpoints[:3],
+                }
+            }
+        ).encode("utf-8")
+        with mock.patch(
+            "run_partitioned_current_state_edges.urlopen",
+            return_value=missing_response,
+        ), self.assertRaisesRegex(RuntimeError, "19104"):
+            _validate_cloud_evidence_pull_allowlist(
+                "http://127.0.0.1:18100", endpoints
+            )
+
     def test_business_completion_is_controlled_by_policy_route(self):
         for policy_route in ("edge_only", "local_autonomy", "cloud_async"):
             event = {
@@ -111,6 +151,10 @@ class PartitionedEdgeServiceTests(unittest.TestCase):
                         "listen": {"host": "0.0.0.0", "port": 18101},
                         "storage": {},
                         "cloud": {"base_url": "http://127.0.0.1:18100"},
+                        "evidence_pull": {
+                            "enabled": True,
+                            "public_base_url": "http://127.0.0.1:18101",
+                        },
                         "release_watch": {
                             "enabled": True,
                             "registry": "release.json",
@@ -151,6 +195,10 @@ class PartitionedEdgeServiceTests(unittest.TestCase):
                 self.assertEqual("127.0.0.1", config["listen"]["host"])
                 self.assertEqual(
                     "http://192.0.2.10:18100", config["cloud"]["base_url"]
+                )
+                self.assertEqual(
+                    "http://127.0.0.1:{}".format(19101 + partition_id),
+                    config["evidence_pull"]["public_base_url"],
                 )
                 self.assertFalse(config["release_watch"]["enabled"])
                 paths = list(config["storage"].values())
