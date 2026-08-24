@@ -1,6 +1,6 @@
 {
   "sdk_version": "0.13.1",
-  "built_at_utc": "2026-08-24T14:36:08.133886+00:00",
+  "built_at_utc": "2026-08-24T14:57:44.219547+00:00",
   "python_requires": ">=3.8",
   "included_files": [
     {
@@ -1360,8 +1360,8 @@
     },
     {
       "path": "scenes/freeway_traffic/video_demo/index.html",
-      "bytes": 203253,
-      "sha256": "ccb9e56341488160267a7935f9f23e3af2808d30975a8e4bb2967c673147cb56"
+      "bytes": 208740,
+      "sha256": "058d478d36f001189c1c2d161befbb4fc70dd1b0c74112e226e4c624be39c9fd"
     },
     {
       "path": "scenes/freeway_traffic/video_demo/test_deployment.py",
@@ -1371,7 +1371,7 @@
     {
       "path": "scenes/freeway_traffic/video_demo/traffic_final_mainline.SHA256SUMS",
       "bytes": 247,
-      "sha256": "dae20aa823b6f2c0807b7eab4b98a94af01276b8671e26675f69ad96b4492d17"
+      "sha256": "8028f4d461a0dd1f47ca3930ccaad1f50294e90a156282e52dfabee4adc2742b"
     },
     {
       "path": "scenes/freeway_traffic/video_demo/traffic_final_mainline.json",
